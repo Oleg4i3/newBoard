@@ -525,14 +525,6 @@ let firebaseUnsubscribe = null;
 let isSendingToFirebase = false;
 let myFirebaseId = 'user_' + Math.random().toString(36).substr(2, 9);
 
-// ── WebSocket Relay transport ──
-let wsSocket = null;
-let wsRoomId = null;
-let myWsId = 'u_' + Math.random().toString(36).substr(2, 9);
-let isSendingToWs = false;
-const _h = location.host;
-const _isStaticHost = _h.includes('github.io') || _h.includes('gitlab.io') || _h.includes('netlify.app') || _h.includes('vercel.app') || location.protocol === 'file:';
-const WS_AUTO_HOST = _isStaticHost ? '' : _h;
 
 let isSendingToMqtt = false; // Флаг для предотвращения дублирования событий
 
@@ -4876,15 +4868,26 @@ window.addEventListener('beforeunload', function() {
 
 // ==========================================
 // WEBSOCKET RELAY TRANSPORT
+// Modelled exactly after Firebase transport
 // ==========================================
 
+let wsSocket = null;
+let wsRoomId = null;
+let myWsId = 'u_' + Math.random().toString(36).substr(2, 9);
+let isSendingToWs = false;
+
+const _h = location.host;
+const _isStaticHost = _h.includes('github.io') || _h.includes('gitlab.io') || _h.includes('netlify.app') || _h.includes('vercel.app') || location.protocol === 'file:';
+const WS_AUTO_HOST = _isStaticHost ? '' : _h;
+
+const DEFAULT_WS_SERVER = 'windy-sheep-76.oleg4i3.deno.net';
+
 function getWsServerUrl() {
-    const manualInput = document.getElementById('ws-server-url');
-    const manual = manualInput ? manualInput.value.trim() : '';
-    const host = manual || WS_AUTO_HOST || 'localhost:3000';
+    const inp = document.getElementById('ws-server-url');
+    const host = (inp && inp.value.trim()) || WS_AUTO_HOST || DEFAULT_WS_SERVER;
     const clean = host.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '').replace(/\/$/, '');
     const proto = (clean.includes('localhost') || clean.includes('127.0.0.1')) ? 'ws' : 'wss';
-    return `${proto}://${clean}`;
+    return proto + '://' + clean;
 }
 
 function generateWsLink() {
@@ -4893,10 +4896,10 @@ function generateWsLink() {
         roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('ws-room-id').value = roomId;
     }
-    const serverHost = getWsServerUrl().replace(/^wss?:\/\//, '');
+    const inp = document.getElementById('ws-server-url');
+    const serverHost = (inp && inp.value.trim()) || DEFAULT_WS_SERVER;
     const baseUrl = window.location.href.split('?')[0];
-    // Embed server address in link so partner auto-connects to same server
-    const link = `${baseUrl}?wsroom=${roomId}&wsserver=${encodeURIComponent(serverHost)}`;
+    const link = baseUrl + '?wsroom=' + roomId + '&wsserver=' + encodeURIComponent(serverHost);
     document.getElementById('ws-link-display').value = link;
     connectToWsRoom(roomId);
 }
@@ -4913,111 +4916,103 @@ function copyWsLink() {
     });
 }
 
-function checkWsAutoConnect() {
-    const params = new URLSearchParams(window.location.search);
-    const roomId = params.get('wsroom');
-    const serverParam = params.get('wsserver');
-    if (roomId) {
-        // If server is in URL params, pre-fill it
-        if (serverParam) {
-            const serverInput = document.getElementById('ws-server-url');
-            if (serverInput) serverInput.value = decodeURIComponent(serverParam);
-        }
-        document.getElementById('ws-room-id').value = roomId;
-        document.getElementById('manual-connect-spoiler').classList.add('expanded');
-        const wsRadio = document.querySelector('input[name="connection-mode"][value="ws"]');
-        if (wsRadio) wsRadio.checked = true;
-        setTimeout(() => connectToWsRoom(roomId), 300);
-    }
-}
-
 function connectToWsRoom(roomId) {
-    if (wsSocket) {
-        wsSocket.close();
-        wsSocket = null;
-    }
+    if (wsSocket) { wsSocket.onmessage = null; wsSocket.onclose = null; wsSocket.onerror = null; wsSocket.close(); wsSocket = null; }
     wsRoomId = roomId;
 
     const url = getWsServerUrl();
-    setStatus(`Connecting to relay...`, 'ok');
+    setStatus('Connecting to relay...', 'ok');
+    console.log('WS connecting to', url, 'room', roomId);
 
-    try {
-        wsSocket = new WebSocket(url);
-    } catch(e) {
-        setStatus('WS: invalid server URL', 'err');
-        return;
-    }
+    try { wsSocket = new WebSocket(url); }
+    catch(e) { setStatus('WS: invalid server URL', 'err'); return; }
 
     wsSocket.onopen = () => {
-        wsSocket.send(JSON.stringify({ type: 'join', room: roomId }));
-        console.log('✅ WS connected, joining room:', roomId);
+        console.log('✅ WS open, joining room:', roomId);
+        wsSocket.send(JSON.stringify({ type: 'join', room: roomId, sender: myWsId }));
     };
 
     wsSocket.onmessage = (e) => {
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
+        if (msg.sender === myWsId) return;
+        console.log('📥 WS received:', msg.type);
         handleWsMessage(msg);
     };
 
     wsSocket.onclose = () => {
-        if (wsRoomId === roomId && connectionMode === 'ws') {
-            setStatus('Relay disconnected', 'err');
-        }
+        console.log('WS closed');
+        if (connectionMode === 'ws') setStatus('Relay disconnected', 'err');
     };
 
-    wsSocket.onerror = () => {
-        setStatus('WS relay error — check server URL', 'err');
+    wsSocket.onerror = (e) => {
+        console.error('WS error', e);
+        setStatus('WS error — check server URL', 'err');
     };
 }
 
+// Send — mirrors sendToFirebase exactly
 function sendToWs(type, data) {
-    if (!wsSocket || wsSocket.readyState !== WebSocket.OPEN || isSendingToWs) return;
-    const msg = { type, data, sender: myWsId, ts: Date.now() };
+    if (!wsSocket || wsSocket.readyState !== WebSocket.OPEN || isSendingToWs) {
+        console.log('Skip WS send:', type);
+        return;
+    }
+    const msg = { sender: myWsId, type: type, data: data, timestamp: Date.now() };
+    console.log('📤 WS send:', type);
     wsSocket.send(JSON.stringify(msg));
 }
 
+// Receive — exact copy of handleFirebaseMessage
 function handleWsMessage(msg) {
-    if (msg.sender === myWsId) return;
+    isSendingToWs = true;
+    try {
+        const syncProps = [
+            'id','isPinned','left','top','scaleX','scaleY','angle',
+            'fill','stroke','strokeWidth','type','width','height',
+            'rx','ry','points','path','objectCaching','src',
+            'strokeLineCap','strokeLineJoin'
+        ];
+        switch(msg.type) {
+            case 'joined':
+                setStatus('Relay room: ' + wsRoomId, 'ok');
+                // Ask partner for canvas state
+                sendToWs('request_state', { from: myWsId });
+                break;
 
-    switch(msg.type) {
-        case 'joined':
-            setStatus(`Relay room: ${wsRoomId}`, 'ok');
-            // Request canvas state from partner
-            sendToWs('request_state', { from: myWsId });
-            break;
+            case 'peer_joined':
+                setStatus('Partner joined relay!', 'ok');
+                // Send our state to newcomer
+                if (canvas.getObjects().length > 0) {
+                    const state = canvas.toJSON(syncProps);
+                    sendToWs('state_dump', state);
+                }
+                break;
 
-        case 'peer_joined':
-            setStatus(`Partner joined relay room`, 'ok');
-            break;
+            case 'peer_left':
+                setStatus('Partner left', 'err');
+                break;
 
-        case 'peer_left':
-            setStatus(`Partner left`, 'err');
-            break;
+            case 'cursor':
+                updatePartnerCursor(msg.data.x, msg.data.y);
+                break;
 
-        case 'cursor':
-            updatePartnerCursor(msg.data.x, msg.data.y);
-            break;
+            case 'viewport':
+                handlePartnerViewport(msg.data);
+                break;
 
-        case 'viewport':
-            handlePartnerViewport(msg.data);
-            break;
-
-        case 'draw':
-        case 'object_added': {
-            const d = msg.data;
-            if (!d) break;
-            if (d.type === 'image' && d.src) {
-                fabric.Image.fromURL(d.src, (img) => {
-                    img.set({ id: d.id, left: d.left||0, top: d.top||0,
-                        scaleX: d.scaleX||1, scaleY: d.scaleY||1, angle: d.angle||0,
-                        selectable: true, evented: true, __isLocal: true });
-                    canvas.add(img); canvas.requestRenderAll();
-                });
-            } else {
-                fabric.util.enlivenObjects([d], (objs) => {
+            case 'draw':
+            case 'object_added':
+                fabric.util.enlivenObjects([msg.data], function(objs) {
                     const obj = objs[0];
                     if (obj.type === 'path') obj.set('fill', '');
-                    const existing = findObjectById(d.id);
+                    if (obj.type === 'group') {
+                        obj.set({ fill: '', backgroundColor: '' });
+                        obj.getObjects().forEach(child => {
+                            if (child.type === 'path' && (!child.fill || child.fill === 'rgb(0,0,0)')) child.set('fill', '');
+                        });
+                    }
+                    obj.__isLocal = true;
+                    const existing = findObjectById(msg.data.id);
                     if (existing && !existing.group) {
                         existing.set(obj); existing.setCoords();
                     } else if (!existing) {
@@ -5026,98 +5021,96 @@ function handleWsMessage(msg) {
                     }
                     canvas.requestRenderAll();
                 });
+                break;
+
+            case 'modified':
+            case 'object_modified':
+                applyModifiedData(msg.data);
+                break;
+
+            case 'delete':
+            case 'object_removed': {
+                const id = msg.data && msg.data.id ? msg.data.id : msg.data;
+                const obj = canvas.getObjects().find(o => o.id === id);
+                if (obj) { obj.__isLocal = true; canvas.remove(obj); canvas.requestRenderAll(); }
+                break;
             }
-            break;
+
+            case 'group_objects':
+                applyGroupOp(msg.data);
+                break;
+
+            case 'ungroup_objects':
+                applyUngroupOp(msg.data);
+                break;
+
+            case 'request_state':
+                if (canvas.getObjects().length > 0) {
+                    const state = canvas.toJSON(syncProps);
+                    sendToWs('state_dump', state);
+                    console.log('📤 WS: sent full canvas state');
+                }
+                break;
+
+            case 'state_dump':
+                if (canvas.getObjects().length === 0 && msg.data) {
+                    canvas.loadFromJSON(msg.data, function() {
+                        canvas.requestRenderAll();
+                        console.log('✅ WS: canvas state loaded');
+                    });
+                }
+                break;
+
+            default:
+                console.log('Unknown WS type:', msg.type);
         }
-
-        case 'modified':
-        case 'object_modified':
-            applyModifiedData(msg.data);
-            break;
-
-        case 'delete':
-        case 'object_removed': {
-            const id = msg.data.id || msg.data;
-            const obj = canvas.getObjects().find(o => o.id === id);
-            if (obj && !obj.isPinned) {
-                obj.__isLocal = true;
-                canvas.remove(obj); canvas.requestRenderAll();
-            }
-            break;
-        }
-
-        case 'group_objects':
-            applyGroupOp(msg.data);
-            break;
-
-        case 'ungroup_objects':
-            applyUngroupOp(msg.data);
-            break;
-
-        case 'request_state':
-            if (canvas.getObjects().length > 0) {
-                const syncProps = ['id','isPinned','left','top','scaleX','scaleY','angle',
-                    'fill','stroke','strokeWidth','type','width','height',
-                    'rx','ry','points','path','objectCaching','src','strokeLineCap','strokeLineJoin'];
-                sendToWs('state_dump', canvas.toJSON(syncProps));
-            }
-            break;
-
-        case 'state_dump':
-            if (canvas.getObjects().length === 0 && msg.data && msg.data.objects) {
-                isSendingToWs = true;
-                canvas.loadFromJSON(msg.data, () => {
-                    canvas.requestRenderAll();
-                    console.log('✅ Canvas state loaded from WS relay');
-                    setTimeout(() => { isSendingToWs = false; }, 500);
-                });
-            }
-            break;
-
-        case 'sync':
-            canvas.loadFromJSON(JSON.parse(msg.data), () => { canvas.requestRenderAll(); });
-            break;
+    } finally {
+        // Reset immediately — same as Firebase
+        isSendingToWs = false;
     }
 }
 
-// Auto-fill server field when served from real host
+function disconnectWs() {
+    if (wsSocket) {
+        wsSocket.onmessage = null; wsSocket.onclose = null;
+        wsSocket.close(); wsSocket = null; wsRoomId = null;
+    }
+}
+
+window.addEventListener('beforeunload', () => { if (wsSocket) wsSocket.close(); });
+
 (function initWsUI() {
-    const serverField = document.getElementById('ws-server-field');
-    const serverInput = document.getElementById('ws-server-url');
     const params = new URLSearchParams(window.location.search);
     const serverParam = params.get('wsserver');
+    const roomParam = params.get('wsroom');
+    const serverInput = document.getElementById('ws-server-url');
 
-    // Pre-fill server: URL param > auto-host > hardcoded default
-    const DEFAULT_WS_SERVER = 'windy-sheep-76.oleg4i3.deno.net';
-    if (serverParam && serverInput) {
-        serverInput.value = decodeURIComponent(serverParam);
-    } else if (WS_AUTO_HOST && serverInput) {
-        serverInput.value = WS_AUTO_HOST;
-    } else if (serverInput && !serverInput.value) {
-        serverInput.value = DEFAULT_WS_SERVER;
+    // Fill server field: from URL > default
+    if (serverInput) {
+        serverInput.value = serverParam ? decodeURIComponent(serverParam) : DEFAULT_WS_SERVER;
     }
 
-    // Auto-switch to WS mode if URL has wsroom param
-    if (params.get('wsroom')) {
+    // Auto-connect if wsroom in URL
+    if (roomParam) {
         connectionMode = 'ws';
         const wsRadio = document.querySelector('input[name="connection-mode"][value="ws"]');
         if (wsRadio) wsRadio.checked = true;
         document.getElementById('ws-section').style.display = 'block';
         document.getElementById('p2p-section').style.display = 'none';
-
-        setStatus('Connecting to relay server...', 'ok');
+        setStatus('Connecting to relay...', 'ok');
 
         let attempt = 0;
         function tryConnect() {
             attempt++;
-            setStatus(`Connecting... (attempt ${attempt})`, 'ok');
-            connectToWsRoom(params.get('wsroom'));
+            setStatus('Connecting... (attempt ' + attempt + ')', 'ok');
+            connectToWsRoom(roomParam);
         }
         setTimeout(tryConnect, 500);
 
+        // Retry if dropped (handles cold starts)
         setInterval(() => {
-            if (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING) {
-                if (connectionMode === 'ws') tryConnect();
+            if (connectionMode === 'ws' && (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING)) {
+                tryConnect();
             }
         }, 8000);
     }
