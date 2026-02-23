@@ -4885,8 +4885,10 @@ function generateWsLink() {
         roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('ws-room-id').value = roomId;
     }
+    const serverHost = getWsServerUrl().replace(/^wss?:\/\//, '');
     const baseUrl = window.location.href.split('?')[0];
-    const link = `${baseUrl}?wsroom=${roomId}`;
+    // Embed server address in link so partner auto-connects to same server
+    const link = `${baseUrl}?wsroom=${roomId}&wsserver=${encodeURIComponent(serverHost)}`;
     document.getElementById('ws-link-display').value = link;
     connectToWsRoom(roomId);
 }
@@ -4906,11 +4908,15 @@ function copyWsLink() {
 function checkWsAutoConnect() {
     const params = new URLSearchParams(window.location.search);
     const roomId = params.get('wsroom');
+    const serverParam = params.get('wsserver');
     if (roomId) {
-        console.log('Auto-connecting to WS room:', roomId);
+        // If server is in URL params, pre-fill it
+        if (serverParam) {
+            const serverInput = document.getElementById('ws-server-url');
+            if (serverInput) serverInput.value = decodeURIComponent(serverParam);
+        }
         document.getElementById('ws-room-id').value = roomId;
         document.getElementById('manual-connect-spoiler').classList.add('expanded');
-        // Select the WS radio button
         const wsRadio = document.querySelector('input[name="connection-mode"][value="ws"]');
         if (wsRadio) wsRadio.checked = true;
         setTimeout(() => connectToWsRoom(roomId), 300);
@@ -5070,12 +5076,21 @@ function handleWsMessage(msg) {
 (function initWsUI() {
     const serverField = document.getElementById('ws-server-field');
     const serverInput = document.getElementById('ws-server-url');
-    if (WS_AUTO_HOST && serverInput) {
+    const params = new URLSearchParams(window.location.search);
+    const serverParam = params.get('wsserver');
+
+    if (serverParam && serverInput) {
+        // Server address came from the shared link
+        serverInput.value = decodeURIComponent(serverParam);
+        if (serverField) serverField.style.display = 'none';
+    } else if (WS_AUTO_HOST && serverInput) {
+        // Page served from real server — use same host
         serverInput.value = WS_AUTO_HOST;
         if (serverField) serverField.style.display = 'none';
     }
+    // else: show field so user can type Deno Deploy URL
+
     // Auto-switch to WS mode if URL has wsroom param
-    const params = new URLSearchParams(window.location.search);
     if (params.get('wsroom')) {
         connectionMode = 'ws';
         const wsRadio = document.querySelector('input[name="connection-mode"][value="ws"]');
@@ -5083,21 +5098,16 @@ function handleWsMessage(msg) {
         document.getElementById('ws-section').style.display = 'block';
         document.getElementById('p2p-section').style.display = 'none';
 
-        // Show connecting status immediately so partner sees feedback
         setStatus('Connecting to relay server...', 'ok');
 
-        // Render free tier can take 30-60s to wake up — retry with backoff
         let attempt = 0;
         function tryConnect() {
             attempt++;
             setStatus(`Connecting... (attempt ${attempt})`, 'ok');
             connectToWsRoom(params.get('wsroom'));
         }
-
-        // First attempt after short delay (let page render first)
         setTimeout(tryConnect, 500);
 
-        // If WS fails to open in 8s — retry (handles Render cold start)
         setInterval(() => {
             if (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING) {
                 if (connectionMode === 'ws') tryConnect();
