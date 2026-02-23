@@ -495,9 +495,10 @@ function randomId() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
-function connect(room) {
+function connect(room, serverHost) {
   roomId = room;
-  ws = new WebSocket(WS_URL);
+  const url = getWsUrl(serverHost || document.getElementById('serverInput')?.value);
+  ws = new WebSocket(url);
 
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: 'join', room }));
