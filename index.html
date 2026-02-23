@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whiteboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #c8f05a;
+    --accent2: #5af0c8;
+    --text: #e8e8ee;
+    --muted: #666674;
+    --danger: #f05a5a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── LOBBY ── */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 0;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #lobby::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,240,90,0.06) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .lobby-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    color: var(--text);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.2em;
+  }
+
+  .lobby-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 3rem;
+  }
+
+  .lobby-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    width: min(420px, 90vw);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .field-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 1rem;
+    padding: 0.7rem 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #0e0e10;
+    font-weight: 500;
+  }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+  .divider {
+    display: flex; align-items: center; gap: 1rem;
+    color: var(--muted); font-size: 0.7rem;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── APP SHELL ── */
+  #app { display: none; flex-direction: column; height: 100vh; }
+
+  /* ── TOOLBAR ── */
+  #toolbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .toolbar-sep {
+    width: 1px; height: 24px;
+    background: var(--border);
+    margin: 0 0.5rem;
+  }
+
+  .tool-btn {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--surface2); color: var(--text); }
+  .tool-btn.active {
+    background: rgba(200,240,90,0.12);
+    border-color: rgba(200,240,90,0.3);
+    color: var(--accent);
+  }
+
+  .color-swatch {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .color-swatch.active { border-color: var(--text); transform: scale(1.2); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 80px; height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  .room-badge {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: var(--accent); box-shadow: 0 0 6px rgba(200,240,90,0.5); }
+  .status-dot.peer { background: var(--accent2); box-shadow: 0 0 6px rgba(90,240,200,0.5); }
+
+  .sync-indicator {
+    font-size: 0.65rem;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .sync-indicator.visible { opacity: 1; color: var(--accent2); }
+
+  /* ── CANVAS AREA ── */
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 20px 20px, rgba(255,255,255,0.03) 1px, transparent 1px),
+      var(--bg);
+    background-size: 40px 40px;
+    cursor: crosshair;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+    touch-action: none;
+  }
+
+  #bgCanvas { z-index: 1; }
+  #drawCanvas { z-index: 2; }
+
+  /* Remote cursor */
+  #remoteCursor {
+    position: absolute;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: rgba(90,240,200,0.6);
+    border: 2px solid var(--accent2);
+    pointer-events: none;
+    z-index: 20;
+    transform: translate(-50%, -50%);
+    display: none;
+    transition: left 0.1s linear, top 0.1s linear;
+  }
+
+  #remoteCursorLabel {
+    position: absolute;
+    top: 16px; left: 4px;
+    font-size: 0.6rem;
+    color: var(--accent2);
+    white-space: nowrap;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Drop zone overlay */
+  #dropOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(200,240,90,0.05);
+    border: 2px dashed var(--accent);
+    border-radius: 8px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: var(--accent);
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 1.5rem; left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Hidden file input */
+  #fileInput { display: none; }
+
+  /* Tooltip */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%; transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.65rem;
+    white-space: nowrap;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 50;
+  }
+</style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="lobby-title">Whiteboard</div>
+  <div class="lobby-sub">collaborative canvas</div>
+  <div class="lobby-card">
+    <div id="serverField">
+      <div class="field-label">Server address</div>
+      <input type="text" id="serverInput" placeholder="yourapp.glitch.me" value="localhost:3000">
+    </div>
+    <div>
+      <div class="field-label">Room ID</div>
+      <input type="text" id="roomInput" placeholder="enter room name..." value="">
+    </div>
+    <button class="btn btn-primary" onclick="joinRoom()">Join / Create Room</button>
+    <div class="divider">or</div>
+    <button class="btn btn-ghost" onclick="joinRandom()">Random room</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="toolbar">
+    <!-- Tools -->
+    <div class="toolbar-section">
+      <button class="tool-btn active" id="toolPen" data-tip="Pen (P)" onclick="setTool('pen')">✏️</button>
+      <button class="tool-btn" id="toolEraser" data-tip="Eraser (E)" onclick="setTool('eraser')">◻</button>
+      <button class="tool-btn" id="toolLine" data-tip="Line (L)" onclick="setTool('line')">╱</button>
+      <button class="tool-btn" id="toolRect" data-tip="Rect (R)" onclick="setTool('rect')">▭</button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Colors -->
+    <div class="toolbar-section" id="colorSwatches">
+      <div class="color-swatch active" style="background:#f5f5f5" data-color="#f5f5f5" onclick="setColor(this)"></div>
+      <div class="color-swatch" style="background:#c8f05a" data-color="#c8f05a" onclick="setColor(this)"></div>
+      <div class="color-swatch" style="background:#5af0c8" data-color="#5af0c8" onclick="setColor(this)"></div>
+      <div class="color-swatch" style="background:#f05a5a" data-color="#f05a5a" onclick="setColor(this)"></div>
+      <div class="color-swatch" style="background:#f0a05a" data-color="#f0a05a" onclick="setColor(this)"></div>
+      <div class="color-swatch" style="background:#a05af0" data-color="#a05af0" onclick="setColor(this)"></div>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Size -->
+    <div class="toolbar-section" style="gap:0.5rem">
+      <span style="font-size:0.65rem;color:var(--muted)">size</span>
+      <input type="range" id="sizeSlider" min="1" max="40" value="4" oninput="updateSize(this.value)">
+      <span id="sizeVal" style="font-size:0.7rem;color:var(--muted);width:20px">4</span>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Actions -->
+    <div class="toolbar-section">
+      <button class="tool-btn" data-tip="Load image" onclick="document.getElementById('fileInput').click()">🖼</button>
+      <button class="tool-btn" data-tip="Clear canvas" onclick="clearCanvas()">🗑</button>
+      <button class="tool-btn" data-tip="Save PNG" onclick="saveCanvas()">💾</button>
+    </div>
+
+    <!-- Status -->
+    <div class="room-badge">
+      <span id="syncIndicator" class="sync-indicator">syncing...</span>
+      <div id="statusDot" class="status-dot"></div>
+      <span id="roomLabel" style="font-size:0.7rem;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="bgCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+    <div id="remoteCursor">
+      <div id="remoteCursorLabel"></div>
+    </div>
+    <div id="dropOverlay">Drop image here</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fileInput" accept="image/*" onchange="loadImageFile(this)">
+
+<script>
+// ── CONFIG ──
+// If page is served from a real server (not file://) — use that host automatically
+const AUTO_SERVER = location.protocol !== 'file:' ? location.host : '';
+
+function getWsUrl(serverHost) {
+  const host = (serverHost || AUTO_SERVER || 'localhost:3000')
+    .replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '').replace(/\/$/, '');
+  const proto = (host.includes('localhost') || host.includes('127.0.0.1')) ? 'ws' : 'wss';
+  return `${proto}://${host}`;
+}
+
+// ── STATE ──
+let ws = null;
+let userId = null;
+let roomId = null;
+let peerId = null;
+let peerConnected = false;
+
+let tool = 'pen';
+let color = '#f5f5f5';
+let brushSize = 4;
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+let snapshotForShape = null; // for line/rect preview
+
+// Sync throttle
+let pendingStrokes = [];
+let syncTimer = null;
+const SYNC_INTERVAL = 150; // ms - send strokes batched
+
+// ── CANVAS SETUP ──
+const bgCanvas = document.getElementById('bgCanvas');
+const drawCanvas = document.getElementById('drawCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+const ctx = drawCanvas.getContext('2d');
+
+function resizeCanvases() {
+  const wrap = document.getElementById('canvas-wrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  [bgCanvas, drawCanvas].forEach(c => {
+    if (c.width !== w || c.height !== h) {
+      // preserve draw canvas content
+      if (c === drawCanvas && c.width > 0) {
+        const tmp = document.createElement('canvas');
+        tmp.width = c.width; tmp.height = c.height;
+        tmp.getContext('2d').drawImage(c, 0, 0);
+        c.width = w; c.height = h;
+        ctx.drawImage(tmp, 0, 0);
+      } else {
+        c.width = w; c.height = h;
+      }
+    }
+  });
+}
+
+window.addEventListener('resize', resizeCanvases);
+
+// ── LOBBY ──
+function joinRoom() {
+  const room = document.getElementById('roomInput').value.trim() || randomId();
+  const server = document.getElementById('serverInput').value.trim();
+  connect(room, server);
+}
+
+function joinRandom() {
+  const server = document.getElementById('serverInput').value.trim();
+  connect(randomId(), server);
+}
+
+function randomId() {
+  return Math.random().toString(36).substr(2, 6).toUpperCase();
+}
+
+function connect(room) {
+  roomId = room;
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'join', room }));
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    setStatusDot('disconnected');
+    peerConnected = false;
+    showToast('Disconnected. Refresh to reconnect.');
+  };
+
+  ws.onerror = () => {
+    showToast('Connection error');
+  };
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'joined':
+      userId = msg.userId;
+      showApp();
+      document.getElementById('roomLabel').textContent = `#${roomId}`;
+      setStatusDot('connected');
+      showToast(`Room: ${roomId} — share this URL or room name`);
+
+      // Share room in URL
+      history.replaceState(null, '', `?room=${roomId}`);
+      break;
+
+    case 'peer_joined':
+      peerId = msg.userId;
+      peerConnected = true;
+      setStatusDot('peer');
+      document.getElementById('remoteCursorLabel').textContent = 'peer';
+      showToast('Peer connected!');
+      break;
+
+    case 'peer_left':
+      peerConnected = false;
+      setStatusDot('connected');
+      document.getElementById('remoteCursor').style.display = 'none';
+      showToast('Peer disconnected');
+      break;
+
+    case 'request_state':
+      // Send current canvas state to newcomer
+      sendState(msg.targetUserId);
+      break;
+
+    case 'state':
+      // Received full canvas state (base64 PNG)
+      loadState(msg.imageData, msg.bgData);
+      break;
+
+    case 'strokes':
+      applyRemoteStrokes(msg.strokes);
+      break;
+
+    case 'clear':
+      ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      break;
+
+    case 'cursor':
+      updateRemoteCursor(msg.x, msg.y);
+      break;
+
+    case 'bg':
+      loadRemoteBg(msg.imageData);
+      break;
+  }
+}
+
+function showApp() {
+  document.getElementById('lobby').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  resizeCanvases();
+  setupDrawing();
+  setupDrop();
+
+  // Check URL for room
+}
+
+// ── SYNC STATE ──
+function sendState(targetUserId) {
+  const imageData = drawCanvas.toDataURL('image/png', 0.8);
+  const bgData = bgCanvas.toDataURL('image/png', 0.8);
+  send({ type: 'state', imageData, bgData, targetUserId });
+}
+
+function loadState(imageData, bgData) {
+  if (imageData) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    img.src = imageData;
+  }
+  if (bgData) {
+    const img = new Image();
+    img.onload = () => bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
+    img.src = bgData;
+  }
+}
+
+// ── DRAWING ──
+function setupDrawing() {
+  const el = drawCanvas;
+
+  el.addEventListener('pointerdown', onDown);
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointerleave', onUp);
+  el.setPointerCapture;
+}
+
+function getPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (drawCanvas.width / rect.width),
+    y: (e.clientY - rect.top) * (drawCanvas.height / rect.height)
+  };
+}
+
+function onDown(e) {
+  e.preventDefault();
+  isDrawing = true;
+  const pos = getPos(e);
+  lastX = pos.x; lastY = pos.y;
+
+  if (tool === 'line' || tool === 'rect') {
+    snapshotForShape = ctx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+  }
+
+  if (tool === 'pen' || tool === 'eraser') {
+    applyDot(pos.x, pos.y);
+    queueStroke({ type: 'dot', x: pos.x, y: pos.y, color, size: brushSize, tool });
+  }
+}
+
+function onMove(e) {
+  const pos = getPos(e);
+
+  // Send cursor position (throttled inline)
+  if (peerConnected) {
+    send({ type: 'cursor', x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height });
+  }
+
+  if (!isDrawing) return;
+  e.preventDefault();
+
+  if (tool === 'pen' || tool === 'eraser') {
+    applyLine(lastX, lastY, pos.x, pos.y);
+    queueStroke({ type: 'line', x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color, size: brushSize, tool });
+    lastX = pos.x; lastY = pos.y;
+
+  } else if (tool === 'line') {
+    ctx.putImageData(snapshotForShape, 0, 0);
+    drawLine(ctx, lastX, lastY, pos.x, pos.y, color, brushSize);
+
+  } else if (tool === 'rect') {
+    ctx.putImageData(snapshotForShape, 0, 0);
+    drawRect(ctx, lastX, lastY, pos.x - lastX, pos.y - lastY, color, brushSize);
+  }
+}
+
+function onUp(e) {
+  if (!isDrawing) return;
+  isDrawing = false;
+
+  const pos = getPos(e);
+
+  if (tool === 'line') {
+    queueStroke({ type: 'line', x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color, size: brushSize, tool: 'pen' });
+    snapshotForShape = null;
+  } else if (tool === 'rect') {
+    queueStroke({ type: 'rect', x: lastX, y: lastY, w: pos.x - lastX, h: pos.y - lastY, color, size: brushSize });
+    snapshotForShape = null;
+  }
+
+  flushStrokes();
+}
+
+// ── DRAW PRIMITIVES ──
+function applyDot(x, y) {
+  ctx.beginPath();
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  } else {
+    ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+}
+
+function applyLine(x0, y0, x1, y1) {
+  ctx.beginPath();
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.strokeStyle = color;
+  }
+  ctx.lineWidth = brushSize;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawLine(c, x0, y0, x1, y1, col, size) {
+  c.beginPath();
+  c.strokeStyle = col;
+  c.lineWidth = size;
+  c.lineCap = 'round';
+  c.moveTo(x0, y0); c.lineTo(x1, y1);
+  c.stroke();
+}
+
+function drawRect(c, x, y, w, h, col, size) {
+  c.beginPath();
+  c.strokeStyle = col;
+  c.lineWidth = size;
+  c.strokeRect(x, y, w, h);
+}
+
+// ── REMOTE STROKES ──
+function applyRemoteStrokes(strokes) {
+  for (const s of strokes) {
+    const prevColor = color;
+    const prevSize = brushSize;
+    const prevTool = tool;
+
+    color = s.color; brushSize = s.size;
+
+    if (s.type === 'dot') {
+      tool = s.tool;
+      applyDot(s.x, s.y);
+    } else if (s.type === 'line') {
+      tool = s.tool;
+      applyLine(s.x0, s.y0, s.x1, s.y1);
+    } else if (s.type === 'rect') {
+      drawRect(ctx, s.x, s.y, s.w, s.h, s.color, s.size);
+    }
+
+    color = prevColor; brushSize = prevSize; tool = prevTool;
+  }
+}
+
+// ── STROKE BATCHING ──
+function queueStroke(stroke) {
+  pendingStrokes.push(stroke);
+  if (!syncTimer) {
+    syncTimer = setTimeout(flushStrokes, SYNC_INTERVAL);
+  }
+}
+
+function flushStrokes() {
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  if (pendingStrokes.length === 0) return;
+  send({ type: 'strokes', strokes: pendingStrokes });
+  showSyncIndicator();
+  pendingStrokes = [];
+}
+
+// ── REMOTE CURSOR ──
+function updateRemoteCursor(rx, ry) {
+  const cursor = document.getElementById('remoteCursor');
+  cursor.style.display = 'block';
+  cursor.style.left = (rx * drawCanvas.width) + 'px';
+  cursor.style.top = (ry * drawCanvas.height) + 'px';
+}
+
+// ── TOOLS / CONTROLS ──
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('[id^=tool]').forEach(b => b.classList.remove('active'));
+  const map = { pen: 'toolPen', eraser: 'toolEraser', line: 'toolLine', rect: 'toolRect' };
+  document.getElementById(map[t])?.classList.add('active');
+  drawCanvas.style.cursor = t === 'eraser' ? 'cell' : 'crosshair';
+}
+
+function setColor(el) {
+  color = el.dataset.color;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  if (tool === 'eraser') setTool('pen');
+}
+
+function updateSize(v) {
+  brushSize = parseInt(v);
+  document.getElementById('sizeVal').textContent = v;
+}
+
+function clearCanvas() {
+  if (!confirm('Clear entire canvas?')) return;
+  ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  send({ type: 'clear' });
+}
+
+function saveCanvas() {
+  const tmp = document.createElement('canvas');
+  tmp.width = drawCanvas.width; tmp.height = drawCanvas.height;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(bgCanvas, 0, 0);
+  tctx.drawImage(drawCanvas, 0, 0);
+  const a = document.createElement('a');
+  a.download = `whiteboard-${Date.now()}.png`;
+  a.href = tmp.toDataURL('image/png');
+  a.click();
+}
+
+// ── IMAGE LOADING ──
+function loadImageFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const data = e.target.result;
+    loadBgImage(data);
+    send({ type: 'bg', imageData: data });
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function loadBgImage(dataUrl) {
+  const img = new Image();
+  img.onload = () => {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    // Fit image maintaining aspect ratio
+    const scale = Math.min(bgCanvas.width / img.width, bgCanvas.height / img.height);
+    const w = img.width * scale, h = img.height * scale;
+    const x = (bgCanvas.width - w) / 2, y = (bgCanvas.height - h) / 2;
+    bgCtx.drawImage(img, x, y, w, h);
+  };
+  img.src = dataUrl;
+}
+
+function loadRemoteBg(dataUrl) {
+  loadBgImage(dataUrl);
+  showToast('Background updated by peer');
+}
+
+// ── DRAG & DROP ──
+function setupDrop() {
+  const wrap = document.getElementById('canvas-wrap');
+  const overlay = document.getElementById('dropOverlay');
+
+  wrap.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    overlay.style.display = 'flex';
+  });
+  wrap.addEventListener('dragleave', () => {
+    overlay.style.display = 'none';
+  });
+  wrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    overlay.style.display = 'none';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const data = ev.target.result;
+        loadBgImage(data);
+        send({ type: 'bg', imageData: data });
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+// ── WS SEND ──
+function send(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  }
+}
+
+// ── UI HELPERS ──
+function setStatusDot(state) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot';
+  if (state === 'connected') dot.classList.add('connected');
+  else if (state === 'peer') dot.classList.add('peer');
+}
+
+let syncTimeout;
+function showSyncIndicator() {
+  const ind = document.getElementById('syncIndicator');
+  ind.classList.add('visible');
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => ind.classList.remove('visible'), 1500);
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── KEYBOARD SHORTCUTS ──
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (k === 'p') setTool('pen');
+  else if (k === 'e') setTool('eraser');
+  else if (k === 'l') setTool('line');
+  else if (k === 'r') setTool('rect');
+  else if (k === '[') updateSize(Math.max(1, brushSize - 2)), document.getElementById('sizeSlider').value = brushSize;
+  else if (k === ']') updateSize(Math.min(40, brushSize + 2)), document.getElementById('sizeSlider').value = brushSize;
+});
+
+// ── INIT ──
+const urlRoom = new URLSearchParams(location.search).get('room');
+if (urlRoom) document.getElementById('roomInput').value = urlRoom;
+
+// If page is served from a real server — hide server field, it's auto-detected
+if (AUTO_SERVER) {
+  document.getElementById('serverField').style.display = 'none';
+  document.getElementById('serverInput').value = AUTO_SERVER;
+}
+</script>
+</body>
+</html>
