@@ -317,7 +317,7 @@
                     </div>
                     <div id="ws-server-field" style="display:flex; gap:5px; align-items:center; margin-bottom:5px;">
                         <span style="font-size:10px;color:#888;">Server:</span>
-                        <input type="text" id="ws-server-url" class="id-box" placeholder="yourapp.onrender.com" style="width:160px;" value="">
+                        <input type="text" id="ws-server-url" class="id-box" placeholder="xxx.deno.dev" style="width:185px;" value="">
                     </div>
                     <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Works on mobile, iOS, any network. Share this link:</div>
                     <div style="display: flex; gap: 5px; align-items: center;">
@@ -530,7 +530,9 @@ let wsSocket = null;
 let wsRoomId = null;
 let myWsId = 'u_' + Math.random().toString(36).substr(2, 9);
 let isSendingToWs = false;
-const WS_AUTO_HOST = (location.protocol !== 'file:') ? location.host : '';
+const _h = location.host;
+const _isStaticHost = _h.includes('github.io') || _h.includes('gitlab.io') || _h.includes('netlify.app') || _h.includes('vercel.app') || location.protocol === 'file:';
+const WS_AUTO_HOST = _isStaticHost ? '' : _h;
 
 let isSendingToMqtt = false; // Флаг для предотвращения дублирования событий
 
@@ -5079,16 +5081,13 @@ function handleWsMessage(msg) {
     const params = new URLSearchParams(window.location.search);
     const serverParam = params.get('wsserver');
 
+    // Always show server field — pre-fill from URL param or auto-host
     if (serverParam && serverInput) {
-        // Server address came from the shared link
         serverInput.value = decodeURIComponent(serverParam);
-        if (serverField) serverField.style.display = 'none';
     } else if (WS_AUTO_HOST && serverInput) {
-        // Page served from real server — use same host
         serverInput.value = WS_AUTO_HOST;
-        if (serverField) serverField.style.display = 'none';
     }
-    // else: show field so user can type Deno Deploy URL
+    // Always keep server field visible so user can see/edit it
 
     // Auto-switch to WS mode if URL has wsroom param
     if (params.get('wsroom')) {
