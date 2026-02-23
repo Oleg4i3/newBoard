@@ -7,9 +7,23 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
+  // Serve cheeseboard as main app if present, fallback to index.html
+  const serveFile = (filename, contentType) => {
+    const filePath = path.join(__dirname, filename);
+    if (fs.existsSync(filePath)) {
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(filePath).pipe(res);
+      return true;
+    }
+    return false;
+  };
+
   if (req.url === '/' || req.url === '/index.html') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
+    if (!serveFile('cheeseboard.html', 'text/html')) {
+      serveFile('index.html', 'text/html');
+    }
+  } else if (req.url === '/cheeseboard.html') {
+    serveFile('cheeseboard.html', 'text/html');
   } else {
     res.writeHead(404);
     res.end();
