@@ -317,7 +317,7 @@
                     </div>
                     <div id="ws-server-field" style="display:flex; gap:5px; align-items:center; margin-bottom:5px;">
                         <span style="font-size:10px;color:#888;">Server:</span>
-                        <input type="text" id="ws-server-url" class="id-box" placeholder="xxx.deno.dev" style="width:185px;" value="">
+                        <input type="text" id="ws-server-url" class="id-box" placeholder="xxx.deno.dev" style="width:185px;" value="windy-sheep-76.oleg4i3.deno.net">
                     </div>
                     <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Works on mobile, iOS, any network. Share this link:</div>
                     <div style="display: flex; gap: 5px; align-items: center;">
@@ -4832,14 +4832,20 @@ function sendToFirebase(type, data) {
         console.error('❌ Error sending to Firebase:', error);
     });
 }
-// 7. Обновляем функцию broadcast для Firebase
+// 7. Обновляем функцию broadcast для Firebase (WS handled inside original broadcast)
 const originalBroadcast = window.broadcast;
 window.broadcast = function(type, payload) {
     if (connectionMode === 'firebase' && firebaseRef) {
         sendToFirebase(type, payload.data || payload);
-    } else {
-        originalBroadcast(type, payload);
+        return;
     }
+    if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+        if (!payload || !payload.data || !payload.data.__isLocal) {
+            sendToWs(type, payload && payload.data ? payload.data : payload);
+        }
+        return;
+    }
+    originalBroadcast(type, payload);
 };
 
 
@@ -5081,13 +5087,15 @@ function handleWsMessage(msg) {
     const params = new URLSearchParams(window.location.search);
     const serverParam = params.get('wsserver');
 
-    // Always show server field — pre-fill from URL param or auto-host
+    // Pre-fill server: URL param > auto-host > hardcoded default
+    const DEFAULT_WS_SERVER = 'windy-sheep-76.oleg4i3.deno.net';
     if (serverParam && serverInput) {
         serverInput.value = decodeURIComponent(serverParam);
     } else if (WS_AUTO_HOST && serverInput) {
         serverInput.value = WS_AUTO_HOST;
+    } else if (serverInput && !serverInput.value) {
+        serverInput.value = DEFAULT_WS_SERVER;
     }
-    // Always keep server field visible so user can see/edit it
 
     // Auto-switch to WS mode if URL has wsroom param
     if (params.get('wsroom')) {
