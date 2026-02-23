@@ -1683,11 +1683,14 @@ function applyGroupOp(payload) {
         });
         const prevFB   = isSendingToFirebase;
         const prevMqtt = isSendingToMqtt;
+        const prevWs   = isSendingToWs;
         isSendingToFirebase = true;
         isSendingToMqtt     = true;
+        isSendingToWs       = true;
         canvas.add(g);
         isSendingToFirebase = prevFB;
         isSendingToMqtt     = prevMqtt;
+        isSendingToWs       = prevWs;
         canvas.requestRenderAll();
     });
 }
@@ -1700,24 +1703,30 @@ function applyUngroupOp(payload) {
         grp.__isLocal = true;
         const prevFB   = isSendingToFirebase;
         const prevMqtt = isSendingToMqtt;
+        const prevWs   = isSendingToWs;
         isSendingToFirebase = true;
         isSendingToMqtt     = true;
+        isSendingToWs       = true;
         canvas.remove(grp);
         isSendingToFirebase = prevFB;
         isSendingToMqtt     = prevMqtt;
+        isSendingToWs       = prevWs;
     }
     // Enliven each item with absolute coords and add to canvas
     fabric.util.enlivenObjects(payload.items, (objs) => {
         const prevFB   = isSendingToFirebase;
         const prevMqtt = isSendingToMqtt;
+        const prevWs   = isSendingToWs;
         isSendingToFirebase = true;
         isSendingToMqtt     = true;
+        isSendingToWs       = true;
         objs.forEach(o => {
             o.set({ selectable: true, evented: true, __isLocal: true });
             canvas.add(o);
         });
         isSendingToFirebase = prevFB;
         isSendingToMqtt     = prevMqtt;
+        isSendingToWs       = prevWs;
         canvas.requestRenderAll();
     });
 }
@@ -2828,8 +2837,16 @@ function setupPeerEvents() {
     peer.on('open', (id) => {
         console.log(`✅ Peer ID: ${id}`);
         myId = id;
-        connectionMode = "ready";
         actualConnectionType = "stun";
+        
+        // Don't override if already in a server-based mode (WS/Firebase/MQTT)
+        const serverModes = ['ws', 'firebase', 'mqtt'];
+        if (serverModes.includes(connectionMode)) {
+            console.log('PeerJS ready but staying in mode:', connectionMode);
+            return;
+        }
+        
+        connectionMode = "ready";
         
         let statusText;
         if (isHost) {
@@ -3259,8 +3276,10 @@ window.joinPeer = () => {
         
         if (retryCount >= maxRetries) {
             setStatus('Connection failed', 'err');
-            connectionMode = "ready";
-            updateUIForConnectionMode();
+            if (!['ws','firebase','mqtt'].includes(connectionMode)) {
+                connectionMode = "ready";
+                updateUIForConnectionMode();
+            }
             return;
         }
         
