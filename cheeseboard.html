@@ -105,14 +105,14 @@
             border: 0 solid #ddd;
             padding: 0 10px;
             opacity: 0;
-            width: 220px;
+            width: 340px;
         }
 
         .spoiler.expanded {
-            max-height: 350px;
+            max-height: 500px;
             padding: 10px;
             border-width: 1px;
-            opacity: 0.8;
+            opacity: 0.98;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         
@@ -133,7 +133,7 @@
         .mode-switcher {
             display: flex;
             gap: 15px;
-            margin-bottom: 10px;
+            flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px;
         }
         
         .mode-option {
@@ -5072,7 +5072,7 @@ function handleWsMessage(msg) {
     const serverInput = document.getElementById('ws-server-url');
     if (WS_AUTO_HOST && serverInput) {
         serverInput.value = WS_AUTO_HOST;
-        if (serverField) serverField.style.display = 'none'; // hide if auto-detected
+        if (serverField) serverField.style.display = 'none';
     }
     // Auto-switch to WS mode if URL has wsroom param
     const params = new URLSearchParams(window.location.search);
@@ -5082,7 +5082,27 @@ function handleWsMessage(msg) {
         if (wsRadio) wsRadio.checked = true;
         document.getElementById('ws-section').style.display = 'block';
         document.getElementById('p2p-section').style.display = 'none';
-        checkWsAutoConnect();
+
+        // Show connecting status immediately so partner sees feedback
+        setStatus('Connecting to relay server...', 'ok');
+
+        // Render free tier can take 30-60s to wake up — retry with backoff
+        let attempt = 0;
+        function tryConnect() {
+            attempt++;
+            setStatus(`Connecting... (attempt ${attempt})`, 'ok');
+            connectToWsRoom(params.get('wsroom'));
+        }
+
+        // First attempt after short delay (let page render first)
+        setTimeout(tryConnect, 500);
+
+        // If WS fails to open in 8s — retry (handles Render cold start)
+        setInterval(() => {
+            if (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING) {
+                if (connectionMode === 'ws') tryConnect();
+            }
+        }, 8000);
     }
 })();
 </script>
