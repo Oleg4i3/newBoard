@@ -4794,12 +4794,14 @@ function handleFirebaseMessage(msg) {
                 break;
                 
             case 'state_dump':
-                // Загружаем состояние канвы (всегда, в т.ч. при повторном подключении)
-                if (msg.data) {
-                    isSendingToFirebase = true;
+                // Загружаем состояние канвы
+                if (canvas.getObjects().length === 0) {
+                    if (msg.data.objects) {
+                        msg.data.objects.forEach(obj => obj.__isLocal = true);
+                    }
+                    
                     canvas.loadFromJSON(msg.data, function() {
                         canvas.requestRenderAll();
-                        isSendingToFirebase = false;
                         console.log('✅ Canvas state loaded from Firebase');
                     });
                 }
@@ -5070,12 +5072,9 @@ function handleWsMessage(msg) {
                 break;
 
             case 'state_dump':
-                if (msg.data) {
-                    // Always load full state (handles rejoin with stale canvas)
-                    isSendingToWs = true;
+                if (canvas.getObjects().length === 0 && msg.data) {
                     canvas.loadFromJSON(msg.data, function() {
                         canvas.requestRenderAll();
-                        isSendingToWs = false;
                         console.log('✅ WS: canvas state loaded');
                     });
                 }
