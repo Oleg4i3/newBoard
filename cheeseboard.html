@@ -1843,16 +1843,16 @@ function broadcastGroupOp(type, data) {
 }
 
 // ==========================================
-// CROP IMAGE
 // ==========================================
-// CROP IMAGE (fixed coordinate system)
+// CROP IMAGE — non-destructive (stores full image, adjustable crop)
 // ==========================================
-let cropTarget = null;
-let cropRect   = null;
+let cropTarget  = null;
+let cropRect    = null;
 let cropOverlay = null;
+// Saved full-image state before entering crop mode
+let cropSavedState = null;
 
 function startCropMode(targetObj) {
-    // Cleanup any leftover state first
     if (cropRect || cropOverlay) cleanupCrop();
 
     const obj = targetObj || canvas.getActiveObject();
@@ -1863,89 +1863,110 @@ function startCropMode(targetObj) {
 
     cropTarget = obj;
     canvas.discardActiveObject();
-    obj.set('opacity', 0.6);
 
-    // Use object's own canvas coords (NOT getBoundingRect which mixes viewport pixels).
-    // obj.left/top = top-left in canvas space; getScaledWidth/Height = displayed size.
-    const imgL = obj.left;
-    const imgT = obj.top;
-    const imgW = obj.getScaledWidth();
-    const imgH = obj.getScaledHeight();
+    // ── Save the full original image geometry ──────────────────────────
+    // We always keep cropX/Y/width/height relative to the NATURAL pixel size.
+    // _origW/_origH = natural pixel dimensions of the full source image.
+    const el = obj.getElement();  // HTMLImageElement
+    const naturalW = el ? el.naturalWidth  || el.width  : obj.width;
+    const naturalH = el ? el.naturalHeight || el.height : obj.height;
+
+    // Store on the fabric object so we can access it during confirmCrop
+    if (!obj._origNaturalW) obj._origNaturalW = naturalW;
+    if (!obj._origNaturalH) obj._origNaturalH = naturalH;
+
+    // Current crop state (may already be cropped)
+    const prevCropX = obj.cropX || 0;
+    const prevCropY = obj.cropY || 0;
+    const prevW     = obj.width;   // cropped natural width
+    const prevH     = obj.height;  // cropped natural height
+    const imgSX     = obj.scaleX || 1;
+    const imgSY     = obj.scaleY || 1;
+
+    // ── Temporarily reveal the FULL image so user can expand crop ──────
+    cropSavedState = {
+        cropX: prevCropX, cropY: prevCropY,
+        width: prevW,     height: prevH,
+        left:  obj.left,  top:    obj.top,
+        scaleX: imgSX,    scaleY: imgSY
+    };
+
+    // Show the full image (reset crop to natural size, shift left/top accordingly)
+    obj.set({
+        cropX: 0, cropY: 0,
+        width:  obj._origNaturalW,
+        height: obj._origNaturalH,
+        left:   obj.left - prevCropX * imgSX,
+        top:    obj.top  - prevCropY * imgSY,
+        opacity: 0.45,
+    });
+    obj.setCoords();
+
+    // ── Draw the crop rect showing the CURRENT visible area ────────────
+    const fullLeft = obj.left;
+    const fullTop  = obj.top;
+    // Current crop rect in canvas space
+    const crLeft = fullLeft + prevCropX * imgSX;
+    const crTop  = fullTop  + prevCropY * imgSY;
+    const crW    = prevW * imgSX;
+    const crH    = prevH * imgSY;
 
     cropRect = new fabric.Rect({
-        left:   imgL + imgW * 0.1,
-        top:    imgT + imgH * 0.1,
-        width:  imgW * 0.8,
-        height: imgH * 0.8,
-        fill:   'rgba(37,99,235,0.15)',
-        stroke: '#2563eb',
-        strokeWidth: 2,
+        left:   crLeft, top: crTop,
+        width:  crW,    height: crH,
+        fill:   'rgba(37,99,235,0.18)',
+        stroke: '#2563eb', strokeWidth: 2,
         strokeDashArray: [6, 3],
-        selectable:   true,
-        evented:      true,
-        hasBorders:   true,
-        hasControls:  true,
-        id:           '__crop_rect__',
-        lockRotation: true,
-        lockSkewingX: true,
-        lockSkewingY: true
+        selectable: true, evented: true,
+        hasBorders: true, hasControls: true,
+        id: '__crop_rect__',
+        lockRotation: true, lockSkewingX: true, lockSkewingY: true
     });
     canvas.add(cropRect);
     canvas.setActiveObject(cropRect);
 
-    // Build the confirm/cancel bar
+    // ── Buttons ────────────────────────────────────────────────────────
     cropOverlay = document.createElement('div');
     cropOverlay.style.cssText = [
-        'position:absolute', 'bottom:16px', 'left:50%',
-        'transform:translateX(-50%)', 'display:flex', 'gap:10px',
-        'z-index:500',
-        'background:rgba(255,255,255,0.95)', 'padding:8px 16px',
-        'border-radius:30px', 'box-shadow:0 4px 20px rgba(0,0,0,0.2)',
+        'position:absolute','bottom:16px','left:50%',
+        'transform:translateX(-50%)','display:flex','gap:10px','z-index:500',
+        'background:rgba(255,255,255,0.95)','padding:8px 16px',
+        'border-radius:30px','box-shadow:0 4px 20px rgba(0,0,0,0.2)',
         'pointer-events:all'
     ].join(';');
-    cropOverlay.innerHTML = [
-        '<button onclick="confirmCrop()" style="padding:6px 18px;background:#2563eb;',
-        'color:#fff;border:none;border-radius:20px;cursor:pointer;',
-        'font-size:13px;font-weight:600;">✓ Apply</button>',
-        '<button onclick="cancelCrop()" style="padding:6px 18px;background:#eee;',
-        'color:#333;border:none;border-radius:20px;cursor:pointer;font-size:13px;">✕ Cancel</button>'
-    ].join('');
+    cropOverlay.innerHTML =
+        '<button onclick="confirmCrop()" style="padding:6px 18px;background:#2563eb;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;">✓ Apply</button>' +
+        '<button onclick="resetCrop()"   style="padding:6px 18px;background:#f59e0b;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;">↺ Full</button>' +
+        '<button onclick="cancelCrop()" style="padding:6px 18px;background:#eee;color:#333;border:none;border-radius:20px;cursor:pointer;font-size:13px;">✕ Cancel</button>';
     document.getElementById('canvas-wrapper').appendChild(cropOverlay);
 
     canvas.requestRenderAll();
-    setStatus('Drag the blue frame to crop, then click Apply', 'ok');
+    setStatus('Drag blue frame to crop/expand. ↺ Full = restore full image.', 'ok');
 }
 
 function confirmCrop() {
     if (!cropTarget || !cropRect) { cancelCrop(); return; }
-
-    const img = cropTarget;
-
-    // All coordinates are in canvas space (virtual, not screen pixels).
-    const imgL = img.left;
-    const imgT = img.top;
+    const img   = cropTarget;
     const imgSX = img.scaleX || 1;
     const imgSY = img.scaleY || 1;
-    const imgW  = img.getScaledWidth();   // = img.width  * imgSX
-    const imgH  = img.getScaledHeight();  // = img.height * imgSY
 
-    // Crop rect bounds in canvas space (account for its own scale from dragging handles)
+    // Full image bounds in canvas space (img is now showing full natural image)
+    const fullL = img.left;
+    const fullT = img.top;
+    const fullW = img._origNaturalW * imgSX;
+    const fullH = img._origNaturalH * imgSY;
+
+    // Crop rect bounds (may have been resized/moved by user)
     const crL = cropRect.left;
     const crT = cropRect.top;
     const crW = cropRect.getScaledWidth();
     const crH = cropRect.getScaledHeight();
-    const crR = crL + crW;
-    const crB = crT + crH;
 
-    // Image bounds in canvas space
-    const imgR = imgL + imgW;
-    const imgB = imgT + imgH;
-
-    // Clamp crop rect to image bounds
-    const clampL = Math.max(crL, imgL);
-    const clampT = Math.max(crT, imgT);
-    const clampR = Math.min(crR, imgR);
-    const clampB = Math.min(crB, imgB);
+    // Clamp to full image bounds
+    const clampL = Math.max(crL, fullL);
+    const clampT = Math.max(crT, fullT);
+    const clampR = Math.min(crL + crW, fullL + fullW);
+    const clampB = Math.min(crT + crH, fullT + fullH);
 
     if (clampR <= clampL || clampB <= clampT) {
         setStatus('Crop area must overlap the image', 'err');
@@ -1953,23 +1974,19 @@ function confirmCrop() {
         return;
     }
 
-    // Convert canvas-space positions to image natural pixel coords.
-    // If the image already has a cropX/Y offset, add to it.
-    const existingCropX = img.cropX || 0;
-    const existingCropY = img.cropY || 0;
-
-    const newCropX = existingCropX + (clampL - imgL) / imgSX;
-    const newCropY = existingCropY + (clampT - imgT) / imgSY;
+    // Convert canvas-space offset to natural pixel coords
+    const newCropX = (clampL - fullL) / imgSX;
+    const newCropY = (clampT - fullT) / imgSY;
     const newW     = (clampR - clampL) / imgSX;
     const newH     = (clampB - clampT) / imgSY;
 
     img.set({
-        cropX:   Math.max(0, Math.round(newCropX)),
-        cropY:   Math.max(0, Math.round(newCropY)),
-        width:   Math.max(1, Math.round(newW)),
-        height:  Math.max(1, Math.round(newH)),
-        left:    clampL,
-        top:     clampT,
+        cropX:  Math.max(0, Math.round(newCropX)),
+        cropY:  Math.max(0, Math.round(newCropY)),
+        width:  Math.max(1, Math.round(newW)),
+        height: Math.max(1, Math.round(newH)),
+        left:   clampL,
+        top:    clampT,
         opacity: 1
     });
     img.setCoords();
@@ -1982,8 +1999,35 @@ function confirmCrop() {
     setStatus('Crop applied', 'ok');
 }
 
+// Restore full image (remove all cropping)
+function resetCrop() {
+    if (!cropTarget) return;
+    const img = cropTarget;
+    const imgSX = img.scaleX || 1;
+    const imgSY = img.scaleY || 1;
+    // Expand crop rect to full image
+    cropRect.set({
+        left:   img.left,
+        top:    img.top,
+        width:  img._origNaturalW,
+        height: img._origNaturalH,
+        scaleX: imgSX,
+        scaleY: imgSY,
+    });
+    cropRect.setCoords();
+    canvas.setActiveObject(cropRect);
+    canvas.requestRenderAll();
+    setStatus('Click Apply to confirm full image', 'ok');
+}
+
 function cancelCrop() {
-    if (cropTarget) { cropTarget.set('opacity', 1); cropTarget.setCoords(); }
+    if (cropTarget && cropSavedState) {
+        // Restore previous crop state exactly
+        cropTarget.set({ ...cropSavedState, opacity: 1 });
+        cropTarget.setCoords();
+    } else if (cropTarget) {
+        cropTarget.set('opacity', 1);
+    }
     cleanupCrop();
     canvas.requestRenderAll();
 }
@@ -1991,7 +2035,8 @@ function cancelCrop() {
 function cleanupCrop() {
     if (cropRect)    { canvas.remove(cropRect); cropRect = null; }
     if (cropOverlay) { cropOverlay.remove();    cropOverlay = null; }
-    cropTarget = null;
+    cropTarget  = null;
+    cropSavedState = null;
 }
 
 
@@ -2009,14 +2054,37 @@ function renderPalette(id, colors, type) {
             if(type === 'pen') settings.pen.color = c;
             if(type === 'hl') settings.highlighter.color = c;
             if(type === 'shape') settings.shape.stroke = c;
-            
             activateTool(currentTool, true); 
-            
             Array.from(el.children).forEach(k => k.classList.remove('selected'));
             d.classList.add('selected');
         };
         el.appendChild(d);
     });
+
+    // Custom color picker swatch (🎨)
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = '#000000';
+    picker.style.cssText = 'position:absolute;opacity:0;width:22px;height:22px;cursor:pointer;border:none;padding:0;';
+
+    const custom = document.createElement('div');
+    custom.className = 'color-swatch';
+    custom.title = 'Custom color';
+    custom.style.cssText = 'background: conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+    custom.appendChild(picker);
+
+    picker.oninput = () => {
+        const c = picker.value;
+        custom.style.background = c;
+        if(type === 'pen') settings.pen.color = c;
+        if(type === 'hl') settings.highlighter.color = c;
+        if(type === 'shape') settings.shape.stroke = c;
+        activateTool(currentTool, true);
+        Array.from(el.children).forEach(k => k.classList.remove('selected'));
+        custom.classList.add('selected');
+    };
+    custom.onclick = (e) => { picker.click(); e.stopPropagation(); };
+    el.appendChild(custom);
 }
 renderPalette('pen-colors', palette, 'pen');
 renderPalette('highlighter-colors', hlPalette, 'hl');
@@ -2032,11 +2100,11 @@ window.setShapeType = (t) => {
         console.warn('Canvas is not initialized yet');
         return;
     }
-     document.querySelectorAll('.shape-item').forEach(i => i.classList.remove('active'));
-    
-       if (event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-    }
+    document.querySelectorAll('.shape-item').forEach(i => i.classList.remove('active'));
+
+    // Highlight matching shape-item button (works for both click and keyboard)
+    const activeItem = document.querySelector(`.shape-item[onclick*="${t}"]`);
+    if (activeItem) activeItem.classList.add('active');
     
     activateTool('shape', true);
 };
@@ -3651,20 +3719,16 @@ window.addEventListener('keydown', (e) => {
             activateTool('eraser');
             break;
         case 'KeyR':
-            setShapeType('rect');
-            activateTool('shape', true);
+            setShapeType('rect');   // activateTool called inside
             break;
         case 'KeyC':
             setShapeType('circle');
-            activateTool('shape', true);
             break;
         case 'KeyL':
             setShapeType('line');
-            activateTool('shape', true);
             break;
         case 'KeyA':
             setShapeType('arrow');
-            activateTool('shape', true);
             break;
     }
 
@@ -3845,7 +3909,6 @@ const ctxMenu = document.getElementById('ctx-menu');
 const ctxColors = ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'];
 
 function buildCtxColorSwatches() {
-    // The swatches container is now #ctx-stroke-section (a flex row directly)
     const el = document.getElementById('ctx-stroke-section');
     el.innerHTML = '';
     ctxColors.forEach(c => {
@@ -3860,6 +3923,28 @@ function buildCtxColorSwatches() {
         };
         el.appendChild(d);
     });
+
+    // Custom color picker swatch in context menu
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = '#000000';
+    picker.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+
+    const custom = document.createElement('div');
+    custom.className = 'ctx-swatch';
+    custom.title = 'Custom color';
+    custom.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+    custom.appendChild(picker);
+
+    picker.oninput = () => {
+        const c = picker.value;
+        custom.style.background = c;
+        ctxSetStrokeColor(c);
+        el.querySelectorAll('.ctx-swatch').forEach(s => s.classList.remove('selected'));
+        custom.classList.add('selected');
+    };
+    custom.onclick = (e) => { picker.click(); e.stopPropagation(); };
+    el.appendChild(custom);
 }
 buildCtxColorSwatches();
 
