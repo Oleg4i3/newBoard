@@ -305,7 +305,10 @@
             
             <!-- Скрытый блок для ручного подключения -->
             <div id="manual-connect-spoiler" class="spoiler" style="position: absolute; top: 40px; left: 10px; z-index: 102;">
-                <div style="font-size: 12px; margin-bottom: 8px; color: #666; font-weight: bold;">Connection Settings</div>
+                <div style="font-size: 12px; margin-bottom: 8px; color: #666; font-weight: bold; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Connection Settings</span>
+                    <button onclick="toggleManualConnect()" title="Close" style="background:none;border:none;cursor:pointer;font-size:14px;color:#999;padding:0 2px;line-height:1;" onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">✕</button>
+                </div>
                 
                 <div class="mode-switcher">
                     <label class="mode-option">
@@ -320,9 +323,10 @@
                         <input type="radio" name="connection-mode" value="mqtt" onchange="setConnectionMode('mqtt')">
                         Cloud MQTT (Bugy)
                     </label>
-					<label class="mode-option">
+					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
 					Firebase (iOS compatible)
+					<a href="FIREBASE_CLEANER.html" target="_blank" title="Open Firebase Cleaner — clears stale room data" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#fff3e0;border:1px solid #ffb74d;color:#e65100;font-size:11px;text-decoration:none;flex-shrink:0;margin-left:2px;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">🧹</a>
 					</label>
                 </div>
                 
@@ -2916,12 +2920,13 @@ function checkAutoConnect() {
     const connectId = urlParams.get('connect');
     
     if (connectId && connectId.trim() !== '') {
-        console.log('Auto-connect parameter found:', connectId);
+        console.log('Auto-connect (P2P) parameter found:', connectId);
         document.getElementById('remote-id-input').value = connectId;
         document.getElementById('manual-remote-id').value = connectId;
         
+        // Wait for our PeerJS ID to be assigned (peer.on('open') sets myId)
         const checkPeerReady = setInterval(() => {
-            if (myId && connectionMode === "ready") {
+            if (myId) {
                 clearInterval(checkPeerReady);
                 setTimeout(() => {
                     joinPeer();
@@ -2932,7 +2937,7 @@ function checkAutoConnect() {
         
         setTimeout(() => {
             clearInterval(checkPeerReady);
-        }, 5000);
+        }, 10000);
     }
 }
 
@@ -3086,9 +3091,24 @@ function setupPeerEvents() {
 }
 
 initPeer();
-// Default mode is firebase — initialize on startup
+// Default mode is firebase — but only if no connection params are present in URL
 setTimeout(() => {
-    setConnectionMode('firebase');
+    const _autoP = new URLSearchParams(window.location.search);
+    const _hasWs       = !!_autoP.get('wsroom');
+    const _hasMqtt     = !!_autoP.get('room');
+    const _hasFirebase = !!_autoP.get('firebase');
+    const _hasP2P      = !!_autoP.get('connect');
+
+    if (!_hasWs && !_hasMqtt && !_hasFirebase && !_hasP2P) {
+        // No URL params — default to Firebase
+        setConnectionMode('firebase');
+    } else if (_hasP2P) {
+        // P2P link: switch to p2p mode so peer.on('open') sets connectionMode='ready'
+        const p2pRadio = document.querySelector('input[name="connection-mode"][value="p2p"]');
+        if (p2pRadio) { p2pRadio.checked = true; }
+        setConnectionMode('p2p');
+    }
+    // For WS/MQTT/Firebase: already handled by initWsUI() or window.load listener
     checkAutoConnect();
 }, 1000);
 
