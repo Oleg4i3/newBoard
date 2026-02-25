@@ -5178,6 +5178,19 @@ function checkFirebaseAutoConnect() {
 
 // 4. Подключение к комнате Firebase
 function connectToFirebaseRoom(roomId) {
+    // Защита от двойного подключения к одной и той же комнате.
+    // При загрузке страницы с ?firebase=roomId функция вызывалась ДВАЖДЫ:
+    // один раз из checkFirebaseAutoConnect() и один раз из window-load handler.
+    // Это регистрировало два child_added listener, и каждое сообщение обрабатывалось
+    // дважды — отсюда клоны объектов при группировке (applyGroupOp срабатывал 2 раза).
+    if (firebaseRoomId === roomId && firebaseRef) {
+        console.log('Firebase: already connected to room', roomId, '— skipping duplicate connect');
+        return;
+    }
+    // Если подключены к другой комнате — корректно отключаемся
+    if (firebaseRef) {
+        disconnectFirebase();
+    }
     try {
         // Получаем доступ к Firebase
         const db = getFirebase();
@@ -5228,7 +5241,14 @@ function connectToFirebaseRoom(roomId) {
         firebaseRef.child('messages').limitToLast(50).on('child_added', (snapshot) => {
             const msg = snapshot.val();
             if (!msg) return;
-            
+            handleFirebaseMessage(msg);
+        });
+
+        // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда.
+        // Гарантирует, что переподключившийся партнёр получит борд немедленно.
+        firebaseRef.child('state_snapshot').on('value', (snapshot) => {
+            const msg = snapshot.val();
+            if (!msg || msg.sender === myFirebaseId) return;
             handleFirebaseMessage(msg);
         });
         
@@ -5309,6 +5329,9 @@ function handleFirebaseMessage(msg) {
                         'strokeLineCap', 'strokeLineJoin'
                     ];
                     const state = canvas.toJSON(syncProps);
+                    // Временно сбрасываем флаг — иначе sendToFirebase() заблокирует отправку,
+                    // т.к. мы находимся внутри блока где isSendingToFirebase=true
+                    isSendingToFirebase = false;
                     sendToFirebase('state_dump', state);
                     console.log('📤 Sent full canvas state to Firebase');
                 }
@@ -5346,6 +5369,22 @@ function sendToFirebase(type, data) {
     
     console.log("📤 Отправляем в Firebase:", type);
     
+    // state_dump храним в отдельном узле — гарантирует, что переподключившийся
+    // партнёр всегда получит актуальный борд (не зависит от limitToLast(50))
+    if (type === 'state_dump') {
+        firebaseRef.child('state_snapshot').set({
+            sender: myFirebaseId,
+            type: 'state_dump',
+            data: data,
+            timestamp: Date.now()
+        }).then(() => {
+            console.log('✅ state_dump written to Firebase snapshot');
+        }).catch(error => {
+            console.error('❌ Error writing state_dump to Firebase:', error);
+        });
+        return;
+    }
+    
     const message = {
         sender: myFirebaseId,
         type: type,
@@ -5381,8 +5420,9 @@ window.broadcast = function(type, payload) {
 
 function disconnectFirebase() {
     if (firebaseRef) {
-        // Отключаем слушателя
+        // Отключаем все слушателей
         firebaseRef.child('messages').off();
+        firebaseRef.child('state_snapshot').off();
         
         // Удаляем запись о пользователе
         if (myFirebaseId) {
