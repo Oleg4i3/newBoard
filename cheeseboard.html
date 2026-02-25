@@ -84,6 +84,23 @@
         .btn-host { background: #2563eb; } .btn-host:hover { background: #1d4ed8; }
         .btn-join { background: #059669; } .btn-join:hover { background: #047857; }
         .btn-copy { background: #f3f4f6; width: 50px; color: #333; border: 1px solid #ddd;} .btn-copy:hover { background: #e5e7eb; }
+        .btn-qr { background: #f3f4f6; width: 28px; height: 28px; padding: 0; color: #333; border: 1px solid #ddd; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; } .btn-qr:hover { background: #e5e7eb; }
+
+        /* QR Modal */
+        #qr-modal {
+            display: none; position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.45); align-items: center; justify-content: center;
+        }
+        #qr-modal.show { display: flex; }
+        #qr-modal-inner {
+            background: white; border-radius: 12px; padding: 20px 24px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.25); text-align: center; min-width: 200px;
+        }
+        #qr-modal-inner h4 { margin: 0 0 12px; font-size: 13px; color: #444; }
+        #qr-canvas-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+        #qr-url-text { font-size: 9px; color: #888; word-break: break-all; max-width: 240px; margin-bottom: 12px; }
+        #qr-close-btn { background: #f3f4f6; border: 1px solid #ddd; border-radius: 6px; padding: 5px 16px; cursor: pointer; font-size: 12px; }
+        #qr-close-btn:hover { background: #e5e7eb; }
 
         /* Канва на всю высоту */
         #canvas-wrapper { 
@@ -239,35 +256,6 @@
         }
         .ctx-swatch.white-swatch { border-color: rgba(255,255,255,0.5); }
 
-        /* QR Modal */
-        #qr-modal {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.45); z-index: 9999;
-            align-items: center; justify-content: center;
-        }
-        #qr-modal.show { display: flex; }
-        #qr-modal-box {
-            background: white; border-radius: 12px;
-            padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-        }
-        #qr-modal-box canvas, #qr-modal-box img { border-radius: 6px; }
-        .btn-qr {
-            background: transparent; border: 1px solid #ddd; border-radius: 4px;
-            cursor: pointer; font-size: 15px; width: 28px; height: 26px;
-            display: flex; align-items: center; justify-content: center;
-            padding: 0; transition: 0.15s; flex-shrink: 0;
-        }
-        .btn-qr:hover { background: #f0f0f0; }
-        .btn-firebase-clean {
-            margin-top: 6px; width: 100%;
-            padding: 6px 8px; background: #fff3e0; border: 1px solid #fb8c00;
-            border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600;
-            color: #e65100; display: flex; align-items: center; gap: 5px;
-            justify-content: center; transition: 0.2s;
-        }
-        .btn-firebase-clean:hover { background: #ffe0b2; }
-
         /* Slider rows */
         .ctx-slider-wrap {
             display: flex;
@@ -310,6 +298,7 @@
                            title="Share this link with your partner"
                            onclick="copyShareLink()">
                     <button class="btn btn-copy" onclick="copyShareLink()">Copy Link</button>
+                    <button class="btn btn-qr" onclick="showQR('share-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     <button class="spoiler-toggle" onclick="toggleManualConnect()">Manual</button>
                 </div>
             </div>
@@ -331,10 +320,9 @@
                         <input type="radio" name="connection-mode" value="mqtt" onchange="setConnectionMode('mqtt')">
                         Cloud MQTT (Bugy)
                     </label>
-					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
+					<label class="mode-option">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
 					Firebase (iOS compatible)
-					<button class="btn-qr" onclick="window.open('FIREBASE_CLEANER.html','_blank')" title="Clean Firebase — open database cleaner" style="width:22px;height:22px;font-size:13px;flex-shrink:0;" onmousedown="event.preventDefault()">🔥</button>
 					</label>
                 </div>
                 
@@ -372,7 +360,7 @@
                     <div style="display:flex;gap:5px;align-items:center;">
                         <input type="text" id="ws-link-display" class="id-box" readonly style="width:180px;" onclick="copyWsLink()">
                         <button class="btn btn-copy" onclick="copyWsLink()">Copy</button>
-                        <button class="btn-qr" onclick="showQR('ws-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 9 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="4" height="4" rx=".5"/><rect x="1" y="1" width="2" height="2" fill="white"/><rect x="5" y="0" width="4" height="4" rx=".5"/><rect x="6" y="1" width="2" height="2" fill="white"/><rect x="0" y="5" width="4" height="4" rx=".5"/><rect x="1" y="6" width="2" height="2" fill="white"/><rect x="5" y="5" width="2" height="2" rx=".3"/><rect x="7" y="5" width="2" height="2" rx=".3"/><rect x="5" y="7" width="2" height="2" rx=".3"/><rect x="7" y="7" width="2" height="2" rx=".3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('ws-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                 </div>
 
@@ -385,7 +373,7 @@
                     <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
                         <input type="text" id="p2p-link-display" class="id-box" readonly style="width: 180px;" onclick="this.select();navigator.clipboard.writeText(this.value)">
                         <button class="btn btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('p2p-link-display').value)">Copy</button>
-                        <button class="btn-qr" onclick="showQR('p2p-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 9 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="4" height="4" rx=".5"/><rect x="1" y="1" width="2" height="2" fill="white"/><rect x="5" y="0" width="4" height="4" rx=".5"/><rect x="6" y="1" width="2" height="2" fill="white"/><rect x="0" y="5" width="4" height="4" rx=".5"/><rect x="1" y="6" width="2" height="2" fill="white"/><rect x="5" y="5" width="2" height="2" rx=".3"/><rect x="7" y="5" width="2" height="2" rx=".3"/><rect x="5" y="7" width="2" height="2" rx=".3"/><rect x="7" y="7" width="2" height="2" rx=".3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('p2p-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                     <div style="font-size: 10px; color: #888; margin-top: 5px;">Or connect manually:</div>
                     <div style="display: flex; gap: 5px; align-items: center; margin-top: 3px;">
@@ -405,7 +393,7 @@
     <div style="display: flex; gap: 5px; align-items: center;">
         <input type="text" id="firebase-link-display" class="id-box" readonly style="width: 180px;" onclick="copyFirebaseLink()">
         <button class="btn btn-copy" onclick="copyFirebaseLink()">Copy</button>
-        <button class="btn-qr" onclick="showQR('firebase-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 9 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="4" height="4" rx=".5"/><rect x="1" y="1" width="2" height="2" fill="white"/><rect x="5" y="0" width="4" height="4" rx=".5"/><rect x="6" y="1" width="2" height="2" fill="white"/><rect x="0" y="5" width="4" height="4" rx=".5"/><rect x="1" y="6" width="2" height="2" fill="white"/><rect x="5" y="5" width="2" height="2" rx=".3"/><rect x="7" y="5" width="2" height="2" rx=".3"/><rect x="5" y="7" width="2" height="2" rx=".3"/><rect x="7" y="7" width="2" height="2" rx=".3"/></svg></button>
+        <button class="btn btn-qr" onclick="showQR('firebase-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
     </div>
 </div>
                 <!-- MQTT секция -->
@@ -419,10 +407,11 @@
                     <div style="display: flex; gap: 5px; align-items: center;">
                         <input type="text" id="mqtt-link-display" class="id-box" readonly style="width: 180px;" onclick="copyMqttLink()">
                         <button class="btn btn-copy" onclick="copyMqttLink()">Copy</button>
-                        <button class="btn-qr" onclick="showQR('mqtt-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 9 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="4" height="4" rx=".5"/><rect x="1" y="1" width="2" height="2" fill="white"/><rect x="5" y="0" width="4" height="4" rx=".5"/><rect x="6" y="1" width="2" height="2" fill="white"/><rect x="0" y="5" width="4" height="4" rx=".5"/><rect x="1" y="6" width="2" height="2" fill="white"/><rect x="5" y="5" width="2" height="2" rx=".3"/><rect x="7" y="5" width="2" height="2" rx=".3"/><rect x="5" y="7" width="2" height="2" rx=".3"/><rect x="7" y="7" width="2" height="2" rx=".3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                 </div>
             </div>
+        </div>
 		
 		 <div class="divider"></div>
 
@@ -555,27 +544,25 @@
     </div>
 </div>
 
+<!-- QR Modal -->
+<div id="qr-modal">
+    <div id="qr-modal-inner">
+        <h4>📲 QR Code</h4>
+        <div id="qr-canvas-wrap"></div>
+        <div id="qr-url-text"></div>
+        <button id="qr-close-btn" onclick="document.getElementById('qr-modal').classList.remove('show')">Close</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
-<!-- QR Modal -->
-<div id="qr-modal">
-    <div id="qr-modal-box">
-        <div style="font-size:13px;font-weight:600;color:#333;">QR Code</div>
-        <div id="qr-canvas-wrap"></div>
-        <div style="display:flex;gap:8px;">
-            <button class="btn btn-copy" id="qr-copy-btn" onclick="copyQRImage()" style="width:auto;padding:6px 14px;">📋 Copy Image</button>
-            <button class="btn" onclick="closeQR()" style="background:#eee;color:#333;border:1px solid #ddd;padding:6px 14px;">Close</button>
-        </div>
-    </div>
-</div>
 
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
@@ -583,6 +570,23 @@
 
 
 <script>
+// ==========================================
+// QR CODE
+// ==========================================
+function showQR(inputId) {
+    const input = document.getElementById(inputId);
+    const url = input ? input.value.trim() : '';
+    if (!url) { alert('Generate a link first'); return; }
+    const wrap = document.getElementById('qr-canvas-wrap');
+    wrap.innerHTML = '';
+    document.getElementById('qr-url-text').textContent = url;
+    new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+    document.getElementById('qr-modal').classList.add('show');
+}
+document.getElementById('qr-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('show');
+});
+
 // ==========================================
 // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНФИГУРАЦИЯ
 // ==========================================
@@ -5833,41 +5837,6 @@ function disconnectWs() {
 window.addEventListener('beforeunload', () => {
     if (wsSocket) wsSocket.close();
     if (ablyClient) { try { ablyClient.close(); } catch(e) {} }
-});
-
-// ══════════════════════════════════════════════════════════════
-// QR CODE
-// ══════════════════════════════════════════════════════════════
-function showQR(inputId) {
-    const url = document.getElementById(inputId).value.trim();
-    if (!url) return;
-    const wrap = document.getElementById('qr-canvas-wrap');
-    wrap.innerHTML = '';
-    new QRCode(wrap, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
-    document.getElementById('qr-modal').classList.add('show');
-}
-function closeQR() {
-    document.getElementById('qr-modal').classList.remove('show');
-}
-async function copyQRImage() {
-    const img = document.querySelector('#qr-canvas-wrap img') || document.querySelector('#qr-canvas-wrap canvas');
-    if (!img) return;
-    let blob;
-    if (img.tagName === 'CANVAS') {
-        blob = await new Promise(res => img.toBlob(res, 'image/png'));
-    } else {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-    }
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    const btn = document.getElementById('qr-copy-btn');
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => { btn.textContent = '📋 Copy Image'; }, 1500);
-}
-document.getElementById('qr-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeQR();
 });
 
 // ══════════════════════════════════════════════════════════════
