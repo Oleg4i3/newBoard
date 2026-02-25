@@ -295,7 +295,7 @@
                         ⭐ Relay (Recommended)
                     </label>
                     <label class="mode-option">
-                        <input type="radio" name="connection-mode" value="p2p" checked onchange="setConnectionMode('p2p')">
+                        <input type="radio" name="connection-mode" value="p2p" onchange="setConnectionMode('p2p')">
                         P2P (Direct)
                     </label>
                     <label class="mode-option">
@@ -303,7 +303,7 @@
                         Cloud MQTT (Bugy)
                     </label>
 					<label class="mode-option">
-					<input type="radio" name="connection-mode" value="firebase" onchange="setConnectionMode('firebase')">
+					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
 					Firebase (iOS compatible)
 					</label>
                 </div>
@@ -346,17 +346,24 @@
                 </div>
 
                 <!-- P2P секция -->
-                <div id="p2p-section" class="mode-section">
+                <div id="p2p-section" class="mode-section" style="display:none;">
                     <h5>P2P Connection</h5>
-                    <div style="display: flex; gap: 5px; align-items: center;">
+                    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
+                        <button class="btn btn-join" onclick="startHostP2P()">Generate Link</button>
+                    </div>
+                    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
+                        <input type="text" id="p2p-link-display" class="id-box" readonly style="width: 180px;" onclick="this.select();navigator.clipboard.writeText(this.value)">
+                        <button class="btn btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('p2p-link-display').value)">Copy</button>
+                    </div>
+                    <div style="font-size: 10px; color: #888; margin-top: 5px;">Or connect manually:</div>
+                    <div style="display: flex; gap: 5px; align-items: center; margin-top: 3px;">
                         <input type="text" id="manual-remote-id" class="id-box" placeholder="Host ID" style="width: 120px;">
                         <button class="btn btn-join" onclick="joinPeerManual()">Connect</button>
                     </div>
-                    <div style="font-size: 10px; color: #888; margin-top: 5px;">Use if direct link doesn't work</div>
                 </div>
                 
 				<!-- Firebase секция -->
-<div id="firebase-section" class="mode-section" style="display: none;">
+<div id="firebase-section" class="mode-section">
     <h5>Firebase Room</h5>
     <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
         <input type="text" id="firebase-room-id" class="id-box" placeholder="Room ID" style="width: 120px;">
@@ -467,7 +474,7 @@
             <button class="tool-btn" onclick="document.getElementById('file-input').click()" title="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
-			<input type="checkbox" id="show-partner-frame" title="Show partner viewport frame">
+			<input type="checkbox" id="show-partner-frame" title="Show partner viewport frame" checked>
         </div>
    
 
@@ -535,7 +542,7 @@
 // ==========================================
 let lastViewportSend = 0;
 const VIEWPORT_THROTTLE = 200; // ms
-let connectionMode = 'p2p'; // 'p2p', 'mqtt' или 'firebase'
+let connectionMode = 'firebase'; // 'p2p', 'mqtt', 'firebase', 'ws'
 let mqttClient = null;
 let mqttRoomId = null;
 let myMqttId = Math.random().toString(36).substr(2, 9);
@@ -588,8 +595,7 @@ function setConnectionMode(mode) {
         checkMqttAutoConnect();
         setStatus('Switched to Cloud mode', 'ok');
     } else if (mode === 'firebase') {
-      //  enablePaperMode();
-	   disablePaperMode();///!!!!!
+        disablePaperMode();
         checkFirebaseAutoConnect();
         setStatus('Switched to Firebase mode', 'ok');
     } else if (mode === 'ws') {
@@ -3030,7 +3036,11 @@ function setupPeerEvents() {
 }
 
 initPeer();
-setTimeout(checkAutoConnect, 1000);
+// Default mode is firebase — initialize on startup
+setTimeout(() => {
+    setConnectionMode('firebase');
+    checkAutoConnect();
+}, 1000);
 
 function sendCanvasDataChunked() {
     if (!conn || !conn.open) return;
@@ -3312,44 +3322,51 @@ function setStatus(msg, type) {
 }
 
 window.startHost = () => {
+    // Default mode is firebase — Host button generates a firebase link
+    if (connectionMode === 'firebase' || connectionMode === 'p2p' ||
+        connectionMode === 'hosting' || connectionMode === 'connected' || connectionMode === 'ready') {
+        if (connectionMode !== 'p2p') {
+            // Firebase (default)
+            generateFirebaseLink();
+            const spoiler = document.getElementById('manual-connect-spoiler');
+            if (spoiler) spoiler.classList.add('expanded');
+            return;
+        }
+    }
     if (connectionMode === 'mqtt') {
         alert('In Cloud mode, use "Generate Link" button instead');
         return;
     }
-    
+    if (connectionMode === 'ws') {
+        generateWsLink();
+        const spoiler = document.getElementById('manual-connect-spoiler');
+        if (spoiler) spoiler.classList.add('expanded');
+        return;
+    }
+    // P2P fallback
+    startHostP2P();
+};
+
+window.startHostP2P = () => {
     isHost = true;
-    
     if (connectionMode === "hosting" || connectionMode === "connected") {
-        console.log("Re-hosting with new ID...");
-        
-        if (conn && conn.open) {
-            conn.close();
-            conn = null;
-        }
-        
-        if (peer) {
-            peer.destroy();
-            peer = null;
-        }
-        
+        if (conn && conn.open) { conn.close(); conn = null; }
+        if (peer) { peer.destroy(); peer = null; }
         initPeer();
-        
         const waitForNewId = setInterval(() => {
             if (myId && connectionMode === "hosting") {
                 clearInterval(waitForNewId);
                 const shareLink = generateShareLink(myId);
+                document.getElementById('p2p-link-display').value = shareLink;
                 document.getElementById('share-link-display').value = shareLink;
                 setStatus("Re-hosted! Share new link", 'ok');
             }
         }, 100);
-        
         return;
     }
-    
-    console.log("Starting host mode...");
-    
     if (myId) {
         const shareLink = generateShareLink(myId);
+        document.getElementById('p2p-link-display').value = shareLink;
         document.getElementById('share-link-display').value = shareLink;
         setStatus("Hosting (Share the link)", 'ok');
         connectionMode = "hosting";
@@ -5408,6 +5425,28 @@ function connectViaDeno(roomId) {
     wsSocket.onmessage = (e) => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.sender === myWsId) return;
+
+        // Chunked message reassembly
+        if (msg.type === '__chunk__') {
+            const { msgId, chunkIndex, totalChunks, chunk } = msg;
+            if (!_denoChunkBufs[msgId]) {
+                _denoChunkBufs[msgId] = { total: totalChunks, received: 0, chunks: [] };
+            }
+            const buf = _denoChunkBufs[msgId];
+            buf.chunks[chunkIndex] = chunk;
+            buf.received++;
+            if (buf.received === buf.total) {
+                const fullStr = buf.chunks.join('');
+                delete _denoChunkBufs[msgId];
+                try {
+                    const full = JSON.parse(fullStr);
+                    console.log('📥 Deno (chunked):', full.type, Math.round(fullStr.length/1024)+'KB');
+                    handleWsMessage(full);
+                } catch(err) { console.error('Deno chunk reassemble error:', err); }
+            }
+            return;
+        }
+
         handleWsMessage(msg);
     };
     wsSocket.onclose = () => {
@@ -5417,9 +5456,33 @@ function connectViaDeno(roomId) {
 }
 
 // Send via Deno
+// Deno relay: split large messages into chunks (images can be 100KB+)
+// Relay server rebroadcasts every message as-is — no size limit on WS itself,
+// but large single frames can stall/drop on slow connections.
+const DENO_CHUNK_LIMIT = 60000; // 60KB per chunk
+const _denoChunkBufs   = {};
+let   _denoSeq         = 0;
+
 function sendViaDeno(type, data) {
     if (!wsSocket || wsSocket.readyState !== WebSocket.OPEN) return;
-    wsSocket.send(JSON.stringify({ sender: myWsId, type, data, timestamp: Date.now() }));
+    const payload    = { sender: myWsId, type, data, timestamp: Date.now() };
+    const payloadStr = JSON.stringify(payload);
+
+    if (payloadStr.length <= DENO_CHUNK_LIMIT) {
+        wsSocket.send(payloadStr);
+        return;
+    }
+
+    const msgId       = myWsId + '_d' + (++_denoSeq);
+    const totalChunks = Math.ceil(payloadStr.length / DENO_CHUNK_LIMIT);
+    console.log('📤 Deno chunking:', type, Math.round(payloadStr.length/1024)+'KB →', totalChunks, 'chunks');
+    for (let i = 0; i < totalChunks; i++) {
+        const chunk = payloadStr.slice(i * DENO_CHUNK_LIMIT, (i+1) * DENO_CHUNK_LIMIT);
+        wsSocket.send(JSON.stringify({
+            sender: myWsId, type: '__chunk__',
+            msgId, chunkIndex: i, totalChunks, chunk
+        }));
+    }
 }
 
 // ══════════════════════════════════════════════════════════════
