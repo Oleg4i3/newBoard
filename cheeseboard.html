@@ -311,17 +311,36 @@
                 <!-- WS Relay секция -->
                 <div id="ws-section" class="mode-section" style="display: none;">
                     <h5>🌐 Relay Server Room</h5>
-                    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
-                        <input type="text" id="ws-room-id" class="id-box" placeholder="Room ID" style="width: 120px;">
+
+                    <!-- Transport selector -->
+                    <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+                        <span style="font-size:10px;color:#888;">Via:</span>
+                        <select id="ws-transport-select" onchange="onWsTransportChange()"
+                            style="font-size:11px;border:1px solid #ddd;border-radius:6px;padding:2px 4px;cursor:pointer;">
+                            <option value="deno">Deno (WebSocket)</option>
+                            <option value="ably">Ably (recommended)</option>
+                        </select>
+                    </div>
+
+                    <!-- Deno server URL -->
+                    <div id="ws-server-field" style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+                        <span style="font-size:10px;color:#888;">Server:</span>
+                        <input type="text" id="ws-server-url" class="id-box" placeholder="xxx.deno.dev" style="width:175px;" value="windy-sheep-76.oleg4i3.deno.net">
+                    </div>
+
+                    <!-- Ably API key — hidden, hardcoded in JS -->
+                    <div id="ably-key-field" style="display:none;">
+                        <input type="hidden" id="ably-api-key" value="">
+                    </div>
+
+                    <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+                        <input type="text" id="ws-room-id" class="id-box" placeholder="Room ID" style="width:110px;">
                         <button class="btn btn-join" onclick="generateWsLink()">Generate Link</button>
                     </div>
-                    <div id="ws-server-field" style="display:flex; gap:5px; align-items:center; margin-bottom:5px;">
-                        <span style="font-size:10px;color:#888;">Server:</span>
-                        <input type="text" id="ws-server-url" class="id-box" placeholder="xxx.deno.dev" style="width:185px;" value="windy-sheep-76.oleg4i3.deno.net">
-                    </div>
-                    <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Works on mobile, iOS, any network. Share this link:</div>
-                    <div style="display: flex; gap: 5px; align-items: center;">
-                        <input type="text" id="ws-link-display" class="id-box" readonly style="width: 180px;" onclick="copyWsLink()">
+
+                    <div style="font-size:10px;color:#888;margin-bottom:5px;">Works on mobile, iOS, any network:</div>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                        <input type="text" id="ws-link-display" class="id-box" readonly style="width:180px;" onclick="copyWsLink()">
                         <button class="btn btn-copy" onclick="copyWsLink()">Copy</button>
                     </div>
                 </div>
@@ -500,6 +519,7 @@
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -574,7 +594,6 @@ function setConnectionMode(mode) {
         setStatus('Switched to Firebase mode', 'ok');
     } else if (mode === 'ws') {
         disablePaperMode();
-        checkWsAutoConnect();
         setStatus('Switched to Relay (WS) mode', 'ok');
     } else {
         disablePaperMode();
@@ -1212,56 +1231,46 @@ async function handleImport(input) {
                     if (currentTop < 0) currentTop = 50;
                     const pdfLeft = (canvas.width / 2 - _vpt[4]) / _zoom - 400;
 
+                    // Suspend cursor during PDF load to stay under Ably 50 msg/sec limit
+                    const _cursorSuspendedByPdf = true;
+                    cursorAsleep = true;
+
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
+                        // scale 1.5 gives good quality for PDF
                         const viewport = page.getViewport({ scale: 1.5 });
-                        
-                        const canvasTmp = document.createElement('canvas');
-                        const context = canvasTmp.getContext('2d');
-                        canvasTmp.height = viewport.height;
-                        canvasTmp.width = viewport.width;
 
+                        const canvasTmp = document.createElement('canvas');
+                        canvasTmp.width  = viewport.width;
+                        canvasTmp.height = viewport.height;
+                        const context = canvasTmp.getContext('2d');
+                        // White background so PDF text is readable
+                        context.fillStyle = '#ffffff';
+                        context.fillRect(0, 0, canvasTmp.width, canvasTmp.height);
                         await page.render({ canvasContext: context, viewport: viewport }).promise;
 
-                        // Оптимизация размера
-                        const MAX_SIZE = 1200;
-                        if (canvasTmp.width > MAX_SIZE) {
-                            const scale = MAX_SIZE / canvasTmp.width;
-                            const tempCanvas = document.createElement('canvas');
-                            tempCanvas.width = canvasTmp.width * scale;
-                            tempCanvas.height = canvasTmp.height * scale;
-                            const tempCtx = tempCanvas.getContext('2d');
-                            tempCtx.drawImage(canvasTmp, 0, 0, tempCanvas.width, tempCanvas.height);
-                            canvasTmp.width = tempCanvas.width;
-                            canvasTmp.height = tempCanvas.height;
-                            context.drawImage(tempCanvas, 0, 0);
-                        }
+                        // Keep full PDF resolution — chunking handles large messages
+                        // quality 0.92 = near-lossless for text/diagrams
+                        const imgData = canvasTmp.toDataURL('image/jpeg', 0.92);
 
-                        const imgData = canvasTmp.toDataURL('image/jpeg', 0.6); /// was 0.7
-                        
                         await new Promise(resolve => {
                             fabric.Image.fromURL(imgData, (img) => {
-                                img.set({ 
-                                    top: currentTop, 
+                                img.set({
+                                    top:  currentTop,
                                     left: pdfLeft > 0 ? pdfLeft : 100,
-                                    id: 'pdf-' + Math.random().toString(36).substr(2, 9)
+                                    id:   'pdf-' + Math.random().toString(36).substr(2, 9)
                                 });
-                                
-                                if (img.width > 800) {
-                                    img.scaleToWidth(800);
-                                }
-                                
-                                // Используем существующую функцию setupImportedImage
+                                if (img.width > 900) img.scaleToWidth(900);
                                 setupImportedImage(img, `PDF Page ${i}`);
-                                
                                 currentTop += (img.height * img.scaleY) + 50;
-                                
                                 setStatus(`Loading PDF (${i}/${pdf.numPages})...`, 'ok');
                                 resolve();
                             });
                         });
                     }
-                    
+
+                    // Resume cursor after queue drains
+                    setTimeout(() => { cursorAsleep = false; }, 500);
                     setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
                     
                 } catch (err) {
@@ -1812,8 +1821,8 @@ function broadcastGroupOp(type, data) {
         sendToFirebase(type, data);
         return;
     }
-    if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
-        sendToWs(type, data);
+    if (connectionMode === 'ws') {
+        if (!isSendingToWs) sendToWs(type, data);
         return;
     }
     if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
@@ -3186,8 +3195,9 @@ function broadcast(type, payload) {
         return;
     }
 
-    // ── WS Relay ──
-    if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+    // ── WS Relay (Deno or Ably) ──
+    if (connectionMode === 'ws') {
+        if (isSendingToWs) { console.log('⛔ broadcast blocked by isSendingToWs:', type); return; }
         if (!payload || !payload.data || !payload.data.__isLocal) {
             sendToWs(type, payload && payload.data ? payload.data : payload);
         }
@@ -3591,53 +3601,69 @@ function initPartnerCursor() {
     document.getElementById('canvas-wrapper').appendChild(partnerCursorDiv);
 }
 
+// Lerp target — cursor glides smoothly to received position
+let _cursorTargetX = 0, _cursorTargetY = 0;
+let _cursorCurrentX = 0, _cursorCurrentY = 0;
+let _cursorRafId = null;
+
 function updatePartnerCursor(x, y) {
     if (!partnerCursorDiv) initPartnerCursor();
-    
     lastPartnerPos = { x, y };
     partnerCursorVisible = true;
-    
-    const vpt = canvas.viewportTransform;
+
+    // Canvas→screen
+    const vpt  = canvas.viewportTransform;
     const zoom = canvas.getZoom();
-    
-    const screenX = x * zoom + vpt[4];
-    const screenY = y * zoom + vpt[5];
-    
-    const wrapper = document.getElementById('canvas-wrapper');
+    _cursorTargetX = x * zoom + vpt[4];
+    _cursorTargetY = y * zoom + vpt[5];
+
+    // Start animation loop if not running
+    if (!_cursorRafId) _animateCursor();
+}
+
+function _animateCursor() {
+    // Lerp: 25% of remaining distance per frame → ~60fps glide
+    _cursorCurrentX += (_cursorTargetX - _cursorCurrentX) * 0.25;
+    _cursorCurrentY += (_cursorTargetY - _cursorCurrentY) * 0.25;
+
+    const wrapper     = document.getElementById('canvas-wrapper');
     const wrapperRect = wrapper.getBoundingClientRect();
-    
-    const isVisible = (
-        screenX >= 0 && 
-        screenX <= wrapperRect.width && 
-        screenY >= 0 && 
-        screenY <= wrapperRect.height
-    );
-    
+    const sx = _cursorCurrentX, sy = _cursorCurrentY;
+
+    const isVisible = sx >= 0 && sx <= wrapperRect.width && sy >= 0 && sy <= wrapperRect.height;
     if (isVisible) {
-        partnerCursorDiv.style.display = 'block';
-        partnerCursorDiv.style.opacity = '1';
-        partnerCursorDiv.style.left = screenX + 'px';
-        partnerCursorDiv.style.top = screenY + 'px';
-        
-        const cursorRect = partnerCursorDiv.getBoundingClientRect();
-        const windowWidth = window.innerWidth;
-        const windowHeight = window.innerHeight;
-        
-        if (cursorRect.left < 10) {
-            partnerCursorDiv.style.transform = 'translate(0, -100%)';
-        } else if (cursorRect.right > windowWidth - 10) {
-            partnerCursorDiv.style.transform = 'translate(-100%, -100%)';
-        } else {
-            partnerCursorDiv.style.transform = 'translate(-50%, -100%)';
-        }
+        partnerCursorDiv.style.display  = 'block';
+        partnerCursorDiv.style.opacity  = '1';
+        partnerCursorDiv.style.left     = sx + 'px';
+        partnerCursorDiv.style.top      = sy + 'px';
+        const cr = partnerCursorDiv.getBoundingClientRect();
+        if (cr.left < 10)                        partnerCursorDiv.style.transform = 'translate(0,-100%)';
+        else if (cr.right > window.innerWidth-10) partnerCursorDiv.style.transform = 'translate(-100%,-100%)';
+        else                                      partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
     } else {
         partnerCursorDiv.style.opacity = '0.3';
+    }
+
+    // Keep animating until cursor is within 0.5px of target
+    const dx = _cursorTargetX - _cursorCurrentX;
+    const dy = _cursorTargetY - _cursorCurrentY;
+    if (dx * dx + dy * dy > 0.25) {
+        _cursorRafId = requestAnimationFrame(_animateCursor);
+    } else {
+        _cursorRafId = null; // stop loop when settled
     }
 }
 
 function updateCursorOnViewportChange() {
     if (partnerCursorVisible && partnerCursorDiv) {
-        updatePartnerCursor(lastPartnerPos.x, lastPartnerPos.y);
+        // Recalculate screen target from canvas coords on viewport change
+        const vpt  = canvas.viewportTransform;
+        const zoom = canvas.getZoom();
+        _cursorTargetX  = lastPartnerPos.x * zoom + vpt[4];
+        _cursorTargetY  = lastPartnerPos.y * zoom + vpt[5];
+        _cursorCurrentX = _cursorTargetX; // snap instantly on zoom/pan
+        _cursorCurrentY = _cursorTargetY;
+        if (!_cursorRafId) _animateCursor();
     }
 }
 
@@ -3645,30 +3671,257 @@ canvas.on('after:render', function() {
     updateCursorOnViewportChange();
 });
 
-let lastCursorSend = 0;
-function broadcastCursor(e) {
-    const now = Date.now();
-    if (now - lastCursorSend > 50) {
-        const pointer = canvas.getPointer(e);
-        
-        if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
-            publishMqttMessage('cursor', { x: pointer.x, y: pointer.y });
-        } else if (connectionMode === 'firebase' && firebaseRef) {
-            
-            sendToFirebase('cursor', { x: pointer.x, y: pointer.y });
-        } else if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
-            sendToWs('cursor', { x: pointer.x, y: pointer.y });
-        } else if (conn && conn.open) {
-            conn.send({ 
-                type: 'cursor', 
-                x: pointer.x, 
-                y: pointer.y,
-                timestamp: now 
+// ==========================================
+// APPLY REMOTE DRAW OBJECT (shared by WS + Firebase)
+// Images require fabric.Image.fromURL — enlivenObjects cannot load pixels.
+// ==========================================
+function applyRemoteDrawObject(d, onDone) {
+    if (!d) { if (onDone) onDone(); return; }
+
+    function addToCanvas(obj) {
+        obj.__isLocal = true;
+        obj.set({ selectable: true, evented: true });
+        const existing = findObjectById(d.id);
+        if (existing && !existing.group) {
+            existing.set(obj);
+            existing.setCoords();
+        } else if (!existing) {
+            canvas.add(obj);
+        }
+        canvas.requestRenderAll();
+        if (onDone) onDone();
+    }
+
+    if (d.type === 'image' && d.src) {
+        fabric.Image.fromURL(d.src, (img) => {
+            if (!img) { if (onDone) onDone(); return; }
+            img.set({
+                id:     d.id,
+                left:   d.left   || 0,
+                top:    d.top    || 0,
+                scaleX: d.scaleX || 1,
+                scaleY: d.scaleY || 1,
+                angle:  d.angle  || 0,
+                cropX:  d.cropX  || 0,
+                cropY:  d.cropY  || 0,
+                width:  d.width  || img.width,
+                height: d.height || img.height,
+                __isLocal: true,
+                selectable: true,
+                evented: true,
+            });
+            const prev = isSendingToWs; isSendingToWs = true;
+            const existing = findObjectById(d.id);
+            if (existing) canvas.remove(existing);
+            canvas.add(img);
+            isSendingToWs = prev;
+            canvas.requestRenderAll();
+            if (onDone) onDone();
+        });
+        return;
+    }
+
+    fabric.util.enlivenObjects([d], function(objs) {
+        const obj = objs[0];
+        if (!obj) { if (onDone) onDone(); return; }
+        if (obj.type === 'path') obj.set('fill', '');
+        if (obj.type === 'group') {
+            obj.set({ fill: '', backgroundColor: '' });
+            obj.getObjects().forEach(child => {
+                if (child.type === 'path' && (!child.fill || child.fill === 'rgb(0,0,0)'))
+                    child.set('fill', '');
             });
         }
-        
-        lastCursorSend = now;
+        addToCanvas(obj);
+    });
+}
+
+// ==========================================
+// APPLY REMOTE STATE DUMP
+// loadFromJSON works for shapes/paths but silently drops images.
+// After load we re-inject any images from their src URLs.
+// ==========================================
+function applyRemoteStateDump(stateData, onDone) {
+    // Extract image objects from JSON before loading
+    const imageObjects = (stateData.objects || []).filter(o => o.type === 'image' && o.src);
+
+    canvas.loadFromJSON(stateData, function() {
+        if (imageObjects.length === 0) {
+            canvas.requestRenderAll();
+            if (onDone) onDone();
+            return;
+        }
+
+        // Re-load each image via fromURL (loadFromJSON may have skipped them)
+        let remaining = imageObjects.length;
+        imageObjects.forEach(d => {
+            // Check if already loaded correctly (has element with naturalWidth)
+            const existing = findObjectById(d.id);
+            const el = existing && existing.getElement ? existing.getElement() : null;
+            if (el && el.naturalWidth > 0) {
+                // Image loaded fine by loadFromJSON
+                remaining--;
+                if (remaining === 0) { canvas.requestRenderAll(); if (onDone) onDone(); }
+                return;
+            }
+
+            // Need to reload via fromURL
+            if (existing) canvas.remove(existing);
+            fabric.Image.fromURL(d.src, (img) => {
+                img.set({
+                    id: d.id, left: d.left || 0, top: d.top || 0,
+                    scaleX: d.scaleX || 1, scaleY: d.scaleY || 1,
+                    angle: d.angle || 0,
+                    cropX: d.cropX || 0, cropY: d.cropY || 0,
+                    width:  d.width  || img.width,
+                    height: d.height || img.height,
+                    __isLocal: true, selectable: true, evented: true
+                });
+                canvas.add(img);
+                remaining--;
+                if (remaining === 0) { canvas.requestRenderAll(); if (onDone) onDone(); }
+            });
+        });
+    });
+}
+
+// ==========================================
+// SEND STATE DUMP — compress PNG images to JPEG before sending
+// Ably limit: 64KB per message. PNG data-URLs can be 100-500KB.
+// ==========================================
+async function _sendStateDumpCompressed(syncProps) {
+    const state = canvas.toJSON(syncProps);
+
+    // Firebase: send state as-is — no size limit
+    if (connectionMode !== 'ws') {
+        sendToWs('state_dump', state); // actually goes to firebase via broadcast path
+        setTimeout(() => setStatus('Board sent to partner ✔', 'ok'), 600);
+        return;
     }
+
+    // Ably: only recompress opaque PNG → JPEG (to reduce size for chunking).
+    // JPEG images (incl. PDF pages) sent as-is — already compressed at source.
+    // Transparent PNG kept as PNG — must not add white background.
+    const MAX = 1400;
+    const promises = (state.objects || []).map(async (obj) => {
+        if (obj.type !== 'image' || !obj.src) return;
+        // Skip JPEG and http URLs — already good
+        if (obj.src.startsWith('data:image/jpeg') || obj.src.startsWith('http')) return;
+        // It's PNG — check for real transparency
+        await new Promise(resolve => {
+            const el = new Image();
+            el.onload = () => {
+                // Probe for alpha
+                let hasAlpha = false;
+                try {
+                    const probe = document.createElement('canvas');
+                    probe.width = Math.min(el.naturalWidth, 64);
+                    probe.height = Math.min(el.naturalHeight, 64);
+                    const pctx = probe.getContext('2d');
+                    pctx.drawImage(el, 0, 0, probe.width, probe.height);
+                    const pixels = pctx.getImageData(0, 0, probe.width, probe.height).data;
+                    for (let i = 3; i < pixels.length; i += 4) {
+                        if (pixels[i] < 250) { hasAlpha = true; break; }
+                    }
+                } catch(e) {}
+
+                let sw = el.naturalWidth, sh = el.naturalHeight;
+                if (sw > MAX || sh > MAX) {
+                    const scale = MAX / Math.max(sw, sh);
+                    sw = Math.round(sw * scale);
+                    sh = Math.round(sh * scale);
+                }
+                const tmp = document.createElement('canvas');
+                tmp.width = sw; tmp.height = sh;
+                const ctx = tmp.getContext('2d');
+                const origW = obj.width || sw, origH = obj.height || sh;
+
+                if (hasAlpha) {
+                    ctx.clearRect(0, 0, sw, sh);
+                    ctx.drawImage(el, 0, 0, sw, sh);
+                    obj.src = tmp.toDataURL('image/png'); // keep transparency
+                } else {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, sw, sh);
+                    ctx.drawImage(el, 0, 0, sw, sh);
+                    obj.src = tmp.toDataURL('image/jpeg', 0.92);
+                }
+                obj.scaleX = (obj.scaleX || 1) * (origW / sw);
+                obj.scaleY = (obj.scaleY || 1) * (origH / sh);
+                obj.width  = sw;
+                obj.height = sh;
+                resolve();
+            };
+            el.onerror = resolve;
+            el.src = obj.src;
+        });
+    });
+
+    await Promise.all(promises);
+    sendToWs('state_dump', state);
+    setTimeout(() => setStatus('Board sent to partner ✔', 'ok'), 600);
+}
+
+// ── Cursor sender: deadband + sleep ────────────────────────────
+let lastCursorSend  = 0;
+let lastCursorX     = null;
+let lastCursorY     = null;
+let cursorIdleTimer = null;
+let cursorAsleep    = false;     // true = don't send, hide partner cursor
+let cursorSleepTimer = null;
+
+const CURSOR_DEADBAND_PX   = 5;    // ignore movement < 5px
+const CURSOR_SEND_INTERVAL = 50;   // max 20 Hz
+const CURSOR_SLEEP_MS      = 4000; // sleep after 4s idle
+
+function _cursorGoSleep() {
+    cursorAsleep = true;
+    // Tell partner to hide cursor
+    _sendCursorPos(lastCursorX, lastCursorY, true);
+}
+
+function broadcastCursor(e) {
+    const now     = Date.now();
+    const pointer = canvas.getPointer(e);
+    const px = pointer.x, py = pointer.y;
+
+    // Deadband: skip if mouse barely moved
+    const dx = lastCursorX !== null ? px - lastCursorX : 999;
+    const dy = lastCursorY !== null ? py - lastCursorY : 999;
+    const moved = dx * dx + dy * dy >= CURSOR_DEADBAND_PX * CURSOR_DEADBAND_PX;
+
+    if (!moved) return;
+
+    // Wake up if was sleeping
+    if (cursorAsleep) {
+        cursorAsleep = false;
+        // Immediately send position to show cursor again
+    }
+
+    // Throttle
+    if (now - lastCursorSend < CURSOR_SEND_INTERVAL) return;
+
+    lastCursorSend = now;
+    lastCursorX = px;
+    lastCursorY = py;
+
+    // Reset sleep timer
+    clearTimeout(cursorSleepTimer);
+    clearTimeout(cursorIdleTimer);
+    cursorSleepTimer = setTimeout(_cursorGoSleep, CURSOR_SLEEP_MS);
+    // Park position after 600ms of no movement
+    cursorIdleTimer = setTimeout(() => _sendCursorPos(px, py), 600);
+
+    _sendCursorPos(px, py);
+}
+
+function _sendCursorPos(x, y, hidden) {
+    const now = Date.now();
+    const d = hidden ? { x, y, hidden: true } : { x, y };
+    if      (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) publishMqttMessage('cursor', d);
+    else if (connectionMode === 'firebase' && firebaseRef)                    sendToFirebase('cursor', d);
+    else if (connectionMode === 'ws')                                         sendToWs('cursor', d);
+    else if (conn && conn.open)                                               conn.send({ type: 'cursor', ...d, timestamp: now });
 }
 setTimeout(initPartnerCursor, 1000);
 
@@ -4333,21 +4586,97 @@ function setupImportedImage(img, filename) {
 
     canvas.add(img);
     canvas.setActiveObject(img);
-    
-    // ВАЖНО: передаем больше свойств для корректной синхронизации
-    const syncProps = [
-        'id', 'left', 'top', 'scaleX', 'scaleY', 'angle', 
-        'width', 'height', 'type', 'src'
-    ];
-    
-    // Используем общую функцию broadcast
-    broadcast('draw', { 
-        data: img.toObject(syncProps),
-        isImage: true,
-        fileName: filename
-    });
-    
     addToHistory(img);
+
+    // Broadcast with JPEG-compressed src to keep under Ably 64KB message limit.
+    // PNG/PDF src can be 200KB+ uncompressed — always recompress to JPEG before sending.
+    _broadcastImageWithJpegSrc(img, filename);
+}
+
+function _broadcastImageWithJpegSrc(img, filename) {
+    const syncProps = ['id','left','top','scaleX','scaleY','angle','width','height','type','src','cropX','cropY'];
+
+    // Firebase: send as-is — no size limit, no quality loss
+    if (connectionMode !== 'ws') {
+        broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
+        return;
+    }
+
+    // Ably (WS): must fit in chunks of 46KB each.
+    // Strategy: re-render via offscreen canvas.
+    //   - PNG with alpha → keep as PNG (preserve transparency)
+    //   - everything else → JPEG q=0.92
+    const el = img.getElement();
+    if (!el) {
+        broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
+        return;
+    }
+
+    const origW = el.naturalWidth  || img.width;
+    const origH = el.naturalHeight || img.height;
+    const origSrc = img.getSrc ? img.getSrc() : '';
+    const isPng = origSrc.startsWith('data:image/png') || (filename && filename.toLowerCase().endsWith('.png'));
+
+    // Detect real transparency in PNG
+    let hasAlpha = false;
+    if (isPng) {
+        try {
+            const probe = document.createElement('canvas');
+            probe.width = Math.min(origW, 64); probe.height = Math.min(origH, 64);
+            const pctx = probe.getContext('2d');
+            pctx.drawImage(el, 0, 0, probe.width, probe.height);
+            const pixels = pctx.getImageData(0, 0, probe.width, probe.height).data;
+            for (let i = 3; i < pixels.length; i += 4) {
+                if (pixels[i] < 250) { hasAlpha = true; break; }
+            }
+        } catch(e) {}
+    }
+
+    // Scale to max 1400px (chunking handles big messages)
+    const MAX = 1400;
+    let sw = origW, sh = origH;
+    if (sw > MAX || sh > MAX) {
+        const scale = MAX / Math.max(sw, sh);
+        sw = Math.round(sw * scale);
+        sh = Math.round(sh * scale);
+    }
+
+    const tmp = document.createElement('canvas');
+    tmp.width = sw; tmp.height = sh;
+    const ctx = tmp.getContext('2d');
+
+    let outSrc;
+    if (hasAlpha) {
+        // Transparent PNG — no white fill, preserve alpha
+        ctx.clearRect(0, 0, sw, sh);
+        ctx.drawImage(el, 0, 0, sw, sh);
+        outSrc = tmp.toDataURL('image/png');
+    } else {
+        // Opaque image — JPEG for smaller size
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, sw, sh);
+        ctx.drawImage(el, 0, 0, sw, sh);
+        outSrc = tmp.toDataURL('image/jpeg', 0.92);
+    }
+
+    const data = {
+        type:   'image',
+        src:    outSrc,
+        id:     img.id,
+        left:   img.left,
+        top:    img.top,
+        scaleX: img.scaleX * (origW / sw),
+        scaleY: img.scaleY * (origH / sh),
+        angle:  img.angle  || 0,
+        width:  sw,
+        height: sh,
+        cropX:  img.cropX  || 0,
+        cropY:  img.cropY  || 0,
+    };
+
+    console.log('📸 sending', hasAlpha ? 'PNG(alpha)' : 'JPEG',
+                Math.round(outSrc.length/1024) + 'KB', sw+'x'+sh);
+    broadcast('draw', { data, isImage: true, fileName: filename });
 }
 // ==========================================
 // ПАНОРАМИРОВАНИЕ СТРЕЛКАМИ (ARROWS)
@@ -4621,7 +4950,7 @@ function sendMyViewport() {
             width: canvas.width,
             height: canvas.height
         });
-    } else if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+    } else if (connectionMode === 'ws') {
         sendToWs('viewport', {
             transform: canvas.viewportTransform,
             zoom: canvas.getZoom(),
@@ -4840,7 +5169,12 @@ function handleFirebaseMessage(msg) {
     try {
         switch(msg.type) {
             case 'cursor':
-                updatePartnerCursor(msg.data.x, msg.data.y);
+                if (msg.data.hidden) {
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    partnerCursorVisible = false;
+                } else {
+                    updatePartnerCursor(msg.data.x, msg.data.y);
+                }
                 break;
                 
             case 'viewport':
@@ -4849,31 +5183,7 @@ function handleFirebaseMessage(msg) {
                 
             case 'draw':
             case 'object_added':
-                fabric.util.enlivenObjects([msg.data], function(objs) {
-                    const obj = objs[0];
-                    // Clear accidental fills from pen paths and group wrappers
-                    if (obj.type === 'path') obj.set('fill', '');
-                    if (obj.type === 'group') {
-                        obj.set({ fill: '', backgroundColor: '' });
-                        obj.getObjects().forEach(child => {
-                            if (child.type === 'path' && (!child.fill || child.fill === 'rgb(0,0,0)')) {
-                                child.set('fill', '');
-                            }
-                        });
-                    }
-                    obj.__isLocal = true;
-                    
-                    // Use findObjectById so we can update group children too
-                    const existing = findObjectById(msg.data.id);
-                    if (existing && !existing.group) {
-                        existing.set(obj);
-                        existing.setCoords();
-                    } else if (!existing) {
-                        obj.set({ selectable: true, evented: true, __isLocal: true });
-                        canvas.add(obj);
-                    }
-                    canvas.requestRenderAll();
-                });
+                applyRemoteDrawObject(msg.data, () => { isSendingToFirebase = false; });
                 break;
                 
             case 'modified':
@@ -4918,15 +5228,12 @@ function handleFirebaseMessage(msg) {
                 break;
                 
             case 'state_dump':
-                // Загружаем состояние канвы (всегда, в т.ч. при повторном подключении)
                 if (msg.data) {
                     setStatus('Syncing board...', 'ok');
                     isSendingToFirebase = true;
-                    canvas.loadFromJSON(msg.data, function() {
-                        canvas.requestRenderAll();
+                    applyRemoteStateDump(msg.data, () => {
                         isSendingToFirebase = false;
                         setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
-                        console.log('✅ Canvas state loaded from Firebase');
                     });
                 }
                 break;
@@ -4974,7 +5281,7 @@ window.broadcast = function(type, payload) {
         sendToFirebase(type, payload.data || payload);
         return;
     }
-    if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+    if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {  // Deno only
         if (!payload || !payload.data || !payload.data.__isLocal) {
             sendToWs(type, payload && payload.data ? payload.data : payload);
         }
@@ -5024,6 +5331,7 @@ const _isStaticHost = _h.includes('github.io') || _h.includes('gitlab.io') || _h
 const WS_AUTO_HOST = _isStaticHost ? '' : _h;
 
 const DEFAULT_WS_SERVER = 'windy-sheep-76.oleg4i3.deno.net';
+const DEFAULT_ABLY_KEY  = 'MD_vTw.eyunYA:z-ipfW9Fhz00MboiU-yBoevbrrdeFvzeOAB7JEWvt3A';
 
 function getWsServerUrl() {
     const inp = document.getElementById('ws-server-url');
@@ -5039,10 +5347,16 @@ function generateWsLink() {
         roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('ws-room-id').value = roomId;
     }
-    const inp = document.getElementById('ws-server-url');
-    const serverHost = (inp && inp.value.trim()) || DEFAULT_WS_SERVER;
     const baseUrl = window.location.href.split('?')[0];
-    const link = baseUrl + '?wsroom=' + roomId + '&wsserver=' + encodeURIComponent(serverHost);
+    const transport = (document.getElementById('ws-transport-select') || {}).value || 'deno';
+    let link;
+    if (transport === 'ably') {
+        // API key is secret — stored locally, never embedded in link
+        link = baseUrl + '?wsroom=' + roomId + '&wstransport=ably';
+    } else {
+        const serverHost = (document.getElementById('ws-server-url').value.trim()) || DEFAULT_WS_SERVER;
+        link = baseUrl + '?wsroom=' + roomId + '&wsserver=' + encodeURIComponent(serverHost);
+    }
     document.getElementById('ws-link-display').value = link;
     connectToWsRoom(roomId);
 }
@@ -5059,12 +5373,29 @@ function copyWsLink() {
     });
 }
 
-function connectToWsRoom(roomId) {
-    if (wsSocket) { wsSocket.onmessage = null; wsSocket.onclose = null; wsSocket.onerror = null; wsSocket.close(); wsSocket = null; }
-    wsRoomId = roomId;
+// ── Transport selection UI ─────────────────────────────────────
+function onWsTransportChange() {
+    const t = document.getElementById('ws-transport-select').value;
+    wsTransport = t;
+    try { localStorage.setItem('ws_transport', t); } catch(e) {}
+    document.getElementById('ws-server-field').style.display = (t === 'deno') ? 'flex' : 'none';
+    // ably-key-field stays hidden always (key is hardcoded)
+}
 
+function saveAblyKey(val) { /* key is hardcoded */ }
+function loadAblyKey() { return DEFAULT_ABLY_KEY; }
+
+// ══════════════════════════════════════════════════════════════
+// DENO WebSocket transport
+// ══════════════════════════════════════════════════════════════
+function connectViaDeno(roomId) {
+    if (wsSocket) {
+        wsSocket.onmessage = null; wsSocket.onclose = null; wsSocket.onerror = null;
+        wsSocket.close(); wsSocket = null;
+    }
+    wsRoomId = roomId;
     const url = getWsServerUrl();
-    setStatus('Connecting to relay...', 'ok');
+    setStatus('Connecting to Deno relay...', 'ok');
     console.log('WS connecting to', url, 'room', roomId);
 
     try { wsSocket = new WebSocket(url); }
@@ -5074,38 +5405,217 @@ function connectToWsRoom(roomId) {
         console.log('✅ WS open, joining room:', roomId);
         wsSocket.send(JSON.stringify({ type: 'join', room: roomId, sender: myWsId }));
     };
-
     wsSocket.onmessage = (e) => {
-        let msg;
-        try { msg = JSON.parse(e.data); } catch { return; }
+        let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.sender === myWsId) return;
-        console.log('📥 WS received:', msg.type);
         handleWsMessage(msg);
     };
-
     wsSocket.onclose = () => {
-        console.log('WS closed');
         if (connectionMode === 'ws') setStatus('Relay disconnected', 'err');
     };
-
-    wsSocket.onerror = (e) => {
-        console.error('WS error', e);
-        setStatus('WS error — check server URL', 'err');
-    };
+    wsSocket.onerror = () => setStatus('WS error — check server URL', 'err');
 }
 
-// Send — never blocked by isSendingToWs (that flag only prevents re-broadcast of received data)
-function sendToWs(type, data) {
-    if (!wsSocket || wsSocket.readyState !== WebSocket.OPEN) {
-        console.log('Skip WS send (no socket):', type);
+// Send via Deno
+function sendViaDeno(type, data) {
+    if (!wsSocket || wsSocket.readyState !== WebSocket.OPEN) return;
+    wsSocket.send(JSON.stringify({ sender: myWsId, type, data, timestamp: Date.now() }));
+}
+
+// ══════════════════════════════════════════════════════════════
+// ABLY transport
+// ══════════════════════════════════════════════════════════════
+let ablyClient   = null;
+let ablyChannel  = null;
+let wsTransport  = 'deno'; // 'deno' | 'ably'
+
+// Cursor throttle: 50ms for Deno, 150ms for Ably (saves messages)
+const CURSOR_THROTTLE_DENO  = 50;
+const CURSOR_THROTTLE_ABLY  = 150;
+
+let _ablyPresenceEntered = false; // enter presence only once per session
+
+function connectViaAbly(roomId) {
+    const apiKey = loadAblyKey();
+    if (ablyClient) {
+        try { ablyClient.close(); } catch(e) {}
+        ablyClient = null; ablyChannel = null;
+    }
+    _ablyPresenceEntered = false;
+
+    wsRoomId = roomId;
+    setStatus('Connecting to Ably...', 'ok');
+
+    ablyClient = new Ably.Realtime({ key: apiKey, clientId: myWsId });
+
+    // Subscriptions set up ONCE on the channel object — survive reconnects automatically
+    ablyChannel = ablyClient.channels.get('cb-room-' + roomId);
+
+    ablyChannel.subscribe('msg', (ablyMsg) => {
+        if (ablyMsg.clientId === myWsId) return;
+        const msg = ablyMsg.data;
+        console.log('📥 Ably:', msg.type);
+        handleWsMessage(msg);
+    });
+
+    ablyChannel.subscribe('chunk', (ablyMsg) => {
+        if (ablyMsg.clientId === myWsId) return;
+        const { msgId, chunkIndex, totalChunks, chunk } = ablyMsg.data;
+        if (!_ablyChunkBufs[msgId]) {
+            _ablyChunkBufs[msgId] = { total: totalChunks, received: 0, chunks: [] };
+        }
+        const buf = _ablyChunkBufs[msgId];
+        buf.chunks[chunkIndex] = chunk;
+        buf.received++;
+        if (buf.received === buf.total) {
+            const fullStr = buf.chunks.join('');
+            delete _ablyChunkBufs[msgId];
+            try {
+                const msg = JSON.parse(fullStr);
+                console.log('📥 Ably (chunked):', msg.type, Math.round(fullStr.length/1024) + 'KB');
+                handleWsMessage(msg);
+            } catch(e) { console.error('Ably chunk reassemble error:', e); }
+        }
+    });
+
+    // Presence: partner joined/left
+    ablyChannel.presence.subscribe('enter', (member) => {
+        if (member.clientId === myWsId) return;
+        console.log('👤 Partner entered:', member.clientId);
+        setStatus('Partner joined — sending board...', 'ok');
+        const syncProps = ['id','isPinned','left','top','scaleX','scaleY','angle',
+            'fill','stroke','strokeWidth','type','width','height',
+            'rx','ry','points','path','objectCaching','src','strokeLineCap','strokeLineJoin'];
+        if (canvas.getObjects().length > 0) {
+            _sendStateDumpCompressed(syncProps);
+        } else {
+            setStatus('Partner joined (empty board)', 'ok');
+        }
+    });
+
+    ablyChannel.presence.subscribe('leave', (member) => {
+        if (member.clientId === myWsId) return;
+        // Ignore leave events that are followed immediately by re-enter (reconnect)
+        // Only show "partner left" if they stay gone for 3 seconds
+        clearTimeout(member._leaveTimer);
+        member._leaveTimer = setTimeout(() => {
+            // Check if still absent
+            ablyChannel.presence.get((err, members) => {
+                const stillPresent = !err && members.some(m => m.clientId === member.clientId);
+                if (!stillPresent) {
+                    console.log('👤 Partner left (confirmed):', member.clientId);
+                    setStatus('Partner left', 'err');
+                }
+            });
+        }, 3000);
+    });
+
+    ablyClient.connection.on('connected', () => {
+        console.log('✅ Ably connected, presenceEntered:', _ablyPresenceEntered);
+        if (_ablyPresenceEntered) {
+            // Reconnect — just update status, don't re-enter presence (SDK handles it)
+            setStatus('Ably room: ' + roomId, 'ok');
+            return;
+        }
+        // First connect — enter presence and check for partner
+        ablyChannel.presence.get((err, members) => {
+            const othersPresent = !err && members.some(m => m.clientId !== myWsId);
+            ablyChannel.presence.enter({}, () => {
+                _ablyPresenceEntered = true;
+                if (othersPresent) {
+                    console.log('Partner already in room, requesting state');
+                    setStatus('Ably room: ' + roomId + ' — requesting board...', 'ok');
+                    sendViaAbly('request_state', { from: myWsId });
+                } else {
+                    setStatus('Ably room: ' + roomId, 'ok');
+                }
+            });
+        });
+    });
+
+    ablyClient.connection.on('failed', () =>
+        setStatus('Ably: connection failed — check API key', 'err'));
+    ablyClient.connection.on('disconnected', () => {
+        if (connectionMode === 'ws') setStatus('Ably: reconnecting...', 'err');
+    });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ABLY SEND QUEUE
+// Ably limit: 50 msg/sec per channel. 16-page PDF = ~48 chunks if sent raw.
+// Solution: serialize all sends through a queue at max 35 msg/sec (28ms/msg).
+// Chunking: messages >48KB split; unique msgId via counter (not Date.now).
+// ══════════════════════════════════════════════════════════════
+const ABLY_CHUNK_LIMIT = 46000; // safe under 64KB limit after JSON envelope
+const ABLY_SEND_INTERVAL = 30;  // ms between publishes → ~33 msg/sec < 50 limit
+let _ablySeq = 0;               // monotonic counter for unique msgIds
+const _ablyQueue = [];          // { eventName, payload } pending sends
+let _ablyQueueTimer = null;
+const _ablyChunkBufs = {};      // receiving: { msgId → { total, received, chunks[] } }
+
+function _ablyFlushQueue() {
+    _ablyQueueTimer = null;
+    if (!ablyChannel || _ablyQueue.length === 0) return;
+    const item = _ablyQueue.shift();
+    ablyChannel.publish(item.eventName, item.payload, (err) => {
+        if (err) console.error('Ably publish error:', item.payload.type || 'chunk', err.message);
+    });
+    if (_ablyQueue.length > 0) {
+        _ablyQueueTimer = setTimeout(_ablyFlushQueue, ABLY_SEND_INTERVAL);
+    }
+}
+
+function _ablyEnqueue(eventName, payload) {
+    _ablyQueue.push({ eventName, payload });
+    if (!_ablyQueueTimer) {
+        _ablyQueueTimer = setTimeout(_ablyFlushQueue, 0);
+    }
+}
+
+function sendViaAbly(type, data) {
+    if (!ablyChannel) { console.warn('Ably: no channel, skip', type); return; }
+
+    const payload    = { sender: myWsId, type, data, timestamp: Date.now() };
+    const payloadStr = JSON.stringify(payload);
+
+    if (payloadStr.length <= ABLY_CHUNK_LIMIT) {
+        console.log('📤 Ably queue:', type, Math.round(payloadStr.length / 1024) + 'KB');
+        _ablyEnqueue('msg', payload);
         return;
     }
-    const msg = { sender: myWsId, type: type, data: data, timestamp: Date.now() };
-    console.log('📤 WS send:', type);
-    wsSocket.send(JSON.stringify(msg));
+
+    // Large — chunk with unique sequential msgId (NOT Date.now — collides for rapid sends)
+    const msgId = myWsId + '_' + (++_ablySeq);
+    const totalChunks = Math.ceil(payloadStr.length / ABLY_CHUNK_LIMIT);
+    console.log('📤 Ably chunking:', type, Math.round(payloadStr.length / 1024) + 'KB →', totalChunks, 'chunks, msgId:', msgId);
+
+    for (let i = 0; i < totalChunks; i++) {
+        const chunk = payloadStr.slice(i * ABLY_CHUNK_LIMIT, (i + 1) * ABLY_CHUNK_LIMIT);
+        _ablyEnqueue('chunk', { sender: myWsId, msgId, chunkIndex: i, totalChunks, chunk });
+    }
 }
 
-// Receive — exact copy of handleFirebaseMessage
+// ══════════════════════════════════════════════════════════════
+// UNIFIED API — routes to Deno or Ably
+// ══════════════════════════════════════════════════════════════
+function connectToWsRoom(roomId) {
+    wsRoomId = roomId;
+    if (wsTransport === 'ably') {
+        connectViaAbly(roomId);
+    } else {
+        connectViaDeno(roomId);
+    }
+}
+
+function sendToWs(type, data) {
+    if (wsTransport === 'ably') {
+        sendViaAbly(type, data);
+    } else {
+        sendViaDeno(type, data);
+    }
+}
+
+// ── Receive (shared for both transports) ──────────────────────
 function handleWsMessage(msg) {
     isSendingToWs = true;
     try {
@@ -5117,19 +5627,14 @@ function handleWsMessage(msg) {
         ];
         switch(msg.type) {
             case 'joined':
-                setStatus('Relay room: ' + wsRoomId, 'ok');
-                // Ask partner for canvas state
+                setStatus('Room: ' + wsRoomId + ' (' + (wsTransport === 'ably' ? 'Ably' : 'Deno') + ')', 'ok');
                 sendToWs('request_state', { from: myWsId });
                 break;
 
             case 'peer_joined':
                 setStatus('Partner joined — sending board...', 'ok');
-                // Send our state to newcomer
                 if (canvas.getObjects().length > 0) {
-                    const state = canvas.toJSON(syncProps);
-                    sendToWs('state_dump', state);
-                    // Brief confirmation for sender
-                    setTimeout(() => setStatus('Board sent to partner ✔', 'ok'), 800);
+                    _sendStateDumpCompressed(syncProps);
                 } else {
                     setStatus('Partner joined (empty board)', 'ok');
                 }
@@ -5140,7 +5645,12 @@ function handleWsMessage(msg) {
                 break;
 
             case 'cursor':
-                updatePartnerCursor(msg.data.x, msg.data.y);
+                if (msg.data.hidden) {
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    partnerCursorVisible = false;
+                } else {
+                    updatePartnerCursor(msg.data.x, msg.data.y);
+                }
                 break;
 
             case 'viewport':
@@ -5149,25 +5659,7 @@ function handleWsMessage(msg) {
 
             case 'draw':
             case 'object_added':
-                fabric.util.enlivenObjects([msg.data], function(objs) {
-                    const obj = objs[0];
-                    if (obj.type === 'path') obj.set('fill', '');
-                    if (obj.type === 'group') {
-                        obj.set({ fill: '', backgroundColor: '' });
-                        obj.getObjects().forEach(child => {
-                            if (child.type === 'path' && (!child.fill || child.fill === 'rgb(0,0,0)')) child.set('fill', '');
-                        });
-                    }
-                    obj.__isLocal = true;
-                    const existing = findObjectById(msg.data.id);
-                    if (existing && !existing.group) {
-                        existing.set(obj); existing.setCoords();
-                    } else if (!existing) {
-                        obj.set({ selectable: true, evented: true, __isLocal: true });
-                        canvas.add(obj);
-                    }
-                    canvas.requestRenderAll();
-                });
+                applyRemoteDrawObject(msg.data, () => { isSendingToWs = false; });
                 break;
 
             case 'modified':
@@ -5193,23 +5685,19 @@ function handleWsMessage(msg) {
 
             case 'request_state':
                 if (canvas.getObjects().length > 0) {
-                    const state = canvas.toJSON(syncProps);
-                    sendToWs('state_dump', state);
-                    console.log('📤 WS: sent full canvas state');
+                    _sendStateDumpCompressed(syncProps);
                 }
                 break;
 
             case 'state_dump':
                 if (msg.data) {
-                    // Always load full state (handles rejoin with stale canvas)
                     setStatus('Syncing board...', 'ok');
                     isSendingToWs = true;
-                    canvas.loadFromJSON(msg.data, function() {
-                        canvas.requestRenderAll();
-                        isSendingToWs = false;
+                    applyRemoteStateDump(msg.data, () => {
+                        setTimeout(() => { isSendingToWs = false; }, 150);
                         setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
-                        console.log('✅ WS: canvas state loaded');
                     });
+                    return; // don't reset flag in finally
                 }
                 break;
 
@@ -5217,7 +5705,6 @@ function handleWsMessage(msg) {
                 console.log('Unknown WS type:', msg.type);
         }
     } finally {
-        // Reset immediately — same as Firebase
         isSendingToWs = false;
     }
 }
@@ -5225,22 +5712,40 @@ function handleWsMessage(msg) {
 function disconnectWs() {
     if (wsSocket) {
         wsSocket.onmessage = null; wsSocket.onclose = null;
-        wsSocket.close(); wsSocket = null; wsRoomId = null;
+        wsSocket.close(); wsSocket = null;
     }
+    if (ablyClient) {
+        try { ablyClient.close(); } catch(e) {}
+        ablyClient = null; ablyChannel = null;
+    }
+    wsRoomId = null;
 }
 
-window.addEventListener('beforeunload', () => { if (wsSocket) wsSocket.close(); });
+window.addEventListener('beforeunload', () => {
+    if (wsSocket) wsSocket.close();
+    if (ablyClient) { try { ablyClient.close(); } catch(e) {} }
+});
 
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
 (function initWsUI() {
     const params = new URLSearchParams(window.location.search);
-    const serverParam = params.get('wsserver');
-    const roomParam = params.get('wsroom');
-    const serverInput = document.getElementById('ws-server-url');
+    const serverParam   = params.get('wsserver');
+    const roomParam     = params.get('wsroom');
+    const transportParam = params.get('wstransport'); // 'ably' if set
 
-    // Fill server field: from URL > default
-    if (serverInput) {
-        serverInput.value = serverParam ? decodeURIComponent(serverParam) : DEFAULT_WS_SERVER;
-    }
+    // Default transport: Ably (hardcoded key, no setup needed)
+    const savedTransport = transportParam || localStorage.getItem('ws_transport') || 'ably';
+    wsTransport = savedTransport;
+
+    const sel = document.getElementById('ws-transport-select');
+    if (sel) { sel.value = wsTransport; onWsTransportChange(); }
+
+    // Fill Deno server field
+    const serverInput = document.getElementById('ws-server-url');
+    if (serverInput && serverParam) serverInput.value = decodeURIComponent(serverParam);
+    else if (serverInput && !serverInput.value) serverInput.value = DEFAULT_WS_SERVER;
 
     // Auto-connect if wsroom in URL
     if (roomParam) {
@@ -5249,24 +5754,31 @@ window.addEventListener('beforeunload', () => { if (wsSocket) wsSocket.close(); 
         if (wsRadio) wsRadio.checked = true;
         document.getElementById('ws-section').style.display = 'block';
         document.getElementById('p2p-section').style.display = 'none';
-        setStatus('Connecting to relay...', 'ok');
+        setStatus('Connecting...', 'ok');
 
         let attempt = 0;
         function tryConnect() {
             attempt++;
             setStatus('Connecting... (attempt ' + attempt + ')', 'ok');
-            connectToWsRoom(roomParam);
+            if (wsTransport === 'ably') {
+                document.getElementById('ws-room-id').value = roomParam;
+                connectToWsRoom(roomParam);
+            } else {
+                connectToWsRoom(roomParam);
+            }
         }
         setTimeout(tryConnect, 500);
 
-        // Retry if dropped (handles cold starts)
+        // Retry only for Deno (Ably handles reconnect internally)
         setInterval(() => {
-            if (connectionMode === 'ws' && (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING)) {
+            if (connectionMode === 'ws' && wsTransport === 'deno' &&
+                (!wsSocket || wsSocket.readyState === WebSocket.CLOSED || wsSocket.readyState === WebSocket.CLOSING)) {
                 tryConnect();
             }
         }, 8000);
     }
 })();
+
 </script>
 </body>
 </html>
