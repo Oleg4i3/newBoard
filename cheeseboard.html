@@ -2778,6 +2778,38 @@ canvas.on('object:moving', handleLiveSync);
 canvas.on('object:scaling', handleLiveSync);
 canvas.on('object:rotating', handleLiveSync);
 
+// ── Grid-snap for straight (horizontal / vertical) lines & arrows ─────────────
+// When moving a line/arrow that is nearly H or V we snap the perpendicular axis
+// to the nearest grid line so the line stays "on the grid" visually.
+// Threshold: the line is considered straight when sin(angle) < 0.12 (~7°).
+const LINE_SNAP_THRESHOLD = 0.12;
+
+canvas.on('object:moving', function(e) {
+    const obj = e.target;
+    if (!obj || !obj.lineType) return; // only line / dashed / arrow objects
+
+    const x1 = obj.lineX1, y1 = obj.lineY1;
+    const x2 = obj.lineX2, y2 = obj.lineY2;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+
+    if (Math.abs(dy) / len < LINE_SNAP_THRESHOLD) {
+        // ── Horizontal line: snap its centre-Y to nearest grid row ─────────
+        // obj.height for a path includes strokeWidth, so centre ≈ top + height/2
+        const centreY = obj.top + obj.height / 2;
+        const snapped = Math.round(centreY / gridSize) * gridSize;
+        obj.top = snapped - obj.height / 2;
+        obj.setCoords();
+    } else if (Math.abs(dx) / len < LINE_SNAP_THRESHOLD) {
+        // ── Vertical line: snap its centre-X to nearest grid column ────────
+        const centreX = obj.left + obj.width / 2;
+        const snapped = Math.round(centreX / gridSize) * gridSize;
+        obj.left = snapped - obj.width / 2;
+        obj.setCoords();
+    }
+});
+
 
 
 // ==========================================
@@ -4769,41 +4801,71 @@ function _broadcastImageWithJpegSrc(img, filename) {
 // ПАНОРАМИРОВАНИЕ СТРЕЛКАМИ (ARROWS)
 // ==========================================
 window.addEventListener('keydown', (e) => {
-    if (canvas.getActiveObject() && canvas.getActiveObject().isEditing) {
+    // Ignore when a text field on the page has focus
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+    const active = canvas.getActiveObject();
+
+    // Don't intercept arrows while text-editing an object
+    if (active && active.isEditing) return;
+
+    const isArrow = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code);
+    if (!isArrow) return;
+
+    if (active) {
+        // ── Move selected object(s) 1 px per key press ──────────────────────
+        e.preventDefault();
+        const STEP = e.shiftKey ? 10 : 1; // Shift = 10px nudge
+
+        switch (e.code) {
+            case 'ArrowUp':    active.top    -= STEP; break;
+            case 'ArrowDown':  active.top    += STEP; break;
+            case 'ArrowLeft':  active.left   -= STEP; break;
+            case 'ArrowRight': active.left   += STEP; break;
+        }
+        active.setCoords();
+
+        // For line/arrow objects also shift the stored world endpoints so the
+        // object stays consistent when the canvas is re-serialised or the
+        // endpoint controls are used after nudging.
+        if (active.lineType) {
+            const dx = active.left - (Math.min(active.lineX1, active.lineX2));
+            const dy = active.top  - (Math.min(active.lineY1, active.lineY2));
+            active.lineX1 += dx; active.lineY1 += dy;
+            active.lineX2 += dx; active.lineY2 += dy;
+        }
+
+        canvas.requestRenderAll();
+
+        // Debounced broadcast so rapid key-holds don't flood the channel
+        clearTimeout(active._nudgeBroadcastTimer);
+        active._nudgeBroadcastTimer = setTimeout(() => {
+            const syncProps = [
+                'id','left','top','scaleX','scaleY','angle',
+                'lineType','lineX1','lineY1','lineX2','lineY2'
+            ];
+            if (active.type === 'activeSelection') {
+                active.getObjects().forEach(o => {
+                    broadcast('modified', { data: getAbsoluteObjectData(o, syncProps) });
+                });
+            } else {
+                broadcast('modified', { data: active.toObject(syncProps) });
+            }
+        }, 80);
         return;
     }
 
-    if (canvas.getActiveObject()) {
-        return;
-    }
-
+    // ── No selection — pan the viewport ─────────────────────────────────────
+    e.preventDefault();
     const step = 20;
     const vpt = canvas.viewportTransform;
-    let changed = false;
-
     switch (e.code) {
-        case 'ArrowUp':
-            vpt[5] += step;
-            changed = true;
-            break;
-        case 'ArrowDown':
-            vpt[5] -= step;
-            changed = true;
-            break;
-        case 'ArrowLeft':
-            vpt[4] += step;
-            changed = true;
-            break;
-        case 'ArrowRight':
-            vpt[4] -= step;
-            changed = true;
-            break;
+        case 'ArrowUp':    vpt[5] += step; break;
+        case 'ArrowDown':  vpt[5] -= step; break;
+        case 'ArrowLeft':  vpt[4] += step; break;
+        case 'ArrowRight': vpt[4] -= step; break;
     }
-
-    if (changed) {
-        e.preventDefault();
-        canvas.requestRenderAll();
-    }
+    canvas.requestRenderAll();
 });
 
 // ==========================================
@@ -5182,12 +5244,11 @@ function connectToFirebaseRoom(roomId) {
     // При загрузке страницы с ?firebase=roomId функция вызывалась ДВАЖДЫ:
     // один раз из checkFirebaseAutoConnect() и один раз из window-load handler.
     // Это регистрировало два child_added listener, и каждое сообщение обрабатывалось
-    // дважды — отсюда клоны объектов при группировке (applyGroupOp срабатывал 2 раза).
+    // дважды — отсюда клоны объектов при группировке.
     if (firebaseRoomId === roomId && firebaseRef) {
         console.log('Firebase: already connected to room', roomId, '— skipping duplicate connect');
         return;
     }
-    // Если подключены к другой комнате — корректно отключаемся
     if (firebaseRef) {
         disconnectFirebase();
     }
@@ -5244,8 +5305,7 @@ function connectToFirebaseRoom(roomId) {
             handleFirebaseMessage(msg);
         });
 
-        // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда.
-        // Гарантирует, что переподключившийся партнёр получит борд немедленно.
+        // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
         firebaseRef.child('state_snapshot').on('value', (snapshot) => {
             const msg = snapshot.val();
             if (!msg || msg.sender === myFirebaseId) return;
@@ -5329,9 +5389,7 @@ function handleFirebaseMessage(msg) {
                         'strokeLineCap', 'strokeLineJoin'
                     ];
                     const state = canvas.toJSON(syncProps);
-                    // Временно сбрасываем флаг — иначе sendToFirebase() заблокирует отправку,
-                    // т.к. мы находимся внутри блока где isSendingToFirebase=true
-                    isSendingToFirebase = false;
+                    isSendingToFirebase = false; // сбрасываем флаг иначе sendToFirebase заблокирует
                     sendToFirebase('state_dump', state);
                     console.log('📤 Sent full canvas state to Firebase');
                 }
@@ -5369,8 +5427,8 @@ function sendToFirebase(type, data) {
     
     console.log("📤 Отправляем в Firebase:", type);
     
-    // state_dump храним в отдельном узле — гарантирует, что переподключившийся
-    // партнёр всегда получит актуальный борд (не зависит от limitToLast(50))
+    // state_dump храним в отдельном узле — переподключившийся партнёр
+    // всегда получит борд (не зависит от limitToLast(50))
     if (type === 'state_dump') {
         firebaseRef.child('state_snapshot').set({
             sender: myFirebaseId,
@@ -5420,11 +5478,9 @@ window.broadcast = function(type, payload) {
 
 function disconnectFirebase() {
     if (firebaseRef) {
-        // Отключаем все слушателей
         firebaseRef.child('messages').off();
         firebaseRef.child('state_snapshot').off();
         
-        // Удаляем запись о пользователе
         if (myFirebaseId) {
             firebaseRef.child('users').child(myFirebaseId).remove();
         }
