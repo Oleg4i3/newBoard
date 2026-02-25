@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Cleaner</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <button onclick="cleanAllRooms()">Очистить ВСЕ комнаты</button>
+    <button onclick="cleanEmptyRooms()">Очистить пустые комнаты</button>
+    <div id="status"></div>
+
+    <script>
+        // ТА ЖЕ конфигурация Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
+            databaseURL: "https://cheeseboard-c7f66-default-rtdb.firebaseio.com"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        async function cleanAllRooms() {
+            if (!confirm('УДАЛИТЬ ВСЕ КОМНАТЫ? Это необратимо!')) return;
+            
+            document.getElementById('status').innerHTML = 'Удаляем все комнаты...';
+            try {
+                await db.ref('cheeseboard').remove();
+                document.getElementById('status').innerHTML = '✅ Все комнаты удалены!';
+            } catch (error) {
+                document.getElementById('status').innerHTML = '❌ Ошибка: ' + error;
+            }
+        }
+        
+        async function cleanEmptyRooms() {
+            document.getElementById('status').innerHTML = 'Проверяем комнаты...';
+            try {
+                const snapshot = await db.ref('cheeseboard').once('value');
+                const rooms = snapshot.val();
+                if (!rooms) {
+                    document.getElementById('status').innerHTML = 'Нет комнат для очистки';
+                    return;
+                }
+                
+                let deleted = 0;
+                for (const roomId in rooms) {
+                    const room = rooms[roomId];
+                    const users = room.users || {};
+                    
+                    // Если нет пользователей или все offline
+                    if (Object.keys(users).length === 0) {
+                        await db.ref(`cheeseboard/${roomId}`).remove();
+                        deleted++;
+                        console.log(`Удалили комнату: ${roomId}`);
+                    }
+                }
+                
+                document.getElementById('status').innerHTML = `✅ Удалено ${deleted} пустых комнат`;
+            } catch (error) {
+                document.getElementById('status').innerHTML = '❌ Ошибка: ' + error;
+            }
+        }
+        
+        // Автоматическая очистка при загрузке
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('auto') === '1') {
+                cleanEmptyRooms();
+            }
+        };
+    </script>
+</body>
+</html>
