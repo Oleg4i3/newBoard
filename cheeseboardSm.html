@@ -1111,6 +1111,10 @@ function handleMqttMessage(type, data) {
             applyUngroupOp(data);
             break;
             
+        case 'layer_order':
+            applyLayerOrder(data.ids);
+            break;
+            
         case 'request_state':
             // Отправляем текущее состояние канвы
             if (canvas.getObjects().length > 0) {
@@ -3853,6 +3857,9 @@ function setupConn() {
 
         } else if (msg.type === 'ungroup_objects') {
             applyUngroupOp(msg.data);
+
+        } else if (msg.type === 'layer_order') {
+            applyLayerOrder(msg.data.ids);
         }
     }
 }
@@ -4805,7 +4812,7 @@ function ctxBringToFront() {
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.bringToFront(o));
     canvas.requestRenderAll();
-    objs.forEach(o => broadcast('modified', { data: o.toObject(['id']) }));
+    broadcastLayerOrder();
 }
 
 function ctxSendToBack() {
@@ -4815,7 +4822,33 @@ function ctxSendToBack() {
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.sendToBack(o));
     canvas.requestRenderAll();
-    objs.forEach(o => broadcast('modified', { data: o.toObject(['id']) }));
+    broadcastLayerOrder();
+}
+
+// Send the full z-order as an array of ids.
+// Receiver reorders its own canvas._objects to match.
+function broadcastLayerOrder() {
+    const ids = canvas.getObjects()
+        .filter(o => o.id)
+        .map(o => o.id);
+    broadcast('layer_order', { ids });
+}
+
+// Apply a received layer order: reorder canvas._objects to match ids array.
+// Objects not present in ids (e.g. partner has extra objects) are left at top.
+function applyLayerOrder(ids) {
+    const objs = canvas.getObjects();
+    const byId = {};
+    objs.forEach(o => { if (o.id) byId[o.id] = o; });
+
+    // Build reordered array: ids that exist locally first, then unknowns
+    const known = ids.map(id => byId[id]).filter(Boolean);
+    const unknown = objs.filter(o => !o.id || !ids.includes(o.id));
+    const reordered = [...known, ...unknown];
+
+    // Replace canvas._objects in-place (Fabric's internal array)
+    canvas._objects.splice(0, canvas._objects.length, ...reordered);
+    canvas.requestRenderAll();
 }
 
 canvas.on('before:transform', (e) => {
@@ -5630,6 +5663,10 @@ function handleFirebaseMessage(msg) {
             case 'ungroup_objects':
                 applyUngroupOp(msg.data);
                 break;
+
+            case 'layer_order':
+                applyLayerOrder(msg.data.ids);
+                break;
                 
             case 'request_state':
                 // Отправляем текущее состояние канвы
@@ -6162,6 +6199,10 @@ function handleWsMessage(msg) {
 
             case 'ungroup_objects':
                 applyUngroupOp(msg.data);
+                break;
+
+            case 'layer_order':
+                applyLayerOrder(msg.data.ids);
                 break;
 
             case 'request_state':
