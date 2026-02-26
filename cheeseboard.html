@@ -101,6 +101,8 @@
         #qr-url-text { font-size: 9px; color: #888; word-break: break-all; max-width: 240px; margin-bottom: 12px; }
         #qr-close-btn { background: #f3f4f6; border: 1px solid #ddd; border-radius: 6px; padding: 5px 16px; cursor: pointer; font-size: 12px; }
         #qr-close-btn:hover { background: #e5e7eb; }
+        #qr-copy-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 5px 16px; cursor: pointer; font-size: 12px; }
+        #qr-copy-btn:hover { background: #1d4ed8; }
 
         /* Канва на всю высоту */
         #canvas-wrapper { 
@@ -269,6 +271,34 @@
             height: 3px;
         }
         .ctx-slider-wrap span { font-size: 10px; color: rgba(255,255,255,0.8); min-width: 26px; text-align: right; }
+
+        /* Text ctx section */
+        .ctx-font-row {
+            display: flex; align-items: center; gap: 4px; padding: 0 2px; flex-wrap: wrap;
+        }
+        .ctx-font-row select {
+            background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 5px; font-size: 11px; padding: 2px 4px; cursor: pointer; flex: 1; min-width: 80px;
+        }
+        .ctx-font-row select option { background: #222; color: #fff; }
+        .ctx-font-row input[type=number] {
+            width: 40px; background: rgba(255,255,255,0.12); color: #fff;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 5px;
+            font-size: 11px; padding: 2px 4px; text-align: center;
+        }
+        .ctx-font-row input[type=number]::-webkit-inner-spin-button { display: none; }
+        .ctx-fmt-btn {
+            width: 26px; height: 26px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2);
+            background: transparent; color: #fff; font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .ctx-fmt-btn:hover, .ctx-fmt-btn.active { background: rgba(255,255,255,0.25); }
+        .ctx-align-btn {
+            width: 26px; height: 26px; border-radius: 5px; border: none;
+            background: transparent; color: rgba(255,255,255,0.7); font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .ctx-align-btn:hover, .ctx-align-btn.active { background: rgba(255,255,255,0.2); color:#fff; }
     </style>
 </head>
 <body>
@@ -467,6 +497,7 @@
             </div>
             
             <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" title="Eraser (E)">▧</button>
+            <button class="tool-btn" id="btn-text" onclick="activateTool('text')" title="Text (T)">T</button>
           
             <div style="position: relative;">
                 <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" title="Shapes & Lines">⦳</button>
@@ -524,8 +555,9 @@
         <button class="ctx-ic" title="Group"     onclick="ctxGroupSelected()">⊞</button>
         <button class="ctx-ic" title="Ungroup"   onclick="ctxUngroupSelected()">⊟</button>
         <div class="ctx-divider-v"></div>
+        <button class="ctx-ic" id="ctx-pin-btn"  title="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
         <button class="ctx-ic" title="Clone"     onclick="ctxClone()">❐</button>
-        <button class="ctx-ic" title="Crop image" onclick="ctxCrop()">✂</button>
+        <button class="ctx-ic" id="ctx-crop-btn" title="Crop image" onclick="ctxCrop()">✂</button>
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic danger" title="Delete" onclick="ctxDelete()">✕</button>
     </div>
@@ -546,6 +578,61 @@
         <input type="range" id="ctx-fill-opacity" min="0" max="100" value="0" oninput="ctxSetFillOpacity(this.value)">
         <span id="ctx-fill-opacity-val">0%</span>
     </div>
+
+    <!-- TEXT SECTION (only for textbox objects) -->
+    <div id="ctx-text-section" style="display:none; flex-direction:column; gap:5px;">
+        <!-- Font family + size -->
+        <div class="ctx-font-row">
+            <select id="ctx-font-family" onchange="ctxSetFont()">
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Trebuchet MS">Trebuchet MS</option>
+                <option value="Impact">Impact</option>
+                <option value="Comic Sans MS">Comic Sans MS</option>
+            </select>
+            <input type="number" id="ctx-font-size" value="20" min="6" max="200" oninput="ctxSetFontSize(this.value)" title="Font size">
+        </div>
+        <!-- Bold / Italic / Underline + alignment -->
+        <div class="ctx-font-row">
+            <button class="ctx-fmt-btn" id="ctx-bold-btn"      onclick="ctxToggleBold()"      title="Bold"><b>B</b></button>
+            <button class="ctx-fmt-btn" id="ctx-italic-btn"    onclick="ctxToggleItalic()"    title="Italic"><i>I</i></button>
+            <button class="ctx-fmt-btn" id="ctx-underline-btn" onclick="ctxToggleUnderline()" title="Underline"><u>U</u></button>
+            <div style="width:1px;height:18px;background:rgba(255,255,255,0.2);margin:0 3px;flex-shrink:0;"></div>
+            <button class="ctx-align-btn" id="ctx-align-left"   onclick="ctxSetAlign('left')"   title="Align Left">≡</button>
+            <button class="ctx-align-btn" id="ctx-align-center" onclick="ctxSetAlign('center')" title="Center">☰</button>
+            <button class="ctx-align-btn" id="ctx-align-right"  onclick="ctxSetAlign('right')"  title="Align Right">≣</button>
+        </div>
+        <!-- Line height slider -->
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:68px;">Line height</span>
+            <input type="range" id="ctx-line-height" min="0.8" max="3.0" step="0.05" value="1.16" oninput="ctxSetLineHeight(this.value)">
+            <span id="ctx-line-height-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">1.16</span>
+        </div>
+        <!-- Text color swatches -->
+        <div id="ctx-text-color-row" class="ctx-swatches-row"></div>
+    </div>
+
+    <!-- IMAGE FILTER SECTION (only for image objects) -->
+    <div id="ctx-img-section" style="display:none; flex-direction:column; gap:4px;">
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:68px;">Contrast</span>
+            <input type="range" id="ctx-contrast" min="-100" max="100" value="0" oninput="ctxApplyImgFilter()">
+            <span id="ctx-contrast-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">0</span>
+        </div>
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:68px;">Sharpen</span>
+            <input type="range" id="ctx-sharpen" min="0" max="10" value="0" step="1" oninput="ctxApplyImgFilter()">
+            <span id="ctx-sharpen-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">0</span>
+        </div>
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:68px;">Denoise</span>
+            <input type="range" id="ctx-blur" min="0" max="10" value="0" step="1" oninput="ctxApplyImgFilter()">
+            <span id="ctx-blur-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">0</span>
+        </div>
+    </div>
 </div>
 
 <!-- QR Modal -->
@@ -554,7 +641,10 @@
         <h4>📲 QR Code</h4>
         <div id="qr-canvas-wrap"></div>
         <div id="qr-url-text"></div>
-        <button id="qr-close-btn" onclick="document.getElementById('qr-modal').classList.remove('show')">Close</button>
+        <div style="display:flex;gap:8px;justify-content:center;">
+            <button id="qr-copy-btn" onclick="copyQRImage()">📋 Copy Image</button>
+            <button id="qr-close-btn" onclick="document.getElementById('qr-modal').classList.remove('show')">Close</button>
+        </div>
     </div>
 </div>
 
@@ -587,6 +677,41 @@ function showQR(inputId) {
     new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
     document.getElementById('qr-modal').classList.add('show');
 }
+
+function copyQRImage() {
+    const wrap = document.getElementById('qr-canvas-wrap');
+    // QRCode lib renders either a <canvas> or an <img> depending on browser
+    const qrCanvas = wrap.querySelector('canvas');
+    const qrImg    = wrap.querySelector('img');
+
+    function _copyBlob(blob) {
+        try {
+            navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                .then(() => {
+                    const btn = document.getElementById('qr-copy-btn');
+                    const orig = btn.textContent;
+                    btn.textContent = '✔ Copied!';
+                    btn.style.background = '#059669';
+                    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+                })
+                .catch(() => alert('Copy failed — your browser may not support clipboard image write'));
+        } catch(e) { alert('Copy not supported in this browser'); }
+    }
+
+    if (qrCanvas) {
+        qrCanvas.toBlob(_copyBlob, 'image/png');
+    } else if (qrImg) {
+        // Draw img into offscreen canvas → blob
+        const tmp = document.createElement('canvas');
+        tmp.width = qrImg.naturalWidth || 200;
+        tmp.height = qrImg.naturalHeight || 200;
+        tmp.getContext('2d').drawImage(qrImg, 0, 0);
+        tmp.toBlob(_copyBlob, 'image/png');
+    } else {
+        alert('QR code not ready yet');
+    }
+}
+
 document.getElementById('qr-modal').addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
 });
@@ -932,7 +1057,9 @@ function setupCanvasMqttEvents() {
         
         const syncProps = [
             'id', 'path', 'left', 'top', 'scaleX', 'scaleY', 'angle',
-            'fill', 'stroke', 'strokeWidth', 'type', 'strokeLineCap', 'strokeLineJoin'
+            'fill', 'stroke', 'strokeWidth', 'type', 'strokeLineCap', 'strokeLineJoin',
+            'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'textAlign', 'lineHeight', 'charSpacing',
+            '_filterContrast', '_filterSharpen', '_filterBlur'
         ];
         
         const pathData = e.path.toObject(syncProps);
@@ -1111,6 +1238,10 @@ function handleMqttMessage(type, data) {
             applyUngroupOp(data);
             break;
             
+        case 'layer_order':
+            applyLayerOrder(data.ids);
+            break;
+            
         case 'request_state':
             // Отправляем текущее состояние канвы
             if (canvas.getObjects().length > 0) {
@@ -1118,7 +1249,9 @@ function handleMqttMessage(type, data) {
                     'id', 'isPinned', 'left', 'top', 'scaleX', 'scaleY', 'angle', 
                     'fill', 'stroke', 'strokeWidth', 'type', 'width', 'height',
                     'rx', 'ry', 'points', 'path', 'objectCaching', 'src',
-                    'strokeLineCap', 'strokeLineJoin'
+                    'strokeLineCap', 'strokeLineJoin',
+                    'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'textAlign', 'lineHeight', 'charSpacing',
+                    '_filterContrast', '_filterSharpen', '_filterBlur'
                 ];
                 const state = canvas.toJSON(syncProps);
                 publishMqttMessage('state_dump', state);
@@ -1136,6 +1269,7 @@ function handleMqttMessage(type, data) {
                 isSendingToMqtt = true;
                 canvas.loadFromJSON(data, () => {
                     canvas.requestRenderAll();
+                    resizeCanvas();
                     console.log('✅ Canvas state loaded from cloud');
                     setTimeout(() => {
                         isSendingToMqtt = false;
@@ -1361,6 +1495,12 @@ const canvas = new fabric.Canvas('c', {
     targetFindTolerance: 10
 });
 
+// Force 2D filter pipeline.
+// Fabric 5 uses WebGL by default; custom filters with only applyTo2d()
+// are silently skipped in WebGL mode (no fragmentSource → passthrough).
+// Canvas2dFilterBackend guarantees applyTo2d() is always called.
+fabric.filterBackend = new fabric.Canvas2dFilterBackend();
+
 fabric.Object.prototype.set({
     transparentCorners: false,
     cornerColor: '#ffffff',
@@ -1402,6 +1542,7 @@ if (fabric.Object.prototype.controls && fabric.Object.prototype.controls.mtr) {
 function resizeCanvas() {
     canvas.setWidth(wrapper.clientWidth);
     canvas.setHeight(wrapper.clientHeight);
+    canvas.requestRenderAll();
 }
 window.addEventListener('resize', resizeCanvas);
 setTimeout(resizeCanvas, 10);
@@ -1476,7 +1617,8 @@ function activateTool(tool, keepMenu = false) {
         'pen': 'btn-pen',
         'highlighter': 'btn-highlighter',
         'shape': 'btn-shape',
-        'eraser': 'btn-eraser' 
+        'eraser': 'btn-eraser',
+        'text': 'btn-text'
     };
     
     if(btnMap[tool]) document.getElementById(btnMap[tool]).classList.add('active');
@@ -1518,6 +1660,8 @@ function activateTool(tool, keepMenu = false) {
         canvas.defaultCursor = 'not-allowed';
         canvas.discardActiveObject();
         canvas.requestRenderAll();
+    } else if (tool === 'text') {
+        canvas.defaultCursor = 'text';
     } else {
         canvas.defaultCursor = 'default';
     }
@@ -1689,7 +1833,6 @@ function applyModifiedData(data) {
 
     if (obj.group && obj.group.type === 'group') {
         // Inside a permanent group: only apply style/appearance props, not position.
-        // Setting left/top on a group child would displace it within the group.
         const POSITION_KEYS = new Set(['left','top','scaleX','scaleY','angle','skewX','skewY']);
         const safeData = {};
         Object.keys(data).forEach(k => {
@@ -1699,13 +1842,156 @@ function applyModifiedData(data) {
         obj.dirty = true;
         obj.group.dirty = true;
         obj.group.setCoords();
+        canvas.requestRenderAll();
+        return true;
+    }
+
+    // Textbox: apply all text props immediately, no lerp (text content can't lerp)
+    if (obj.type === 'textbox') {
+        obj.set(data);
+        obj.initDimensions();  // recompute auto-height after text/font change
+        obj.setCoords();
+        canvas.requestRenderAll();
+        return true;
+    }
+
+    // Images/PDFs: snap directly to final position, no lerp.
+    // Sender suppresses all intermediate frames; we just jump on arrival.
+    if (obj.type === 'image') {
+        // Check for filter params
+        const hasFilters = data._filterContrast !== undefined ||
+                           data._filterSharpen  !== undefined ||
+                           data._filterBlur     !== undefined;
+        if (hasFilters) {
+            _applyRemoteImgFilters(obj, data);
+        }
+        // Apply positional/other props (filter keys won't hurt obj.set)
+        const posData = {};
+        Object.keys(data).forEach(k => { if (!k.startsWith('_filter')) posData[k] = data[k]; });
+        if (Object.keys(posData).length > 1) { obj.set(posData); obj.setCoords(); }
+        canvas.requestRenderAll();
+        return true;
+    }
+
+    // All other objects: lerp positional props, apply style props immediately.
+    const LERP_KEYS = new Set(['left','top','scaleX','scaleY','angle']);
+    const hasLerp = Object.keys(data).some(k => LERP_KEYS.has(k));
+    if (hasLerp) {
+        _lerpSetTarget(obj, data);
     } else {
         obj.set(data);
         obj.setCoords();
+        canvas.requestRenderAll();
     }
-    canvas.requestRenderAll();
     return true;
 }
+
+// ==========================================
+// CLIENT-SIDE INTERPOLATION (LERP)
+//
+// How it works:
+//   _lerpSetTarget(obj, data) — stores target position for an object.
+//   canvas.on('before:render') — runs just before Fabric draws each frame.
+//     Advances every active lerp entry by LERP_A fraction toward its target.
+//     If any entries remain, calls requestRenderAll() to schedule next frame.
+//
+// Why before:render instead of a custom rAF loop:
+//   Fabric 5 uses its own requestRenderAll() / renderAndReset() cycle.
+//   A competing rAF loop calling renderAll() can be silently skipped when
+//   Fabric's isRendering flag is set, causing the "no visual update" bug.
+//   before:render fires synchronously inside Fabric's own render call,
+//   so updated positions are guaranteed to appear in that same frame.
+// ==========================================
+
+const _lerpMap = {}; // id → { obj, tLeft, tTop, tScaleX, tScaleY, tAngle, styleQ }
+const LERP_A   = 0.30; // fraction of gap per frame @ 60fps → ~98% in 7 frames (~117ms)
+
+function _lerpSetTarget(obj, data) {
+    const id = obj.id;
+    if (!id) return;
+
+    let e = _lerpMap[id];
+    if (!e) {
+        e = {
+            obj,
+            tLeft:   obj.left,
+            tTop:    obj.top,
+            tScaleX: obj.scaleX,
+            tScaleY: obj.scaleY,
+            tAngle:  obj.angle,
+            styleQ:  null
+        };
+        _lerpMap[id] = e;
+    }
+
+    if (data.left   !== undefined) e.tLeft   = data.left;
+    if (data.top    !== undefined) e.tTop    = data.top;
+    if (data.scaleX !== undefined) e.tScaleX = data.scaleX;
+    if (data.scaleY !== undefined) e.tScaleY = data.scaleY;
+    if (data.angle  !== undefined) e.tAngle  = data.angle;
+
+    // Non-positional style props applied on next frame
+    const SKIP = new Set(['id','left','top','scaleX','scaleY','angle']);
+    const style = {};
+    let hasStyle = false;
+    Object.keys(data).forEach(k => { if (!SKIP.has(k)) { style[k] = data[k]; hasStyle = true; } });
+    if (hasStyle) e.styleQ = Object.assign(e.styleQ || {}, style);
+
+    // Trigger a render so before:render fires and lerp starts
+    canvas.requestRenderAll();
+}
+
+// Hook into Fabric's own render cycle — runs just before each frame is drawn.
+canvas.on('before:render', function() {
+    const ids = Object.keys(_lerpMap);
+    if (ids.length === 0) return;
+
+    let anyActive = false;
+
+    for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const e  = _lerpMap[id];
+        const o  = e.obj;
+
+        if (!o || !o.canvas) { delete _lerpMap[id]; continue; }
+
+        // Apply queued style changes immediately (no interpolation)
+        if (e.styleQ) { o.set(e.styleQ); o.dirty = true; e.styleQ = null; }
+
+        // Lerp helper (arrow fn captures `anyActive` from outer scope indirectly;
+        // uses `settled` flag updated per-object below)
+        let settled = true;
+
+        const nl = (cur, tgt) => {
+            const d = tgt - cur;
+            if (Math.abs(d) < 0.05) return tgt;
+            settled = false;
+            return cur + d * LERP_A;
+        };
+
+        const newLeft   = nl(o.left,   e.tLeft);
+        const newTop    = nl(o.top,    e.tTop);
+        const newScaleX = nl(o.scaleX, e.tScaleX);
+        const newScaleY = nl(o.scaleY, e.tScaleY);
+
+        // Angle: shortest-path interpolation (handles 359° → 1° wrap)
+        let aDiff = e.tAngle - o.angle;
+        while (aDiff >  180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+        let newAngle = e.tAngle;
+        if (Math.abs(aDiff) >= 0.05) { newAngle = o.angle + aDiff * LERP_A; settled = false; }
+
+        o.set({ left: newLeft, top: newTop, scaleX: newScaleX, scaleY: newScaleY, angle: newAngle });
+        o.dirty = true;
+        o.setCoords();
+
+        if (settled) delete _lerpMap[id];
+        else anyActive = true;
+    }
+
+    // If lerp still has work, request next frame so before:render fires again
+    if (anyActive) canvas.requestRenderAll();
+});
 
 // Remove an object by id, searching recursively.
 // For objects inside groups: remove from the group's child list and redraw.
@@ -2262,7 +2548,21 @@ let lastPosX = 0;
 let lastPosY = 0;
 
 window.addEventListener('keydown', (e) => {
+    // Always let browser/Fabric handle keys when a real input or Fabric's hidden textarea has focus
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
     if (e.code === 'Space' && !isSpacePressed) {
+        const active = canvas.getActiveObject();
+        // Don't intercept space when a textbox is being edited
+        if (canvas.isEditing || (active && active.isEditing)) return;
+
+        // If a textbox is selected (not yet in edit mode), enter editing — Space will
+        // be sent via the normal Fabric path once the hidden textarea is focused
+        if (active && active.type === 'textbox') {
+            active.enterEditing();
+            canvas.requestRenderAll();
+            return;
+        }
         isSpacePressed = true;
         canvas.selection = false;
         canvas.defaultCursor = 'grab';
@@ -2437,6 +2737,47 @@ canvas.on('mouse:down', (o) => {
     }
     
     if (isMultitouch) return;
+
+    // ── Text tool: click to place a new Textbox ──────────────────────────────
+    if (currentTool === 'text') {
+        const pointer = canvas.getPointer(o.e);
+        // If we clicked on an existing textbox, let Fabric handle editing
+        const hit = canvas.findTarget(o.e);
+        if (hit && hit.type === 'textbox') {
+            canvas.setActiveObject(hit);
+            hit.enterEditing();
+            canvas.requestRenderAll();
+            return;
+        }
+        const tb = new fabric.Textbox('', {
+            left:         pointer.x,
+            top:          pointer.y,
+            width:        220,
+            fontSize:     20,
+            fontFamily:   'Arial',
+            fill:         '#000000',
+            textAlign:    'justify',   // auto-justify width by default
+            lineHeight:   1.16,
+            editable:     true,
+            lockUniScaling: false,
+            id:           'txt-' + Math.random().toString(36).substr(2, 9),
+        });
+        // Controls: ml/mr resize width (text reflows), mtr rotates.
+        // mt/mb are hidden — Textbox height is automatic (driven by content).
+        tb.setControlsVisibility({
+            tl: false, tr: false, bl: false, br: false,
+            mt: false, mb: false, ml: true, mr: true, mtr: true
+        });
+        canvas.add(tb);
+        canvas.setActiveObject(tb);
+        tb.enterEditing();
+        tb.selectAll();
+        canvas.requestRenderAll();
+        addToHistory(tb);
+        // Switch to select so clicks outside exit editing without spawning new boxes
+        activateTool('select');
+        return;
+    }
         
     if (currentTool === 'eraser') {
         isErasing = true;
@@ -2690,32 +3031,90 @@ canvas.on('path:created', (e) => {
     broadcast('draw', { data: e.path.toObject(['id']) });
 });
 
+// Broadcast textbox content + style when user finishes editing (clicks away)
+canvas.on('text:editing:exited', (e) => {
+    const tb = e.target;
+    if (!tb || tb.type !== 'textbox') return;
+    if (!tb.text.trim()) {
+        // Remove empty textboxes on exit
+        canvas.remove(tb);
+        canvas.requestRenderAll();
+        return;
+    }
+    broadcast('draw', { data: tb.toObject(_textSyncProps()) });
+});
+
+// Global debounce map for images: id → timer handle.
+// Keyed by object id so the timer survives re-grabs and selection changes.
+const _imgDebounce = {};
+
 canvas.on('object:modified', (e) => {
     const target = e.target;
     if (!target) return;
 
+    // Base sync props (position/lock state for all objects)
     const syncProps = [
         'id', 'isPinned',
-        'lockMovementX', 'lockMovementY',
-        'lockRotation',
+        'lockMovementX', 'lockMovementY', 'lockRotation',
         'lockScalingX', 'lockScalingY',
         'hasControls', 'borderColor', 'hoverCursor'
     ];
 
-    if (target.type === 'activeSelection') {
-        const objects = target.getObjects();
-        // Snapshot absolute positions BEFORE discardActiveObject changes coords.
-        // Must use getAbsoluteObjectData() which applies group matrix to left/top.
-        const absData = objects.map(obj => getAbsoluteObjectData(obj, syncProps));
+    function _doNormalBroadcast() {
+        if (target.type === 'textbox') {
+            // Textbox: always send full text props so partner gets content + position
+            broadcast('modified', { data: target.toObject(_textSyncProps()) });
+            return;
+        }
+        if (target.type === 'activeSelection') {
+            const objects = target.getObjects();
+            const absData = objects.map(obj => {
+                if (obj.type === 'textbox') return obj.toObject(_textSyncProps());
+                return getAbsoluteObjectData(obj, syncProps);
+            });
+            canvas.discardActiveObject();
+            absData.forEach(d => broadcast('modified', { data: d }));
+            const sel = new fabric.ActiveSelection(objects, { canvas: canvas });
+            canvas.setActiveObject(sel);
+            canvas.requestRenderAll();
+        } else {
+            broadcast('modified', { data: target.toObject(syncProps) });
+        }
+    }
 
-        canvas.discardActiveObject();
-        absData.forEach(d => broadcast('modified', { data: d }));
+    // Collect image objects from the target (single image or mixed selection)
+    function _getImageObjs(t) {
+        if (t.type === 'image') return [t];
+        if (t.type === 'activeSelection') return t.getObjects().filter(o => o.type === 'image');
+        return [];
+    }
 
-        const sel = new fabric.ActiveSelection(objects, { canvas: canvas });
-        canvas.setActiveObject(sel);
-        canvas.requestRenderAll();
+    const imgObjs = _getImageObjs(target);
+
+    if (imgObjs.length > 0) {
+        // Images/PDFs: debounce 500ms from the LAST mouseup.
+        // Timer is keyed by object id — survives selection rebuild between re-grabs.
+        // At fire time we do a fresh findObjectById so we always send current position.
+        imgObjs.forEach(img => {
+            const id = img.id;
+            clearTimeout(_imgDebounce[id]);
+            _imgDebounce[id] = setTimeout(() => {
+                delete _imgDebounce[id];
+                const current = findObjectById(id);
+                if (current) broadcast('modified', { data: current.toObject(syncProps) });
+            }, 500);
+        });
+
+        // Also broadcast non-image objects in a mixed selection immediately
+        if (target.type === 'activeSelection') {
+            const nonImgs = target.getObjects().filter(o => o.type !== 'image');
+            if (nonImgs.length > 0) {
+                const absData = nonImgs.map(obj => getAbsoluteObjectData(obj, syncProps));
+                absData.forEach(d => broadcast('modified', { data: d }));
+            }
+        }
     } else {
-        broadcast('modified', { data: target.toObject(syncProps) });
+        _doNormalBroadcast();
     }
 });
 
@@ -2723,7 +3122,7 @@ canvas.on('object:modified', (e) => {
 // LIVE SYNC (ПЛАВНОЕ ДВИЖЕНИЕ)
 // ==========================================
 let lastMoveSend = 0;
-const MOVE_THROTTLE_MS = 40;
+const MOVE_THROTTLE_MS = 100; // 10fps — safe for Firebase free tier
 
 // Helper: convert object-in-group local coords to absolute canvas coords.
 // KEY: Fabric stores obj.left/top as the object origin point (top-left corner)
@@ -2751,6 +3150,13 @@ function getAbsoluteObjectData(obj, syncProps) {
 function handleLiveSync(e) {
     const target = e.target;
     if (!target) return;
+
+    // Images / PDFs: skip ALL intermediate live-sync frames.
+    // Only the final position (object:modified on mouseup) will be broadcast,
+    // with an additional 500ms debounce to avoid flicker on rapid re-grabs.
+    if (target.type === 'image') return;
+    if (target.type === 'activeSelection' &&
+        target.getObjects().some(o => o.type === 'image')) return;
 
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
@@ -3655,6 +4061,12 @@ function setupConn() {
                         angle: msg.data.angle || 0,
                         selectable: true, evented: true
                     });
+                    if (msg.data._filterContrast !== undefined || msg.data._filterSharpen !== undefined || msg.data._filterBlur !== undefined) {
+                        img._filterContrast = msg.data._filterContrast || 0;
+                        img._filterSharpen  = msg.data._filterSharpen  || 0;
+                        img._filterBlur     = msg.data._filterBlur     || 0;
+                        _applyImgFilters(img, img._filterContrast, img._filterSharpen, img._filterBlur);
+                    }
                     canvas.add(img);
                     canvas.requestRenderAll();
                 });
@@ -3685,6 +4097,9 @@ function setupConn() {
 
         } else if (msg.type === 'ungroup_objects') {
             applyUngroupOp(msg.data);
+
+        } else if (msg.type === 'layer_order') {
+            applyLayerOrder(msg.data.ids);
         }
     }
 }
@@ -3725,8 +4140,31 @@ let _cursorTargetX = 0, _cursorTargetY = 0;
 let _cursorCurrentX = 0, _cursorCurrentY = 0;
 let _cursorRafId = null;
 
+// ── Edge arrow: shown when partner cursor is off-screen ──────────────────────
+let _partnerArrowDiv = null;
+
+function _initPartnerArrow() {
+    if (_partnerArrowDiv) return;
+    _partnerArrowDiv = document.createElement('div');
+    _partnerArrowDiv.id = 'partner-arrow';
+    // Arrow SVG points UP — CSS rotation will orient it toward partner
+    _partnerArrowDiv.innerHTML = `
+        <svg width="26" height="26" viewBox="0 0 26 26">
+            <polygon points="13,2 24,24 13,18 2,24"
+                fill="#fa3f5e" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>`;
+    _partnerArrowDiv.style.cssText = `
+        position: absolute; pointer-events: none; z-index: 10001;
+        display: none; transform-origin: center center;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.45));
+        transition: opacity 0.15s;
+    `;
+    document.getElementById('canvas-wrapper').appendChild(_partnerArrowDiv);
+}
+
 function updatePartnerCursor(x, y) {
     if (!partnerCursorDiv) initPartnerCursor();
+    if (!_partnerArrowDiv) _initPartnerArrow();
     lastPartnerPos = { x, y };
     partnerCursorVisible = true;
 
@@ -3748,19 +4186,25 @@ function _animateCursor() {
     const wrapper     = document.getElementById('canvas-wrapper');
     const wrapperRect = wrapper.getBoundingClientRect();
     const sx = _cursorCurrentX, sy = _cursorCurrentY;
+    const W = wrapperRect.width, H = wrapperRect.height;
 
-    const isVisible = sx >= 0 && sx <= wrapperRect.width && sy >= 0 && sy <= wrapperRect.height;
+    const isVisible = sx >= 0 && sx <= W && sy >= 0 && sy <= H;
+
     if (isVisible) {
+        // Show cursor icon, hide edge arrow
         partnerCursorDiv.style.display  = 'block';
         partnerCursorDiv.style.opacity  = '1';
         partnerCursorDiv.style.left     = sx + 'px';
         partnerCursorDiv.style.top      = sy + 'px';
         const cr = partnerCursorDiv.getBoundingClientRect();
-        if (cr.left < 10)                        partnerCursorDiv.style.transform = 'translate(0,-100%)';
+        if (cr.left < 10)                         partnerCursorDiv.style.transform = 'translate(0,-100%)';
         else if (cr.right > window.innerWidth-10) partnerCursorDiv.style.transform = 'translate(-100%,-100%)';
-        else                                      partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
+        else                                       partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
+        if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
     } else {
-        partnerCursorDiv.style.opacity = '0.3';
+        // Hide cursor icon, show edge arrow pointing toward partner
+        partnerCursorDiv.style.display = 'none';
+        _showPartnerArrow(sx, sy, W, H);
     }
 
     // Keep animating until cursor is within 0.5px of target
@@ -3771,6 +4215,40 @@ function _animateCursor() {
     } else {
         _cursorRafId = null; // stop loop when settled
     }
+}
+
+function _showPartnerArrow(sx, sy, W, H) {
+    if (!_partnerArrowDiv) return;
+    const MARGIN = 36; // px from edge
+
+    // Direction from screen center to partner position
+    const cx = W / 2, cy = H / 2;
+    const dx = sx - cx, dy = sy - cy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return; // cursor at center — no direction to show
+
+    const nx = dx / len, ny = dy / len;
+
+    // Find where ray from center hits the viewport rectangle (with margin)
+    const L = MARGIN, T = MARGIN, R = W - MARGIN, B = H - MARGIN;
+    let t = Infinity;
+    if (nx > 0) t = Math.min(t, (R - cx) / nx);
+    if (nx < 0) t = Math.min(t, (L - cx) / nx);
+    if (ny > 0) t = Math.min(t, (B - cy) / ny);
+    if (ny < 0) t = Math.min(t, (T - cy) / ny);
+
+    const ax = cx + nx * t;
+    const ay = cy + ny * t;
+
+    // CSS rotation: SVG arrow points UP (north). atan2 gives angle from east.
+    // Add 90° to convert east-reference → north-reference for CSS.
+    const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+
+    _partnerArrowDiv.style.display   = 'block';
+    _partnerArrowDiv.style.opacity   = '1';
+    _partnerArrowDiv.style.left      = ax + 'px';
+    _partnerArrowDiv.style.top       = ay + 'px';
+    _partnerArrowDiv.style.transform = `translate(-50%, -50%) rotate(${angleDeg}deg)`;
 }
 
 function updateCursorOnViewportChange() {
@@ -3829,6 +4307,13 @@ function applyRemoteDrawObject(d, onDone) {
                 selectable: true,
                 evented: true,
             });
+            // Restore image filters if present in the draw data
+            if (d._filterContrast !== undefined || d._filterSharpen !== undefined || d._filterBlur !== undefined) {
+                img._filterContrast = d._filterContrast || 0;
+                img._filterSharpen  = d._filterSharpen  || 0;
+                img._filterBlur     = d._filterBlur     || 0;
+                _applyImgFilters(img, img._filterContrast, img._filterSharpen, img._filterBlur);
+            }
             const prev = isSendingToWs; isSendingToWs = true;
             const existing = findObjectById(d.id);
             if (existing) canvas.remove(existing);
@@ -3844,6 +4329,12 @@ function applyRemoteDrawObject(d, onDone) {
         const obj = objs[0];
         if (!obj) { if (onDone) onDone(); return; }
         if (obj.type === 'path') obj.set('fill', '');
+        if (obj.type === 'textbox') {
+            obj.setControlsVisibility({
+                tl: false, tr: false, bl: false, br: false,
+                mt: false, mb: false, ml: true, mr: true, mtr: true
+            });
+        }
         if (obj.type === 'group') {
             obj.set({ fill: '', backgroundColor: '' });
             obj.getObjects().forEach(child => {
@@ -3865,6 +4356,16 @@ function applyRemoteStateDump(stateData, onDone) {
     const imageObjects = (stateData.objects || []).filter(o => o.type === 'image' && o.src);
 
     canvas.loadFromJSON(stateData, function() {
+        // Re-apply textbox control visibility (loadFromJSON doesn't restore it)
+        canvas.getObjects().forEach(o => {
+            if (o.type === 'textbox') {
+                o.setControlsVisibility({
+                    tl: false, tr: false, bl: false, br: false,
+                    mt: false, mb: false, ml: true, mr: true, mtr: true
+                });
+            }
+        });
+
         if (imageObjects.length === 0) {
             canvas.requestRenderAll();
             if (onDone) onDone();
@@ -3896,6 +4397,13 @@ function applyRemoteStateDump(stateData, onDone) {
                     height: d.height || img.height,
                     __isLocal: true, selectable: true, evented: true
                 });
+                // Restore image filter params from state dump
+                if (d._filterContrast !== undefined || d._filterSharpen !== undefined || d._filterBlur !== undefined) {
+                    img._filterContrast = d._filterContrast || 0;
+                    img._filterSharpen  = d._filterSharpen  || 0;
+                    img._filterBlur     = d._filterBlur     || 0;
+                    _applyImgFilters(img, img._filterContrast, img._filterSharpen, img._filterBlur);
+                }
                 canvas.add(img);
                 remaining--;
                 if (remaining === 0) { canvas.requestRenderAll(); if (onDone) onDone(); }
@@ -4048,7 +4556,29 @@ setTimeout(initPartnerCursor, 1000);
 // ГОРЯЧИЕ КЛАВИШИ
 // ==========================================
 window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    // Never intercept keys when a real input field or Fabric's hidden textarea has focus
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const active = canvas.getActiveObject();
+
+    // EDITING MODE: Fabric handles everything internally (text input, cursor, selection).
+    // We must not call preventDefault or any canvas methods here.
+    if (canvas.isEditing || (active && active.isEditing)) return;
+
+    // TEXTBOX SELECTED (not editing): any non-modifier key should enter editing mode.
+    // Printable chars, Space, Delete, Backspace, arrows — let Fabric handle them all.
+    if (active && active.type === 'textbox') {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            const passThrough = new Set(['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+                'Escape','Tab','CapsLock','NumLock','ScrollLock','PrintScreen','Pause']);
+            if (!passThrough.has(e.code)) {
+                // Enter editing mode — don't preventDefault so the keydown reaches Fabric's IText handler
+                active.enterEditing();
+                canvas.requestRenderAll();
+                return;
+            }
+        }
+    }
 
     // 🔥 НОВОЕ: Блокировка горячих клавиш в режиме MQTT
     if (connectionMode === 'mqtt') {
@@ -4101,6 +4631,9 @@ window.addEventListener('keydown', (e) => {
             break;
         case 'KeyA':
             setShapeType('arrow');
+            break;
+        case 'KeyT':
+            activateTool('text');
             break;
     }
 
@@ -4324,48 +4857,109 @@ function showCtxMenu(x, y) {
     const obj = canvas.getActiveObject();
     if (!obj) return;
 
-    const isImg = obj.type === 'image';
+    const isImg  = obj.type === 'image';
+    const isText = obj.type === 'textbox';
 
-    // Determine if fill-opacity slider should be shown.
-    // Show it when any of the targets is a closed shape (not a line, not an image).
     const CLOSED_TYPES = new Set(['rect','circle','ellipse','triangle','polygon','path']);
     const LINE_TYPES   = new Set(['line','dashed','arrow']);
     function isClosedObj(o) {
-        if (o.type === 'image') return false;
+        if (o.type === 'image' || o.type === 'textbox') return false;
         if (o.lineType || LINE_TYPES.has(o.lineType)) return false;
         return CLOSED_TYPES.has(o.type);
     }
-    const targets = getStyleTargets(obj);
+    const targets   = getStyleTargets(obj);
     const hasClosed = targets.some(isClosedObj);
     const allImg    = targets.every(o => o.type === 'image');
+    const allText   = targets.every(o => o.type === 'textbox');
 
     const strokeSection      = document.getElementById('ctx-stroke-section');
     const strokeWidthSection = document.getElementById('ctx-stroke-width-section');
     const fillSection        = document.getElementById('ctx-fill-section');
+    const textSection        = document.getElementById('ctx-text-section');
+    const imgSection         = document.getElementById('ctx-img-section');
 
-    strokeSection.style.display      = allImg ? 'none' : 'flex';
-    strokeWidthSection.style.display = allImg ? 'none' : 'flex';
+    strokeSection.style.display      = (allImg || allText) ? 'none' : 'flex';
+    strokeWidthSection.style.display = (allImg || allText) ? 'none' : 'flex';
     fillSection.style.display        = hasClosed ? 'flex' : 'none';
+    textSection.style.display        = allText ? 'flex' : 'none';
+    imgSection.style.display         = allImg  ? 'flex' : 'none';
 
-    // Sync stroke width from first target
-    const firstTarget = targets[0] || obj;
-    const w = firstTarget.strokeWidth || 1;
-    document.getElementById('ctx-stroke-width').value = w;
-    document.getElementById('ctx-stroke-width-val').textContent = w;
+    // Crop button: only for images; Pin button: always shown
+    const cropBtn = document.getElementById('ctx-crop-btn');
+    if (cropBtn) cropBtn.style.display = allImg ? 'flex' : 'none';
+    // Update pin button visual state
+    const pinBtn = document.getElementById('ctx-pin-btn');
+    if (pinBtn) {
+        const pinned = targets.some(o => o.isPinned);
+        pinBtn.style.opacity = pinned ? '1' : '0.45';
+        pinBtn.title = pinned ? 'Unpin' : 'Pin';
+    }
 
-    // Sync fill opacity from first closed-shape target
-    if (hasClosed) {
-        const closedTarget = targets.find(isClosedObj) || firstTarget;
-        let opacity = 0;
-        const fill = closedTarget.fill;
-        if (fill && fill !== 'transparent') {
-            try {
-                const col = new fabric.Color(fill);
-                opacity = Math.round(col.getAlpha() * 100);
-            } catch(e) {}
+    // ── Populate stroke sliders for non-text/non-image ────────────────────────
+    if (!allImg && !allText) {
+        const firstTarget = targets[0] || obj;
+        const w = firstTarget.strokeWidth || 1;
+        document.getElementById('ctx-stroke-width').value = w;
+        document.getElementById('ctx-stroke-width-val').textContent = w;
+
+        if (hasClosed) {
+            const closedTarget = targets.find(isClosedObj) || firstTarget;
+            let opacity = 0;
+            const fill = closedTarget.fill;
+            if (fill && fill !== 'transparent') {
+                try { const col = new fabric.Color(fill); opacity = Math.round(col.getAlpha() * 100); } catch(e) {}
+            }
+            document.getElementById('ctx-fill-opacity').value = opacity;
+            document.getElementById('ctx-fill-opacity-val').textContent = opacity + '%';
         }
-        document.getElementById('ctx-fill-opacity').value = opacity;
-        document.getElementById('ctx-fill-opacity-val').textContent = opacity + '%';
+    }
+
+    // ── Populate text controls ────────────────────────────────────────────────
+    if (allText) {
+        const tb = targets[0] || obj;
+        document.getElementById('ctx-font-family').value = tb.fontFamily || 'Arial';
+        document.getElementById('ctx-font-size').value   = tb.fontSize   || 20;
+        document.getElementById('ctx-bold-btn').classList.toggle('active',      tb.fontWeight === 'bold');
+        document.getElementById('ctx-italic-btn').classList.toggle('active',    tb.fontStyle  === 'italic');
+        document.getElementById('ctx-underline-btn').classList.toggle('active', !!tb.underline);
+        ['left','center','right'].forEach(a => {
+            document.getElementById('ctx-align-' + a).classList.toggle('active', (tb.textAlign || 'left') === a);
+        });
+        const lh = tb.lineHeight !== undefined ? tb.lineHeight : 1.16;
+        document.getElementById('ctx-line-height').value = lh;
+        document.getElementById('ctx-line-height-val').textContent = parseFloat(lh).toFixed(2);
+        // Build text color swatches
+        const row = document.getElementById('ctx-text-color-row');
+        row.innerHTML = '';
+        ['#000000','#ffffff','#ff0000','#0000ff','#008000','#ffa500','#800080','#888888'].forEach(c => {
+            const sw = document.createElement('div');
+            sw.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
+            sw.style.background = c;
+            if ((tb.fill || '#000000') === c) sw.classList.add('selected');
+            sw.onclick = () => ctxSetTextColor(c);
+            row.appendChild(sw);
+        });
+        // Custom color
+        const picker = document.createElement('input'); picker.type = 'color'; picker.value = tb.fill || '#000000';
+        picker.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+        const custom = document.createElement('div');
+        custom.className = 'ctx-swatch'; custom.title = 'Custom';
+        custom.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+        custom.appendChild(picker);
+        picker.oninput = () => ctxSetTextColor(picker.value);
+        custom.onclick = (e) => { picker.click(); e.stopPropagation(); };
+        row.appendChild(custom);
+    }
+
+    // ── Populate image filter sliders ─────────────────────────────────────────
+    if (allImg) {
+        const img = targets[0] || obj;
+        const c = img._filterContrast || 0;
+        const s = img._filterSharpen  || 0;
+        const b = img._filterBlur     || 0;
+        document.getElementById('ctx-contrast').value = c; document.getElementById('ctx-contrast-val').textContent = c;
+        document.getElementById('ctx-sharpen').value  = s; document.getElementById('ctx-sharpen-val').textContent  = s;
+        document.getElementById('ctx-blur').value     = b; document.getElementById('ctx-blur-val').textContent     = b;
     }
 
     // Initial position
@@ -4373,7 +4967,6 @@ function showCtxMenu(x, y) {
     ctxMenu.style.top  = y + 'px';
     ctxMenu.classList.add('show');
 
-    // Keep in viewport (measure after display)
     requestAnimationFrame(() => {
         const rect = ctxMenu.getBoundingClientRect();
         if (rect.right  > window.innerWidth)  ctxMenu.style.left = Math.max(0, x - rect.width)  + 'px';
@@ -4560,6 +5153,7 @@ function ctxGroupSelected()   { hideCtxMenu(); groupSelected(); }
 function ctxUngroupSelected() { hideCtxMenu(); ungroupSelected(); }
 function ctxClone()           { hideCtxMenu(); duplicateSelected(); }
 function ctxDelete()          { hideCtxMenu(); deleteSelected(); }
+function ctxTogglePin()       { hideCtxMenu(); togglePin(); }
 
 function ctxCrop() {
     hideCtxMenu();
@@ -4574,7 +5168,7 @@ function ctxBringToFront() {
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.bringToFront(o));
     canvas.requestRenderAll();
-    objs.forEach(o => broadcast('modified', { data: o.toObject(['id']) }));
+    broadcastLayerOrder();
 }
 
 function ctxSendToBack() {
@@ -4584,7 +5178,248 @@ function ctxSendToBack() {
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.sendToBack(o));
     canvas.requestRenderAll();
-    objs.forEach(o => broadcast('modified', { data: o.toObject(['id']) }));
+    broadcastLayerOrder();
+}
+
+// Send the full z-order as an array of ids.
+// Receiver reorders its own canvas._objects to match.
+function broadcastLayerOrder() {
+    const ids = canvas.getObjects()
+        .filter(o => o.id)
+        .map(o => o.id);
+    broadcast('layer_order', { ids });
+}
+
+// Apply a received layer order: reorder canvas._objects to match ids array.
+// Objects not present in ids (e.g. partner has extra objects) are left at top.
+function applyLayerOrder(ids) {
+    const objs = canvas.getObjects();
+    const byId = {};
+    objs.forEach(o => { if (o.id) byId[o.id] = o; });
+
+    // Build reordered array: ids that exist locally first, then unknowns
+    const known = ids.map(id => byId[id]).filter(Boolean);
+    const unknown = objs.filter(o => !o.id || !ids.includes(o.id));
+    const reordered = [...known, ...unknown];
+
+    // Replace canvas._objects in-place (Fabric's internal array)
+    canvas._objects.splice(0, canvas._objects.length, ...reordered);
+    canvas.requestRenderAll();
+}
+
+// ── Text sync props (all fields needed to reconstruct a textbox) ─────────────
+function _textSyncProps() {
+    return ['id','type','text','fontFamily','fontSize','fontWeight','fontStyle',
+            'underline','textAlign','fill','left','top','width','scaleX','scaleY',
+            'angle','lineHeight','charSpacing','isPinned'];
+}
+
+// ── Text context-menu functions ───────────────────────────────────────────────
+function ctxSetFont() {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    obj.set('fontFamily', document.getElementById('ctx-font-family').value);
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxSetFontSize(val) {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    const sz = Math.max(6, Math.min(200, parseInt(val) || 20));
+    obj.set('fontSize', sz);
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxToggleBold() {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    const next = obj.fontWeight === 'bold' ? 'normal' : 'bold';
+    obj.set('fontWeight', next);
+    document.getElementById('ctx-bold-btn').classList.toggle('active', next === 'bold');
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxToggleItalic() {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    const next = obj.fontStyle === 'italic' ? 'normal' : 'italic';
+    obj.set('fontStyle', next);
+    document.getElementById('ctx-italic-btn').classList.toggle('active', next === 'italic');
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxToggleUnderline() {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    const next = !obj.underline;
+    obj.set('underline', next);
+    document.getElementById('ctx-underline-btn').classList.toggle('active', next);
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxSetAlign(align) {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    obj.set('textAlign', align);
+    ['left','center','right'].forEach(a => {
+        document.getElementById('ctx-align-' + a).classList.toggle('active', a === align);
+    });
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+function ctxSetTextColor(color) {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    obj.set('fill', color);
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+    hideCtxMenu();
+}
+function ctxSetLineHeight(val) {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'textbox') return;
+    const lh = Math.max(0.8, Math.min(3.0, parseFloat(val)));
+    obj.set('lineHeight', lh);
+    document.getElementById('ctx-line-height-val').textContent = lh.toFixed(2);
+    canvas.requestRenderAll();
+    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+}
+
+// ── Image filter functions ────────────────────────────────────────────────────
+// Filters are applied client-side via Fabric's filter pipeline.
+// Only the filter *parameters* (3 numbers) are synced — not pixel data.
+
+// ── Despeckle filter — median-based JPEG artifact removal ─────────────────────
+// Algorithm: for each pixel, compare it to the median of its 3×3 neighbourhood.
+// If the deviation exceeds a threshold, blend the pixel toward the median.
+// Result: isolated JPEG block edges and mosquito-noise spikes are removed while
+// smooth gradients, fine lines and actual photo details are preserved.
+// This is fundamentally different from blur — blur would also soften real detail.
+fabric.Image.filters.Despeckle = fabric.util.createClass(fabric.Image.filters.BaseFilter, {
+    type: 'Despeckle',
+    strength: 0,  // 0–10
+
+    applyTo2d(options) {
+        if (this.strength === 0) return;
+        const imageData = options.imageData;
+        const data = imageData.data;
+        const w = imageData.width;
+        const h = imageData.height;
+
+        // threshold: deviation below this is left alone.
+        // strength 1 → threshold ~8;  strength 10 → threshold ~80 (aggressive)
+        const threshold = this.strength * 8;
+        // maxBlend: how far to push toward median at peak deviation (capped at 0.9)
+        const maxBlend = Math.min(0.9, this.strength * 0.09);
+
+        // Work on a copy so comparisons always reference original values
+        const src = new Uint8ClampedArray(data);
+
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const idx = (y * w + x) * 4;
+
+                // Collect 3×3 neighbourhood values for R, G, B
+                const r9 = [], g9 = [], b9 = [];
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const ni = ((y + dy) * w + (x + dx)) * 4;
+                        r9.push(src[ni]);
+                        g9.push(src[ni + 1]);
+                        b9.push(src[ni + 2]);
+                    }
+                }
+
+                // Sort and pick the median (index 4 of 9 elements)
+                r9.sort((a, b) => a - b); const mr = r9[4];
+                g9.sort((a, b) => a - b); const mg = g9[4];
+                b9.sort((a, b) => a - b); const mb = b9[4];
+
+                // Maximum channel deviation from neighbourhood median
+                const maxDev = Math.max(
+                    Math.abs(src[idx]     - mr),
+                    Math.abs(src[idx + 1] - mg),
+                    Math.abs(src[idx + 2] - mb)
+                );
+
+                if (maxDev > threshold) {
+                    // Blend ratio ramps from 0 at threshold to maxBlend at 2×threshold
+                    const t = Math.min(maxBlend, maxBlend * (maxDev - threshold) / threshold);
+                    data[idx]     = src[idx]     + (mr - src[idx])     * t;
+                    data[idx + 1] = src[idx + 1] + (mg - src[idx + 1]) * t;
+                    data[idx + 2] = src[idx + 2] + (mb - src[idx + 2]) * t;
+                    // Alpha unchanged
+                }
+            }
+        }
+    },
+
+    toObject() { return { type: this.type, strength: this.strength }; },
+    fromObject(object) { return new fabric.Image.filters.Despeckle(object); }
+});
+fabric.Image.filters.Despeckle.fromObject = function(object) {
+    return new fabric.Image.filters.Despeckle(object);
+};
+// Alias SoapBlur → Despeckle for backward-compat with old saved boards
+fabric.Image.filters.SoapBlur = fabric.Image.filters.Despeckle;
+fabric.Image.filters.SoapBlur.fromObject = fabric.Image.filters.Despeckle.fromObject;
+
+function ctxApplyImgFilter() {
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'image') return;
+
+    const contrast = parseInt(document.getElementById('ctx-contrast').value);
+    const sharpen  = parseInt(document.getElementById('ctx-sharpen').value);
+    const denoise  = parseInt(document.getElementById('ctx-blur').value);
+
+    document.getElementById('ctx-contrast-val').textContent = contrast;
+    document.getElementById('ctx-sharpen-val').textContent  = sharpen;
+    document.getElementById('ctx-blur-val').textContent     = denoise;
+
+    _applyImgFilters(obj, contrast, sharpen, denoise);
+    canvas.requestRenderAll();
+
+    clearTimeout(obj._filterSyncTimer);
+    obj._filterSyncTimer = setTimeout(() => {
+        obj._filterContrast = contrast;
+        obj._filterSharpen  = sharpen;
+        obj._filterBlur     = denoise;
+        broadcast('modified', { data: {
+            id: obj.id,
+            _filterContrast: contrast,
+            _filterSharpen:  sharpen,
+            _filterBlur:     denoise
+        }});
+    }, 150);
+}
+
+function _applyImgFilters(obj, contrast, sharpen, denoise) {
+    const filters = [];
+    if (contrast !== 0) {
+        filters.push(new fabric.Image.filters.Contrast({ contrast: contrast / 100 }));
+    }
+    if (sharpen > 0) {
+        const s = sharpen * 0.3;
+        filters.push(new fabric.Image.filters.Convolute({
+            matrix: [0, -s, 0, -s, 1 + 4 * s, -s, 0, -s, 0]
+        }));
+    }
+    if (denoise > 0) {
+        // Median-based despeckle — removes JPEG block artifacts without blurring detail.
+        // At strength 1-3: subtle cleanup; 5-7: aggressive artifact removal; 8-10: maximum.
+        filters.push(new fabric.Image.filters.Despeckle({ strength: denoise }));
+    }
+    obj.filters = filters;
+    obj.applyFilters();
+}
+
+// Apply filters received from partner
+function _applyRemoteImgFilters(obj, data) {
+    const c = data._filterContrast !== undefined ? data._filterContrast : (obj._filterContrast || 0);
+    const s = data._filterSharpen  !== undefined ? data._filterSharpen  : (obj._filterSharpen  || 0);
+    const b = data._filterBlur     !== undefined ? data._filterBlur     : (obj._filterBlur     || 0);
+    obj._filterContrast = c; obj._filterSharpen = s; obj._filterBlur = b;
+    _applyImgFilters(obj, c, s, b);
 }
 
 canvas.on('before:transform', (e) => {
@@ -4650,6 +5485,11 @@ function openBoard(input) {
             const updatedJson = regenerateIds(json);
             
             canvas.loadFromJSON(updatedJson, function() {
+                canvas.getObjects().forEach(o => {
+                    if (o.type === 'textbox') {
+                        o.setControlsVisibility({ tl:false, tr:false, bl:false, br:false, mt:false, mb:false, ml:true, mr:true, mtr:true });
+                    }
+                });
                 canvas.renderAll();
                 setStatus('Board loaded successfully', 'ok');
                 
@@ -4802,12 +5642,12 @@ function _broadcastImageWithJpegSrc(img, filename) {
 // ==========================================
 window.addEventListener('keydown', (e) => {
     // Ignore when a text field on the page has focus
-    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
 
     const active = canvas.getActiveObject();
 
     // Don't intercept arrows while text-editing an object
-    if (active && active.isEditing) return;
+    if (canvas.isEditing || (active && active.isEditing)) return;
 
     const isArrow = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code);
     if (!isArrow) return;
@@ -4837,21 +5677,18 @@ window.addEventListener('keydown', (e) => {
 
         canvas.requestRenderAll();
 
-        // Debounced broadcast so rapid key-holds don't flood the channel
-        clearTimeout(active._nudgeBroadcastTimer);
-        active._nudgeBroadcastTimer = setTimeout(() => {
-            const syncProps = [
-                'id','left','top','scaleX','scaleY','angle',
-                'lineType','lineX1','lineY1','lineX2','lineY2'
-            ];
-            if (active.type === 'activeSelection') {
-                active.getObjects().forEach(o => {
-                    broadcast('modified', { data: getAbsoluteObjectData(o, syncProps) });
-                });
-            } else {
-                broadcast('modified', { data: active.toObject(syncProps) });
-            }
-        }, 80);
+        // ── Throttled broadcast while key is held, final send on keyup ──────
+        // Old code used a debounce (clearTimeout+setTimeout) which meant
+        // the message was NEVER sent while the key was held, only on release.
+        // New approach: send every NUDGE_THROTTLE_MS while held, then once more
+        // immediately on keyup for the exact final position.
+        const NUDGE_THROTTLE_MS = 100;
+        const now2 = Date.now();
+        if (!active._nudgeLastSend) active._nudgeLastSend = 0;
+        if (now2 - active._nudgeLastSend >= NUDGE_THROTTLE_MS) {
+            active._nudgeLastSend = now2;
+            _broadcastNudge(active);
+        }
         return;
     }
 
@@ -4868,13 +5705,37 @@ window.addEventListener('keydown', (e) => {
     canvas.requestRenderAll();
 });
 
-// ==========================================
-// COPY / PASTE SYSTEM (Clipboard API)
-// ==========================================
+// ── Helper: send current position of nudged object ─────────────────────────────
+function _broadcastNudge(obj) {
+    const syncProps = [
+        'id','left','top','scaleX','scaleY','angle',
+        'lineType','lineX1','lineY1','lineX2','lineY2'
+    ];
+    if (obj.type === 'activeSelection') {
+        obj.getObjects().forEach(o => {
+            broadcast('modified', { data: getAbsoluteObjectData(o, syncProps) });
+        });
+    } else {
+        broadcast('modified', { data: obj.toObject(syncProps) });
+    }
+}
+
+// ── keyup: send final exact position immediately when arrow key is released ────
+window.addEventListener('keyup', (e) => {
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+    if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) return;
+    const active = canvas.getActiveObject();
+    if (!active || canvas.isEditing || active.isEditing) return;
+    // Reset throttle guard so next keydown sends immediately
+    if (active._nudgeLastSend) active._nudgeLastSend = 0;
+    _broadcastNudge(active);
+});
+
+
 window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyC')) {
         const active = canvas.getActiveObject();
-        if (active && !canvas.isEditing && document.activeElement.tagName !== 'INPUT') {
+        if (active && !canvas.isEditing && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
             e.preventDefault();
             
             active.clone((cloned) => {
@@ -4898,7 +5759,43 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('paste', async (e) => {
-    if (document.activeElement.tagName === 'INPUT') return;
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+
+    const active = canvas.getActiveObject();
+
+    // ── Case 1: Textbox in EDITING mode ────────────────────────────────────────
+    // Don't rely on Fabric's hidden textarea getting the event — intercept and
+    // insert via API so it always works regardless of focus state.
+    if (canvas.isEditing || (active && active.isEditing)) {
+        const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
+        if (plainText) {
+            e.preventDefault();
+            active.insertChars(plainText);
+            canvas.requestRenderAll();
+            clearTimeout(active._textBroadcastTimer);
+            active._textBroadcastTimer = setTimeout(() => {
+                broadcast('modified', { data: active.toObject(_textSyncProps()) });
+            }, 300);
+        }
+        // Don't fall through — even if no text, don't paste an image over an active edit session
+        return;
+    }
+
+    // ── Case 2: Textbox SELECTED but not editing ────────────────────────────────
+    if (active && active.type === 'textbox') {
+        const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
+        if (plainText) {
+            e.preventDefault();
+            active.enterEditing();
+            active.insertChars(plainText);
+            canvas.requestRenderAll();
+            clearTimeout(active._textBroadcastTimer);
+            active._textBroadcastTimer = setTimeout(() => {
+                broadcast('modified', { data: active.toObject(_textSyncProps()) });
+            }, 300);
+            return;
+        }
+    }
 
     e.preventDefault();
 
@@ -4948,7 +5845,38 @@ window.addEventListener('paste', async (e) => {
             });
         }
     } catch (err) {
-        // Игнорируем ошибки парсинга
+        // JSON.parse failed → plain text; create a textbox with the content
+        try {
+            const plainText = await navigator.clipboard.readText();
+            if (plainText && plainText.trim()) {
+                const vpt  = canvas.viewportTransform;
+                const zoom = canvas.getZoom();
+                const cx   = (canvas.width  / 2 - vpt[4]) / zoom;
+                const cy   = (canvas.height / 2 - vpt[5]) / zoom;
+                const tb = new fabric.Textbox(plainText.trim(), {
+                    left:       cx - 110,
+                    top:        cy - 30,
+                    width:      220,
+                    fontSize:   20,
+                    fontFamily: 'Arial',
+                    fill:       '#000000',
+                    textAlign:  'justify',
+                    lineHeight: 1.16,
+                    editable:   true,
+                    lockUniScaling: false,
+                    id: 'txt-' + Math.random().toString(36).substr(2, 9)
+                });
+                tb.setControlsVisibility({
+                    tl: false, tr: false, bl: false, br: false,
+                    mt: false, mb: false, ml: true, mr: true, mtr: true
+                });
+                canvas.add(tb);
+                canvas.setActiveObject(tb);
+                canvas.requestRenderAll();
+                addToHistory(tb);
+                broadcast('draw', { data: tb.toObject(_textSyncProps()) });
+            }
+        } catch (e2) { /* clipboard read failed */ }
     }
 });
 
@@ -5337,7 +6265,7 @@ function handleFirebaseMessage(msg) {
         switch(msg.type) {
             case 'cursor':
                 if (msg.data.hidden) {
-                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none'; if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
                     partnerCursorVisible = false;
                 } else {
                     updatePartnerCursor(msg.data.x, msg.data.y);
@@ -5378,6 +6306,10 @@ function handleFirebaseMessage(msg) {
             case 'ungroup_objects':
                 applyUngroupOp(msg.data);
                 break;
+
+            case 'layer_order':
+                applyLayerOrder(msg.data.ids);
+                break;
                 
             case 'request_state':
                 // Отправляем текущее состояние канвы
@@ -5386,7 +6318,9 @@ function handleFirebaseMessage(msg) {
                         'id', 'isPinned', 'left', 'top', 'scaleX', 'scaleY', 'angle', 
                         'fill', 'stroke', 'strokeWidth', 'type', 'width', 'height',
                         'rx', 'ry', 'points', 'path', 'objectCaching', 'src',
-                        'strokeLineCap', 'strokeLineJoin'
+                        'strokeLineCap', 'strokeLineJoin',
+                    'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'textAlign', 'lineHeight', 'charSpacing',
+                    '_filterContrast', '_filterSharpen', '_filterBlur'
                     ];
                     const state = canvas.toJSON(syncProps);
                     isSendingToFirebase = false; // сбрасываем флаг иначе sendToFirebase заблокирует
@@ -5402,6 +6336,7 @@ function handleFirebaseMessage(msg) {
                     applyRemoteStateDump(msg.data, () => {
                         isSendingToFirebase = false;
                         setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
+                        resizeCanvas();
                     });
                 }
                 break;
@@ -5714,7 +6649,9 @@ function connectViaAbly(roomId) {
         setStatus('Partner joined — sending board...', 'ok');
         const syncProps = ['id','isPinned','left','top','scaleX','scaleY','angle',
             'fill','stroke','strokeWidth','type','width','height',
-            'rx','ry','points','path','objectCaching','src','strokeLineCap','strokeLineJoin'];
+            'rx','ry','points','path','objectCaching','src','strokeLineCap','strokeLineJoin',
+            'text','fontFamily','fontSize','fontWeight','fontStyle','underline','textAlign','lineHeight','charSpacing',
+            '_filterContrast','_filterSharpen','_filterBlur'];
         if (canvas.getObjects().length > 0) {
             _sendStateDumpCompressed(syncProps);
         } else {
@@ -5852,7 +6789,9 @@ function handleWsMessage(msg) {
             'id','isPinned','left','top','scaleX','scaleY','angle',
             'fill','stroke','strokeWidth','type','width','height',
             'rx','ry','points','path','objectCaching','src',
-            'strokeLineCap','strokeLineJoin'
+            'strokeLineCap','strokeLineJoin',
+            'text','fontFamily','fontSize','fontWeight','fontStyle','underline','textAlign','lineHeight','charSpacing',
+            '_filterContrast','_filterSharpen','_filterBlur'
         ];
         switch(msg.type) {
             case 'joined':
@@ -5875,7 +6814,7 @@ function handleWsMessage(msg) {
 
             case 'cursor':
                 if (msg.data.hidden) {
-                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none'; if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
                     partnerCursorVisible = false;
                 } else {
                     updatePartnerCursor(msg.data.x, msg.data.y);
@@ -5912,6 +6851,10 @@ function handleWsMessage(msg) {
                 applyUngroupOp(msg.data);
                 break;
 
+            case 'layer_order':
+                applyLayerOrder(msg.data.ids);
+                break;
+
             case 'request_state':
                 if (canvas.getObjects().length > 0) {
                     _sendStateDumpCompressed(syncProps);
@@ -5925,6 +6868,7 @@ function handleWsMessage(msg) {
                     applyRemoteStateDump(msg.data, () => {
                         setTimeout(() => { isSendingToWs = false; }, 150);
                         setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
+                        resizeCanvas();
                     });
                     return; // don't reset flag in finally
                 }
