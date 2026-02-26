@@ -1702,9 +1702,8 @@ function applyModifiedData(data) {
         return true;
     }
 
-    // Images/PDFs: snap immediately to final position — no lerp.
-    // The sender already suppresses all intermediate updates; we just
-    // want an instant jump to the final resting place.
+    // Images/PDFs: snap directly to final position, no lerp.
+    // Sender suppresses all intermediate frames; we just jump on arrival.
     if (obj.type === 'image') {
         obj.set(data);
         obj.setCoords();
@@ -1712,7 +1711,7 @@ function applyModifiedData(data) {
         return true;
     }
 
-    // All other objects: check whether this update contains positional data
+    // All other objects: lerp positional props, apply style props immediately.
     const LERP_KEYS = new Set(['left','top','scaleX','scaleY','angle']);
     const hasLerp = Object.keys(data).some(k => LERP_KEYS.has(k));
     if (hasLerp) {
@@ -1727,31 +1726,31 @@ function applyModifiedData(data) {
 
 // ==========================================
 // CLIENT-SIDE INTERPOLATION (LERP)
-// Smooths received position/transform updates to 60fps regardless of
-// how often Firebase / Ably delivers them (typically 3–10fps).
 //
-// KEY DESIGN DECISIONS:
-//  • canvas.renderAll()  not requestRenderAll() — synchronous, called from
-//    inside our own rAF so we own the render timing completely.
-//  • obj.set({key:val})  not obj[key] = val — uses Fabric's official setter
-//    which properly invalidates internal caches.
-//  • Per-object lerp state stored in _lerpMap, keyed by object id.
+// How it works:
+//   _lerpSetTarget(obj, data) — stores target position for an object.
+//   canvas.on('before:render') — runs just before Fabric draws each frame.
+//     Advances every active lerp entry by LERP_A fraction toward its target.
+//     If any entries remain, calls requestRenderAll() to schedule next frame.
+//
+// Why before:render instead of a custom rAF loop:
+//   Fabric 5 uses its own requestRenderAll() / renderAndReset() cycle.
+//   A competing rAF loop calling renderAll() can be silently skipped when
+//   Fabric's isRendering flag is set, causing the "no visual update" bug.
+//   before:render fires synchronously inside Fabric's own render call,
+//   so updated positions are guaranteed to appear in that same frame.
 // ==========================================
 
-const _lerpMap = {};   // id → { obj, tLeft, tTop, tScaleX, tScaleY, tAngle, styleQ }
-let   _lerpRaf = null; // rAF handle; null when loop is stopped
-
-const LERP_A = 0.30;   // fraction of gap closed per frame @ 60 fps
-                       // 0.30^7 ≈ 0.022 → ~98% in 7 frames ≈ 117ms
+const _lerpMap = {}; // id → { obj, tLeft, tTop, tScaleX, tScaleY, tAngle, styleQ }
+const LERP_A   = 0.30; // fraction of gap per frame @ 60fps → ~98% in 7 frames (~117ms)
 
 function _lerpSetTarget(obj, data) {
     const id = obj.id;
     if (!id) return;
 
-    let entry = _lerpMap[id];
-    if (!entry) {
-        // First update for this object — seed current position as "from"
-        entry = {
+    let e = _lerpMap[id];
+    if (!e) {
+        e = {
             obj,
             tLeft:   obj.left,
             tTop:    obj.top,
@@ -1760,79 +1759,66 @@ function _lerpSetTarget(obj, data) {
             tAngle:  obj.angle,
             styleQ:  null
         };
-        _lerpMap[id] = entry;
+        _lerpMap[id] = e;
     }
 
-    // Update positional targets from incoming data
-    if (data.left   !== undefined) entry.tLeft   = data.left;
-    if (data.top    !== undefined) entry.tTop    = data.top;
-    if (data.scaleX !== undefined) entry.tScaleX = data.scaleX;
-    if (data.scaleY !== undefined) entry.tScaleY = data.scaleY;
-    if (data.angle  !== undefined) entry.tAngle  = data.angle;
+    if (data.left   !== undefined) e.tLeft   = data.left;
+    if (data.top    !== undefined) e.tTop    = data.top;
+    if (data.scaleX !== undefined) e.tScaleX = data.scaleX;
+    if (data.scaleY !== undefined) e.tScaleY = data.scaleY;
+    if (data.angle  !== undefined) e.tAngle  = data.angle;
 
-    // Queue any non-positional style props for immediate apply on next frame
-    const LERP_KEYS = new Set(['id','left','top','scaleX','scaleY','angle']);
-    let hasStyle = false;
+    // Non-positional style props applied on next frame
+    const SKIP = new Set(['id','left','top','scaleX','scaleY','angle']);
     const style = {};
-    Object.keys(data).forEach(k => {
-        if (!LERP_KEYS.has(k)) { style[k] = data[k]; hasStyle = true; }
-    });
-    if (hasStyle) {
-        entry.styleQ = Object.assign(entry.styleQ || {}, style);
-    }
+    let hasStyle = false;
+    Object.keys(data).forEach(k => { if (!SKIP.has(k)) { style[k] = data[k]; hasStyle = true; } });
+    if (hasStyle) e.styleQ = Object.assign(e.styleQ || {}, style);
 
-    // Start the loop if not already running
-    if (!_lerpRaf) _lerpRaf = requestAnimationFrame(_lerpTick);
+    // Trigger a render so before:render fires and lerp starts
+    canvas.requestRenderAll();
 }
 
-function _lerpTick() {
+// Hook into Fabric's own render cycle — runs just before each frame is drawn.
+canvas.on('before:render', function() {
+    const ids = Object.keys(_lerpMap);
+    if (ids.length === 0) return;
+
     let anyActive = false;
 
-    // Iterate snapshot of keys (deletion during iteration is safe this way)
-    const ids = Object.keys(_lerpMap);
     for (let i = 0; i < ids.length; i++) {
         const id = ids[i];
         const e  = _lerpMap[id];
         const o  = e.obj;
 
-        // Remove stale entries (object deleted from canvas)
         if (!o || !o.canvas) { delete _lerpMap[id]; continue; }
 
-        // ── Apply queued style props immediately ─────────────────────────
-        if (e.styleQ) {
-            o.set(e.styleQ);
-            o.dirty = true;
-            e.styleQ = null;
-        }
+        // Apply queued style changes immediately (no interpolation)
+        if (e.styleQ) { o.set(e.styleQ); o.dirty = true; e.styleQ = null; }
 
-        // ── Lerp: linear props ───────────────────────────────────────────
+        // Lerp helper (arrow fn captures `anyActive` from outer scope indirectly;
+        // uses `settled` flag updated per-object below)
         let settled = true;
 
-        function lerpProp(cur, tgt) {
+        const nl = (cur, tgt) => {
             const d = tgt - cur;
-            if (Math.abs(d) < 0.05) return tgt; // snapped
+            if (Math.abs(d) < 0.05) return tgt;
             settled = false;
             return cur + d * LERP_A;
-        }
+        };
 
-        const newLeft   = lerpProp(o.left,   e.tLeft);
-        const newTop    = lerpProp(o.top,    e.tTop);
-        const newScaleX = lerpProp(o.scaleX, e.tScaleX);
-        const newScaleY = lerpProp(o.scaleY, e.tScaleY);
+        const newLeft   = nl(o.left,   e.tLeft);
+        const newTop    = nl(o.top,    e.tTop);
+        const newScaleX = nl(o.scaleX, e.tScaleX);
+        const newScaleY = nl(o.scaleY, e.tScaleY);
 
-        // ── Angle: shortest-path wrap (handles 359°→1° smoothly) ────────
+        // Angle: shortest-path interpolation (handles 359° → 1° wrap)
         let aDiff = e.tAngle - o.angle;
         while (aDiff >  180) aDiff -= 360;
         while (aDiff < -180) aDiff += 360;
-        let newAngle;
-        if (Math.abs(aDiff) < 0.05) {
-            newAngle = e.tAngle;
-        } else {
-            newAngle = o.angle + aDiff * LERP_A;
-            settled = false;
-        }
+        let newAngle = e.tAngle;
+        if (Math.abs(aDiff) >= 0.05) { newAngle = o.angle + aDiff * LERP_A; settled = false; }
 
-        // Apply via Fabric's official setter so caches invalidate properly
         o.set({ left: newLeft, top: newTop, scaleX: newScaleX, scaleY: newScaleY, angle: newAngle });
         o.dirty = true;
         o.setCoords();
@@ -1841,16 +1827,9 @@ function _lerpTick() {
         else anyActive = true;
     }
 
-    // renderAll() is synchronous — we're already inside our own rAF so the
-    // browser will paint this frame with the updated positions.
-    canvas.renderAll();
-
-    if (anyActive) {
-        _lerpRaf = requestAnimationFrame(_lerpTick);
-    } else {
-        _lerpRaf = null;
-    }
-}
+    // If lerp still has work, request next frame so before:render fires again
+    if (anyActive) canvas.requestRenderAll();
+});
 
 // Remove an object by id, searching recursively.
 // For objects inside groups: remove from the group's child list and redraw.
@@ -2835,6 +2814,10 @@ canvas.on('path:created', (e) => {
     broadcast('draw', { data: e.path.toObject(['id']) });
 });
 
+// Global debounce map for images: id → timer handle.
+// Keyed by object id so the timer survives re-grabs and selection changes.
+const _imgDebounce = {};
+
 canvas.on('object:modified', (e) => {
     const target = e.target;
     if (!target) return;
@@ -2847,25 +2830,12 @@ canvas.on('object:modified', (e) => {
         'hasControls', 'borderColor', 'hoverCursor'
     ];
 
-    // Helper: check whether this target involves any imported image/PDF
-    function _targetHasImage(t) {
-        if (t.type === 'image') return true;
-        if (t.type === 'activeSelection')
-            return t.getObjects().some(o => o.type === 'image');
-        return false;
-    }
-
-    // Core broadcast logic (shared between immediate and delayed paths)
-    function _doBroadcast() {
+    function _doNormalBroadcast() {
         if (target.type === 'activeSelection') {
             const objects = target.getObjects();
-            // Snapshot absolute positions BEFORE discardActiveObject changes coords.
-            // Must use getAbsoluteObjectData() which applies group matrix to left/top.
             const absData = objects.map(obj => getAbsoluteObjectData(obj, syncProps));
-
             canvas.discardActiveObject();
             absData.forEach(d => broadcast('modified', { data: d }));
-
             const sel = new fabric.ActiveSelection(objects, { canvas: canvas });
             canvas.setActiveObject(sel);
             canvas.requestRenderAll();
@@ -2874,13 +2844,39 @@ canvas.on('object:modified', (e) => {
         }
     }
 
-    if (_targetHasImage(target)) {
-        // Images/PDFs: debounce 500ms so rapid grabs don't send intermediate
-        // positions — only the final resting place is transmitted.
-        clearTimeout(target._imgModTimer);
-        target._imgModTimer = setTimeout(_doBroadcast, 500);
+    // Collect image objects from the target (single image or mixed selection)
+    function _getImageObjs(t) {
+        if (t.type === 'image') return [t];
+        if (t.type === 'activeSelection') return t.getObjects().filter(o => o.type === 'image');
+        return [];
+    }
+
+    const imgObjs = _getImageObjs(target);
+
+    if (imgObjs.length > 0) {
+        // Images/PDFs: debounce 500ms from the LAST mouseup.
+        // Timer is keyed by object id — survives selection rebuild between re-grabs.
+        // At fire time we do a fresh findObjectById so we always send current position.
+        imgObjs.forEach(img => {
+            const id = img.id;
+            clearTimeout(_imgDebounce[id]);
+            _imgDebounce[id] = setTimeout(() => {
+                delete _imgDebounce[id];
+                const current = findObjectById(id);
+                if (current) broadcast('modified', { data: current.toObject(syncProps) });
+            }, 500);
+        });
+
+        // Also broadcast non-image objects in a mixed selection immediately
+        if (target.type === 'activeSelection') {
+            const nonImgs = target.getObjects().filter(o => o.type !== 'image');
+            if (nonImgs.length > 0) {
+                const absData = nonImgs.map(obj => getAbsoluteObjectData(obj, syncProps));
+                absData.forEach(d => broadcast('modified', { data: d }));
+            }
+        }
     } else {
-        _doBroadcast();
+        _doNormalBroadcast();
     }
 });
 
@@ -3897,8 +3893,31 @@ let _cursorTargetX = 0, _cursorTargetY = 0;
 let _cursorCurrentX = 0, _cursorCurrentY = 0;
 let _cursorRafId = null;
 
+// ── Edge arrow: shown when partner cursor is off-screen ──────────────────────
+let _partnerArrowDiv = null;
+
+function _initPartnerArrow() {
+    if (_partnerArrowDiv) return;
+    _partnerArrowDiv = document.createElement('div');
+    _partnerArrowDiv.id = 'partner-arrow';
+    // Arrow SVG points UP — CSS rotation will orient it toward partner
+    _partnerArrowDiv.innerHTML = `
+        <svg width="26" height="26" viewBox="0 0 26 26">
+            <polygon points="13,2 24,24 13,18 2,24"
+                fill="#fa3f5e" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>`;
+    _partnerArrowDiv.style.cssText = `
+        position: absolute; pointer-events: none; z-index: 10001;
+        display: none; transform-origin: center center;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.45));
+        transition: opacity 0.15s;
+    `;
+    document.getElementById('canvas-wrapper').appendChild(_partnerArrowDiv);
+}
+
 function updatePartnerCursor(x, y) {
     if (!partnerCursorDiv) initPartnerCursor();
+    if (!_partnerArrowDiv) _initPartnerArrow();
     lastPartnerPos = { x, y };
     partnerCursorVisible = true;
 
@@ -3920,19 +3939,25 @@ function _animateCursor() {
     const wrapper     = document.getElementById('canvas-wrapper');
     const wrapperRect = wrapper.getBoundingClientRect();
     const sx = _cursorCurrentX, sy = _cursorCurrentY;
+    const W = wrapperRect.width, H = wrapperRect.height;
 
-    const isVisible = sx >= 0 && sx <= wrapperRect.width && sy >= 0 && sy <= wrapperRect.height;
+    const isVisible = sx >= 0 && sx <= W && sy >= 0 && sy <= H;
+
     if (isVisible) {
+        // Show cursor icon, hide edge arrow
         partnerCursorDiv.style.display  = 'block';
         partnerCursorDiv.style.opacity  = '1';
         partnerCursorDiv.style.left     = sx + 'px';
         partnerCursorDiv.style.top      = sy + 'px';
         const cr = partnerCursorDiv.getBoundingClientRect();
-        if (cr.left < 10)                        partnerCursorDiv.style.transform = 'translate(0,-100%)';
+        if (cr.left < 10)                         partnerCursorDiv.style.transform = 'translate(0,-100%)';
         else if (cr.right > window.innerWidth-10) partnerCursorDiv.style.transform = 'translate(-100%,-100%)';
-        else                                      partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
+        else                                       partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
+        if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
     } else {
-        partnerCursorDiv.style.opacity = '0.3';
+        // Hide cursor icon, show edge arrow pointing toward partner
+        partnerCursorDiv.style.display = 'none';
+        _showPartnerArrow(sx, sy, W, H);
     }
 
     // Keep animating until cursor is within 0.5px of target
@@ -3943,6 +3968,40 @@ function _animateCursor() {
     } else {
         _cursorRafId = null; // stop loop when settled
     }
+}
+
+function _showPartnerArrow(sx, sy, W, H) {
+    if (!_partnerArrowDiv) return;
+    const MARGIN = 36; // px from edge
+
+    // Direction from screen center to partner position
+    const cx = W / 2, cy = H / 2;
+    const dx = sx - cx, dy = sy - cy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return; // cursor at center — no direction to show
+
+    const nx = dx / len, ny = dy / len;
+
+    // Find where ray from center hits the viewport rectangle (with margin)
+    const L = MARGIN, T = MARGIN, R = W - MARGIN, B = H - MARGIN;
+    let t = Infinity;
+    if (nx > 0) t = Math.min(t, (R - cx) / nx);
+    if (nx < 0) t = Math.min(t, (L - cx) / nx);
+    if (ny > 0) t = Math.min(t, (B - cy) / ny);
+    if (ny < 0) t = Math.min(t, (T - cy) / ny);
+
+    const ax = cx + nx * t;
+    const ay = cy + ny * t;
+
+    // CSS rotation: SVG arrow points UP (north). atan2 gives angle from east.
+    // Add 90° to convert east-reference → north-reference for CSS.
+    const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+
+    _partnerArrowDiv.style.display   = 'block';
+    _partnerArrowDiv.style.opacity   = '1';
+    _partnerArrowDiv.style.left      = ax + 'px';
+    _partnerArrowDiv.style.top       = ay + 'px';
+    _partnerArrowDiv.style.transform = `translate(-50%, -50%) rotate(${angleDeg}deg)`;
 }
 
 function updateCursorOnViewportChange() {
@@ -5530,7 +5589,7 @@ function handleFirebaseMessage(msg) {
         switch(msg.type) {
             case 'cursor':
                 if (msg.data.hidden) {
-                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none'; if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
                     partnerCursorVisible = false;
                 } else {
                     updatePartnerCursor(msg.data.x, msg.data.y);
@@ -6068,7 +6127,7 @@ function handleWsMessage(msg) {
 
             case 'cursor':
                 if (msg.data.hidden) {
-                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                    if (partnerCursorDiv) partnerCursorDiv.style.display = 'none'; if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
                     partnerCursorVisible = false;
                 } else {
                     updatePartnerCursor(msg.data.x, msg.data.y);
