@@ -1689,7 +1689,6 @@ function applyModifiedData(data) {
 
     if (obj.group && obj.group.type === 'group') {
         // Inside a permanent group: only apply style/appearance props, not position.
-        // Setting left/top on a group child would displace it within the group.
         const POSITION_KEYS = new Set(['left','top','scaleX','scaleY','angle','skewX','skewY']);
         const safeData = {};
         Object.keys(data).forEach(k => {
@@ -1700,17 +1699,28 @@ function applyModifiedData(data) {
         obj.group.dirty = true;
         obj.group.setCoords();
         canvas.requestRenderAll();
+        return true;
+    }
+
+    // Images/PDFs: snap immediately to final position — no lerp.
+    // The sender already suppresses all intermediate updates; we just
+    // want an instant jump to the final resting place.
+    if (obj.type === 'image') {
+        obj.set(data);
+        obj.setCoords();
+        canvas.requestRenderAll();
+        return true;
+    }
+
+    // All other objects: check whether this update contains positional data
+    const LERP_KEYS = new Set(['left','top','scaleX','scaleY','angle']);
+    const hasLerp = Object.keys(data).some(k => LERP_KEYS.has(k));
+    if (hasLerp) {
+        _lerpSetTarget(obj, data);
     } else {
-        // ── Lerp positional props, apply style props immediately ─────────────
-        const LERP_KEYS = ['left','top','scaleX','scaleY','angle'];
-        const hasLerp = LERP_KEYS.some(k => data[k] !== undefined);
-        if (hasLerp) {
-            _setLerpTarget(data);
-        } else {
-            obj.set(data);
-            obj.setCoords();
-            canvas.requestRenderAll();
-        }
+        obj.set(data);
+        obj.setCoords();
+        canvas.requestRenderAll();
     }
     return true;
 }
@@ -1718,106 +1728,127 @@ function applyModifiedData(data) {
 // ==========================================
 // CLIENT-SIDE INTERPOLATION (LERP)
 // Smooths received position/transform updates to 60fps regardless of
-// how often Firebase delivers them (typically 3–10fps on free tier).
-// Style changes (color, strokeWidth, etc.) are applied immediately.
+// how often Firebase / Ably delivers them (typically 3–10fps).
+//
+// KEY DESIGN DECISIONS:
+//  • canvas.renderAll()  not requestRenderAll() — synchronous, called from
+//    inside our own rAF so we own the render timing completely.
+//  • obj.set({key:val})  not obj[key] = val — uses Fabric's official setter
+//    which properly invalidates internal caches.
+//  • Per-object lerp state stored in _lerpMap, keyed by object id.
 // ==========================================
-const _lerpTargets = {};   // id → { left, top, scaleX, scaleY, angle }
-const _lerpStyle   = {};   // id → non-positional props to apply on next frame
-let   _lerpRafId   = null;
-const LERP_ALPHA   = 0.28; // fraction of remaining distance per frame @60fps
-                           // 0.28^6 ≈ 0.03 → 97% covered in 6 frames (100ms) ✓
 
-function _setLerpTarget(data) {
-    const id = data.id;
+const _lerpMap = {};   // id → { obj, tLeft, tTop, tScaleX, tScaleY, tAngle, styleQ }
+let   _lerpRaf = null; // rAF handle; null when loop is stopped
+
+const LERP_A = 0.30;   // fraction of gap closed per frame @ 60 fps
+                       // 0.30^7 ≈ 0.022 → ~98% in 7 frames ≈ 117ms
+
+function _lerpSetTarget(obj, data) {
+    const id = obj.id;
     if (!id) return;
 
-    const LERP_KEYS = new Set(['left','top','scaleX','scaleY','angle']);
-
-    // Seed current position if this object is new to lerp
-    if (!_lerpTargets[id]) {
-        const obj = findObjectById(id);
-        if (!obj) return;
-        _lerpTargets[id] = {
-            left:   obj.left,
-            top:    obj.top,
-            scaleX: obj.scaleX,
-            scaleY: obj.scaleY,
-            angle:  obj.angle
+    let entry = _lerpMap[id];
+    if (!entry) {
+        // First update for this object — seed current position as "from"
+        entry = {
+            obj,
+            tLeft:   obj.left,
+            tTop:    obj.top,
+            tScaleX: obj.scaleX,
+            tScaleY: obj.scaleY,
+            tAngle:  obj.angle,
+            styleQ:  null
         };
+        _lerpMap[id] = entry;
     }
 
-    // Split incoming data into lerp-able and style props
-    const styleProps = {};
+    // Update positional targets from incoming data
+    if (data.left   !== undefined) entry.tLeft   = data.left;
+    if (data.top    !== undefined) entry.tTop    = data.top;
+    if (data.scaleX !== undefined) entry.tScaleX = data.scaleX;
+    if (data.scaleY !== undefined) entry.tScaleY = data.scaleY;
+    if (data.angle  !== undefined) entry.tAngle  = data.angle;
+
+    // Queue any non-positional style props for immediate apply on next frame
+    const LERP_KEYS = new Set(['id','left','top','scaleX','scaleY','angle']);
+    let hasStyle = false;
+    const style = {};
     Object.keys(data).forEach(k => {
-        if (k === 'id') return;
-        if (LERP_KEYS.has(k)) {
-            _lerpTargets[id][k] = data[k];
-        } else {
-            styleProps[k] = data[k];
-        }
+        if (!LERP_KEYS.has(k)) { style[k] = data[k]; hasStyle = true; }
     });
-    if (Object.keys(styleProps).length) {
-        _lerpStyle[id] = Object.assign(_lerpStyle[id] || {}, styleProps);
+    if (hasStyle) {
+        entry.styleQ = Object.assign(entry.styleQ || {}, style);
     }
 
-    if (!_lerpRafId) _lerpRafId = requestAnimationFrame(_runLerpLoop);
+    // Start the loop if not already running
+    if (!_lerpRaf) _lerpRaf = requestAnimationFrame(_lerpTick);
 }
 
-function _runLerpLoop() {
+function _lerpTick() {
     let anyActive = false;
 
-    const ids = Object.keys(_lerpTargets);
+    // Iterate snapshot of keys (deletion during iteration is safe this way)
+    const ids = Object.keys(_lerpMap);
     for (let i = 0; i < ids.length; i++) {
         const id = ids[i];
-        const obj = findObjectById(id);
-        if (!obj) { delete _lerpTargets[id]; delete _lerpStyle[id]; continue; }
+        const e  = _lerpMap[id];
+        const o  = e.obj;
 
-        // Apply any pending style props immediately (no lerp)
-        if (_lerpStyle[id]) {
-            obj.set(_lerpStyle[id]);
-            obj.dirty = true;
-            delete _lerpStyle[id];
+        // Remove stale entries (object deleted from canvas)
+        if (!o || !o.canvas) { delete _lerpMap[id]; continue; }
+
+        // ── Apply queued style props immediately ─────────────────────────
+        if (e.styleQ) {
+            o.set(e.styleQ);
+            o.dirty = true;
+            e.styleQ = null;
         }
 
-        const tgt = _lerpTargets[id];
+        // ── Lerp: linear props ───────────────────────────────────────────
         let settled = true;
 
-        // Linear props: left, top, scaleX, scaleY
-        ['left','top','scaleX','scaleY'].forEach(p => {
-            if (tgt[p] === undefined) return;
-            const diff = tgt[p] - obj[p];
-            if (Math.abs(diff) > 0.05) {
-                obj[p] = obj[p] + diff * LERP_ALPHA;
-                settled = false;
-            } else {
-                obj[p] = tgt[p];
-            }
-        });
-
-        // Angle: shortest-path interpolation (handle 0°↔360° wrap)
-        if (tgt.angle !== undefined) {
-            let aDiff = tgt.angle - obj.angle;
-            while (aDiff >  180) aDiff -= 360;
-            while (aDiff < -180) aDiff += 360;
-            if (Math.abs(aDiff) > 0.05) {
-                obj.angle = obj.angle + aDiff * LERP_ALPHA;
-                settled = false;
-            } else {
-                obj.angle = tgt.angle;
-            }
+        function lerpProp(cur, tgt) {
+            const d = tgt - cur;
+            if (Math.abs(d) < 0.05) return tgt; // snapped
+            settled = false;
+            return cur + d * LERP_A;
         }
 
-        obj.setCoords();
-        if (settled) delete _lerpTargets[id];
+        const newLeft   = lerpProp(o.left,   e.tLeft);
+        const newTop    = lerpProp(o.top,    e.tTop);
+        const newScaleX = lerpProp(o.scaleX, e.tScaleX);
+        const newScaleY = lerpProp(o.scaleY, e.tScaleY);
+
+        // ── Angle: shortest-path wrap (handles 359°→1° smoothly) ────────
+        let aDiff = e.tAngle - o.angle;
+        while (aDiff >  180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+        let newAngle;
+        if (Math.abs(aDiff) < 0.05) {
+            newAngle = e.tAngle;
+        } else {
+            newAngle = o.angle + aDiff * LERP_A;
+            settled = false;
+        }
+
+        // Apply via Fabric's official setter so caches invalidate properly
+        o.set({ left: newLeft, top: newTop, scaleX: newScaleX, scaleY: newScaleY, angle: newAngle });
+        o.dirty = true;
+        o.setCoords();
+
+        if (settled) delete _lerpMap[id];
         else anyActive = true;
     }
 
-    canvas.requestRenderAll();
+    // renderAll() is synchronous — we're already inside our own rAF so the
+    // browser will paint this frame with the updated positions.
+    canvas.renderAll();
 
     if (anyActive) {
-        _lerpRafId = requestAnimationFrame(_runLerpLoop);
+        _lerpRaf = requestAnimationFrame(_lerpTick);
     } else {
-        _lerpRafId = null;
+        _lerpRaf = null;
     }
 }
 
