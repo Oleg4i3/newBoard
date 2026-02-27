@@ -532,6 +532,7 @@
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
 			<input type="checkbox" id="show-partner-frame" title="Show partner viewport frame" checked>
+            <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" title="Moderate partner screen — fit partner's view into your screen">🎯</button>
         </div>
    
 
@@ -6084,6 +6085,48 @@ function updatePartnerFrame() {
 function handlePartnerViewport(data) {
     partnerViewport = data;
     updatePartnerFrame();
+}
+
+// Модерирование экрана партнера: перемещаем наш viewport так,
+// чтобы изображение модератора (наш экран) гарантированно вмещало
+// весь экран партнера (с правильным масштабом по меньшей стороне).
+function moderatePartnerScreen() {
+    if (!partnerViewport) {
+        alert('No partner viewport data yet. Partner must be connected and sharing their screen.');
+        return;
+    }
+
+    const pTransform = partnerViewport.transform;
+    const pZoom      = partnerViewport.zoom;
+    const pWidth     = partnerViewport.width;
+    const pHeight    = partnerViewport.height;
+
+    // Мировые координаты экрана партнера
+    const worldLeft   = -pTransform[4] / pZoom;
+    const worldTop    = -pTransform[5] / pZoom;
+    const worldWidth  = pWidth  / pZoom;
+    const worldHeight = pHeight / pZoom;
+    const worldCenterX = worldLeft + worldWidth  / 2;
+    const worldCenterY = worldTop  + worldHeight / 2;
+
+    // Наш экран (canvas без топ-бара)
+    const myW = canvas.width;
+    const myH = canvas.height;
+
+    // Выбираем масштаб так, чтобы партнёрский прямоугольник целиком помещался
+    // (берём минимум из горизонтального и вертикального масштабов)
+    const scaleX = myW / worldWidth;
+    const scaleY = myH / worldHeight;
+    const newZoom = Math.min(scaleX, scaleY);
+
+    // Центрируем партнёрский прямоугольник на нашем экране
+    const newTx = myW / 2 - worldCenterX * newZoom;
+    const newTy = myH / 2 - worldCenterY * newZoom;
+
+    canvas.setViewportTransform([newZoom, 0, 0, newZoom, newTx, newTy]);
+    canvas.requestRenderAll();
+    updatePartnerFrame();
+    sendMyViewport();
 }
 
 
