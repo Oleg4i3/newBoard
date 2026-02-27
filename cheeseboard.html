@@ -5290,15 +5290,28 @@ function ctxSetLineHeight(val) {
 // Filters are applied client-side via Fabric's filter pipeline.
 // Only the filter *parameters* (3 numbers) are synced — not pixel data.
 
-// ── Despeckle filter — median-based JPEG artifact removal ─────────────────────
-// Algorithm: for each pixel, compare it to the median of its 3×3 neighbourhood.
-// If the deviation exceeds a threshold, blend the pixel toward the median.
-// Result: isolated JPEG block edges and mosquito-noise spikes are removed while
-// smooth gradients, fine lines and actual photo details are preserved.
-// This is fundamentally different from blur — blur would also soften real detail.
+// ── Despeckle filter — isolated speck removal by neighbour-delta ──────────────
+//
+// TWO conditions must BOTH hold to erase a pixel:
+//
+//   1. ISOLATION — centre is strictly darker than each of its 8 neighbours.
+//      A text pixel always has at least one dark neighbour (adjacent glyph pixel
+//      or anti-alias fringe) → fails this test → untouched.
+//
+//   2. THRESHOLD — (mean_8_neighbours − centre) < threshold (set by slider).
+//      "Slightly darker than surroundings" = JPEG artifact → erase.
+//      "Much darker than surroundings" = real dot/period/comma → keep.
+//
+//      threshold = strength × 25  (range 25 … 250)
+//      Low  slider (1-3): only faint grey smudges removed
+//      Mid  slider (4-6): typical JPEG specks removed; real dots (diff≈200) kept
+//      High slider (7-10): darker artifacts removed; only very dark dots survive
+//
+// NOTE: the critical insight is the direction — we KEEP pixels whose diff
+// EXCEEDS the threshold (they're real content), and REMOVE those below it.
 fabric.Image.filters.Despeckle = fabric.util.createClass(fabric.Image.filters.BaseFilter, {
     type: 'Despeckle',
-    strength: 0,  // 0–10
+    strength: 0,  // 0 = off, 1–10
 
     applyTo2d(options) {
         if (this.strength === 0) return;
@@ -5306,51 +5319,59 @@ fabric.Image.filters.Despeckle = fabric.util.createClass(fabric.Image.filters.Ba
         const data = imageData.data;
         const w = imageData.width;
         const h = imageData.height;
+        const w4 = w * 4;
 
-        // threshold: deviation below this is left alone.
-        // strength 1 → threshold ~8;  strength 10 → threshold ~80 (aggressive)
-        const threshold = this.strength * 8;
-        // maxBlend: how far to push toward median at peak deviation (capped at 0.9)
-        const maxBlend = Math.min(0.9, this.strength * 0.09);
+        // Pixels with (mean_neighbours - centre) >= threshold are KEPT as real ink.
+        // strength 1 → 25, strength 5 → 125, strength 10 → 250
+        const threshold = this.strength * 25;
 
-        // Work on a copy so comparisons always reference original values
+        // Precompute perceived luminance (BT.601 integer approx, 0–255).
+        const lum = new Uint8Array(w * h);
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+            lum[j] = (data[i] * 2 + data[i + 1] * 5 + data[i + 2] + 4) >> 3;
+        }
+
+        // Work on a copy so replacements never affect neighbour lookups.
         const src = new Uint8ClampedArray(data);
 
         for (let y = 1; y < h - 1; y++) {
+            const rowBase = y * w;
             for (let x = 1; x < w - 1; x++) {
-                const idx = (y * w + x) * 4;
+                const pidx = rowBase + x;
+                const cL   = lum[pidx];
 
-                // Collect 3×3 neighbourhood values for R, G, B
-                const r9 = [], g9 = [], b9 = [];
-                for (let dy = -1; dy <= 1; dy++) {
-                    for (let dx = -1; dx <= 1; dx++) {
-                        const ni = ((y + dy) * w + (x + dx)) * 4;
-                        r9.push(src[ni]);
-                        g9.push(src[ni + 1]);
-                        b9.push(src[ni + 2]);
-                    }
-                }
+                // Read all 8 neighbours once.
+                const n0 = lum[pidx - w - 1], n1 = lum[pidx - w],     n2 = lum[pidx - w + 1],
+                      n3 = lum[pidx     - 1],                           n4 = lum[pidx     + 1],
+                      n5 = lum[pidx + w - 1], n6 = lum[pidx + w],     n7 = lum[pidx + w + 1];
 
-                // Sort and pick the median (index 4 of 9 elements)
-                r9.sort((a, b) => a - b); const mr = r9[4];
-                g9.sort((a, b) => a - b); const mg = g9[4];
-                b9.sort((a, b) => a - b); const mb = b9[4];
+                // CONDITION 1: centre must be strictly darker than ALL 8 neighbours.
+                if (cL >= n0 || cL >= n1 || cL >= n2 || cL >= n3 ||
+                    cL >= n4 || cL >= n5 || cL >= n6 || cL >= n7) continue;
 
-                // Maximum channel deviation from neighbourhood median
-                const maxDev = Math.max(
-                    Math.abs(src[idx]     - mr),
-                    Math.abs(src[idx + 1] - mg),
-                    Math.abs(src[idx + 2] - mb)
-                );
+                // CONDITION 2: delta must be BELOW threshold to qualify as artifact.
+                // If delta >= threshold the pixel is real content (dot, period) → keep.
+                const meanN = (n0 + n1 + n2 + n3 + n4 + n5 + n6 + n7) >> 3;
+                const delta = meanN - cL;
+                if (delta >= threshold) continue;  // real ink → keep
 
-                if (maxDev > threshold) {
-                    // Blend ratio ramps from 0 at threshold to maxBlend at 2×threshold
-                    const t = Math.min(maxBlend, maxBlend * (maxDev - threshold) / threshold);
-                    data[idx]     = src[idx]     + (mr - src[idx])     * t;
-                    data[idx + 1] = src[idx + 1] + (mg - src[idx + 1]) * t;
-                    data[idx + 2] = src[idx + 2] + (mb - src[idx + 2]) * t;
-                    // Alpha unchanged
-                }
+                // Isolated artifact — replace with mean RGB of the 8 neighbours.
+                const idx = pidx * 4;
+                const row0 = idx - w4, row2 = idx + w4;
+                let ni, sr = 0, sg = 0, sb = 0;
+                ni = row0 - 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = row0;     sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = row0 + 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = idx  - 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = idx  + 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = row2 - 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = row2;     sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+                ni = row2 + 4; sr += src[ni]; sg += src[ni+1]; sb += src[ni+2];
+
+                data[idx]     = (sr * 0.125 + 0.5) | 0;
+                data[idx + 1] = (sg * 0.125 + 0.5) | 0;
+                data[idx + 2] = (sb * 0.125 + 0.5) | 0;
+                // Alpha unchanged
             }
         }
     },
