@@ -1502,6 +1502,38 @@ const canvas = new fabric.Canvas('c', {
 // Canvas2dFilterBackend guarantees applyTo2d() is always called.
 fabric.filterBackend = new fabric.Canvas2dFilterBackend();
 
+// ── Rubber-band selection: выделять только полностью вошедшие объекты ──────
+// Fabric 5 по умолчанию выделяет объекты, которые ПЕРЕСЕКАЮТСЯ с рамкой.
+// Переопределяем _collectObjects, чтобы брать только те,
+// что целиком находятся внутри прямоугольника выделения.
+canvas._collectObjects = function(e) {
+    const gs = this._groupSelector;
+    if (!gs) return [];
+
+    // Fabric хранит начало рамки в (ex, ey), смещение — в (left, top)
+    const x1 = gs.ex;
+    const y1 = gs.ey;
+    const x2 = gs.ex + gs.left;
+    const y2 = gs.ey + gs.top;
+
+    // Нормализуем: e1 = верхний-левый, e2 = нижний-правый
+    const e1 = new fabric.Point(Math.min(x1, x2), Math.min(y1, y2));
+    const e2 = new fabric.Point(Math.max(x1, x2), Math.max(y1, y2));
+
+    // Рамка нулевого размера — обычный клик, не трогаем
+    if (e1.eq(e2)) return [];
+
+    const result = [];
+    for (let i = this._objects.length - 1; i >= 0; i--) {
+        const obj = this._objects[i];
+        if (!obj || !obj.selectable || !obj.visible) continue;
+        if (obj.isContainedWithinRect(e1, e2, true)) {
+            result.push(obj);
+        }
+    }
+    return result;
+};
+
 fabric.Object.prototype.set({
     transparentCorners: false,
     cornerColor: '#ffffff',
