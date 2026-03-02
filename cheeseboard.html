@@ -3191,6 +3191,11 @@ function handleLiveSync(e) {
     if (target.type === 'activeSelection' &&
         target.getObjects().some(o => o.type === 'image')) return;
 
+    // activeSelection should never reach here during normal use because
+    // before:transform auto-converts multi-selections to groups.
+    // If it somehow does (e.g. MQTT mode), skip to avoid desync.
+    if (target.type === 'activeSelection') return;
+
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
 
@@ -3202,13 +3207,7 @@ function handleLiveSync(e) {
         'hasControls', 'borderColor', 'hoverCursor'
     ];
 
-    if (target.type === 'activeSelection') {
-        target.getObjects().forEach(obj => {
-            broadcast('modified', { data: getAbsoluteObjectData(obj, syncProps) });
-        });
-    } else {
-        broadcast('modified', { data: target.toObject(syncProps) });
-    }
+    broadcast('modified', { data: target.toObject(syncProps) });
 
     lastMoveSend = now;
 }
@@ -5117,7 +5116,7 @@ function getStyleTargets(obj) {
 }
 
 function ctxSetStrokeColor(color) {
-    const obj = canvas.getActiveObject();
+    const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
     if (!obj) return;
     const targets = getStyleTargets(obj);
     targets.forEach(o => { o.set('stroke', color); o.dirty = true; });
@@ -5132,7 +5131,7 @@ function ctxSetStrokeColor(color) {
 function ctxSetStrokeWidth(val) {
     const v = parseInt(val);
     document.getElementById('ctx-stroke-width-val').textContent = v;
-    const obj = canvas.getActiveObject();
+    const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
     if (!obj) return;
     const targets = getStyleTargets(obj);
     targets.forEach(o => { o.set('strokeWidth', v); o.dirty = true; });
@@ -5144,7 +5143,7 @@ function ctxSetStrokeWidth(val) {
 function ctxSetFillOpacity(val) {
     const opacity = parseInt(val) / 100;
     document.getElementById('ctx-fill-opacity-val').textContent = val + '%';
-    const obj = canvas.getActiveObject();
+    const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
     if (!obj) return;
     const targets = getStyleTargets(obj);
     targets.forEach(o => {
@@ -5476,14 +5475,139 @@ function _applyRemoteImgFilters(obj, data) {
     _applyImgFilters(obj, c, s, b);
 }
 
+// ==========================================
+// AUTO-GROUP FOR SYNC
+// When a user starts transforming (move/scale/rotate) a multi-selection,
+// or applies a style change to it, we immediately convert it to a permanent
+// group and broadcast the group atomically.  This eliminates the coord-space
+// mismatch that caused desync and object duplication with activeSelection.
+// ==========================================
+
+let _autoGroupToastTimer = null;
+
+function _showAutoGroupToast() {
+    let toast = document.getElementById('auto-group-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'auto-group-toast';
+        toast.style.cssText = [
+            'position:fixed','bottom:60px','left:50%','transform:translateX(-50%)',
+            'background:rgba(37,99,235,0.93)','color:#fff',
+            'padding:7px 14px','border-radius:20px',
+            'font-size:12px','font-weight:500',
+            'box-shadow:0 4px 18px rgba(0,0,0,0.22)',
+            'display:flex','align-items:center','gap:10px',
+            'z-index:9998','pointer-events:auto',
+            'transition:opacity 0.4s','opacity:0'
+        ].join(';');
+        toast.innerHTML =
+            '<span>🔗 Auto-grouped for sync</span>' +
+            '<button onclick="ctxUngroupSelected()" style="' +
+                'background:rgba(255,255,255,0.2);border:none;border-radius:10px;' +
+                'color:#fff;padding:2px 9px;cursor:pointer;font-size:11px;"' +
+            '>Ungroup</button>';
+        document.body.appendChild(toast);
+    }
+    // Force reflow so the CSS transition fires
+    toast.style.opacity = '0';
+    requestAnimationFrame(() => { toast.style.opacity = '1'; });
+    clearTimeout(_autoGroupToastTimer);
+    _autoGroupToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+}
+
+/**
+ * If the current active object is a multi-selection (activeSelection), convert
+ * it to a permanent group and broadcast the operation atomically.
+ * Returns the new group, or the existing active object if no grouping was done.
+ */
+function _autoGroupIfMultiSelection() {
+    const active = canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') return active;
+    if (active.getObjects().length < 2)               return active;
+    if (connectionMode === 'mqtt')                     return active;
+
+    const oldIds = active.getObjects().map(o => o.id);
+
+    // Block echo-back: toGroup() fires object:removed (for the activeSelection
+    // container) and object:added (for the new group).  We send a single atomic
+    // group_objects message ourselves via broadcastGroupOp.
+    const prevFB   = isSendingToFirebase;
+    const prevMqtt = isSendingToMqtt;
+    const prevWs   = isSendingToWs;
+    isSendingToFirebase = true;
+    isSendingToMqtt     = true;
+    isSendingToWs       = true;
+
+    const group = active.toGroup();
+
+    isSendingToFirebase = prevFB;
+    isSendingToMqtt     = prevMqtt;
+    isSendingToWs       = prevWs;
+
+    group.id = 'group_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    group.set({ fill: '', backgroundColor: '' });
+
+    // Clear accidental solid fills on child paths (pen strokes etc.)
+    group.getObjects().forEach(child => {
+        if (child.type === 'path') {
+            const f = child.fill;
+            if (!f || f === 'rgb(0,0,0)' || f === null) child.set('fill', '');
+        }
+    });
+
+    canvas.setActiveObject(group);
+    addToHistory(group);
+
+    // Broadcast a single atomic group_objects message so the partner
+    // replaces the individual objects with the group in one step.
+    broadcastGroupOp('group_objects', {
+        oldIds,
+        groupData: group.toObject(['id'])
+    });
+
+    _showAutoGroupToast();
+    return group;
+}
+
 canvas.on('before:transform', (e) => {
-    const target = e.transform.target;
-    if (hasPinnedObjects(target)) {
-        target.lockMovementX = true;
-        target.lockMovementY = true;
-        target.lockRotation = true;
-        target.lockScalingX = true;
-        target.lockScalingY = true;
+    const transform = e.transform;
+    const target    = transform && transform.target;
+    if (!target) return;
+
+    // ── Auto-group multi-selection on transform start ─────────────────────────
+    // toGroup() converts the activeSelection in-place; the SAME object reference
+    // (now a group) is still stored in transform.target, so Fabric continues the
+    // drag/scale/rotate correctly on the new group without interruption.
+    if (target.type === 'activeSelection' && connectionMode !== 'mqtt') {
+        const group = _autoGroupIfMultiSelection();
+        // Redirect the live transform to the new group so this very drag/scale/rotate
+        // already applies to it (no need for the user to restart the gesture).
+        if (group && group.type === 'group') {
+            transform.target = group;
+            // Re-snap the transform origin to the group's actual position/angle
+            const mtx  = group.calcTransformMatrix();
+            const dec  = fabric.util.qrDecompose(mtx);
+            transform.original = {
+                ...transform.original,
+                left:   group.left,
+                top:    group.top,
+                scaleX: group.scaleX,
+                scaleY: group.scaleY,
+                angle:  group.angle,
+                skewX:  group.skewX  || 0,
+                skewY:  group.skewY  || 0,
+            };
+        }
+    }
+
+    // ── Pin lock (existing) ────────────────────────────────────────────────────
+    if (hasPinnedObjects(transform.target)) {
+        const t = transform.target;
+        t.lockMovementX = true;
+        t.lockMovementY = true;
+        t.lockRotation  = true;
+        t.lockScalingX  = true;
+        t.lockScalingY  = true;
     }
 });
 
