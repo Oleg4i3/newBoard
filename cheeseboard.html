@@ -5332,9 +5332,13 @@ function showCtxMenu(x, y) {
 
 function hideCtxMenu() { ctxMenu.classList.remove('show'); }
 
-document.addEventListener('mousedown', (e) => {
+document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return; // тач обрабатывается отдельно
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 });
+document.addEventListener('touchstart', (e) => {
+    if (!ctxMenu.contains(e.target)) hideCtxMenu();
+}, { passive: true });
 
 // Right-click on canvas
 canvas.on('mouse:down', (opt) => {
@@ -5354,29 +5358,52 @@ canvas.on('mouse:down', (opt) => {
     }
 });
 
-// Long-tap for touch
+// Long and double-tap for touch
+// Long-tap + double-tap for touch
 let longTapTimer = null;
 let longTapFired = false;
+let lastTapTime = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 1) return;
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
     longTapFired = false;
-    longTapTimer = setTimeout(() => {
+
+    // --- Двойной тап ---
+    const now = Date.now();
+    const dx = clientX - lastTapX;
+    const dy = clientY - lastTapY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (now - lastTapTime < 350 && dist < 30) {
+        // Это двойной тап
         longTapFired = true;
-        const touch = e.touches[0];
+        clearTimeout(longTapTimer);
         const target = canvas.findTarget(e.touches[0]);
         if (target) { canvas.setActiveObject(target); canvas.requestRenderAll(); }
-        if (canvas.getActiveObject()) showCtxMenu(touch.clientX, touch.clientY);
+        if (canvas.getActiveObject()) showCtxMenu(clientX, clientY);
+        lastTapTime = 0;
+        return;
+    }
+    lastTapTime = now;
+    lastTapX = clientX;
+    lastTapY = clientY;
+
+    // --- Долгий тап ---
+    longTapTimer = setTimeout(() => {
+        longTapFired = true;
+        const target = canvas.findTarget({ clientX, clientY });
+        if (target) { canvas.setActiveObject(target); canvas.requestRenderAll(); }
+        if (canvas.getActiveObject()) showCtxMenu(clientX, clientY);
     }, 600);
 }, { passive: true });
-canvas.upperCanvasEl.addEventListener('touchend', () => {
-    clearTimeout(longTapTimer);
-    longTapTimer = null;
-}, { passive: true });
-canvas.upperCanvasEl.addEventListener('touchmove', () => {
-    clearTimeout(longTapTimer);
-    longTapTimer = null;
-}, { passive: true });
 
+const _cancelLongTap = () => { clearTimeout(longTapTimer); longTapTimer = null; };
+canvas.upperCanvasEl.addEventListener('touchend',    _cancelLongTap, { passive: true });
+canvas.upperCanvasEl.addEventListener('touchmove',   _cancelLongTap, { passive: true });
+canvas.upperCanvasEl.addEventListener('touchcancel', _cancelLongTap, { passive: true });
 // Helper: get serializable data for an object that may be inside
 // an activeSelection or group — always returns ABSOLUTE canvas coords.
 // 'o.toObject()' alone returns LOCAL coords when inside a selection/group,
