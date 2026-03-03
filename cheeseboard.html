@@ -1632,7 +1632,90 @@ canvas.on('before:render', function() {
 // 2. TOOLS & UNDO SYSTEM
 // ==========================================
 let currentTool = 'select';
-const undoStack = [];
+// ══════════════════════════════════════════════════════════════
+// UNDO SYSTEM — tracks add / delete / modify / layer actions
+// Each entry: { type, entries: [{id, before?, after?, state?}] }
+// ══════════════════════════════════════════════════════════════
+const _undoStack = [];
+const _UNDO_MAX  = 60;
+
+// All serializable props we care about
+const _UNDO_PROPS = [
+    'type','left','top','width','height','scaleX','scaleY','angle','skewX','skewY',
+    'fill','stroke','strokeWidth','strokeLineCap','strokeLineJoin','opacity',
+    'rx','ry','points','path','src','cropX','cropY','objectCaching',
+    'isPinned','lockMovementX','lockMovementY','lockRotation',
+    'lockScalingX','lockScalingY','hasControls','borderColor','hoverCursor',
+    'text','fontFamily','fontSize','fontWeight','fontStyle','underline',
+    'textAlign','lineHeight','charSpacing',
+    '_filterContrast','_filterSharpen','_filterBlur'
+];
+
+function _undoSnapshot(obj) {
+    const s = obj.toObject(_UNDO_PROPS);
+    s.id = obj.id;
+    return s;
+}
+
+function _undoPush(action) {
+    _undoStack.push(action);
+    if (_undoStack.length > _UNDO_MAX) _undoStack.shift();
+}
+
+// State captured by before:transform / ctx wrappers
+let _undoBeforeStates = null;
+
+function _undoCaptureSelection(target) {
+    _undoBeforeStates = {};
+    const objs = (target && target.type === 'activeSelection') ? target.getObjects() : (target ? [target] : []);
+    objs.forEach(o => { if (o.id) _undoBeforeStates[o.id] = _undoSnapshot(o); });
+}
+
+function _undoCommit(target) {
+    if (!_undoBeforeStates) return;
+    const objs = (target && target.type === 'activeSelection') ? target.getObjects() : (target ? [target] : []);
+    const entries = [];
+    objs.forEach(o => {
+        if (!o.id || !_undoBeforeStates[o.id]) return;
+        entries.push({ id: o.id, before: _undoBeforeStates[o.id], after: _undoSnapshot(o) });
+    });
+    if (entries.length) _undoPush({ type: 'modify', entries });
+    _undoBeforeStates = null;
+}
+
+// Text editing: save before state when user enters editing
+let _undoTextBefore = null;
+
+// Wrap a ctx* function: capture before → run fn → commit
+function _withUndo(fn) {
+    return function(...args) {
+        const obj = canvas.getActiveObject();
+        if (obj) {
+            _undoBeforeStates = {};
+            const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+            objs.forEach(o => { if (o.id) _undoBeforeStates[o.id] = _undoSnapshot(o); });
+        }
+        const result = fn.apply(this, args);
+        if (obj) _undoCommit(canvas.getActiveObject() || obj);
+        return result;
+    };
+}
+
+function _applyUndoState(obj, state) {
+    const props = Object.assign({}, state);
+    delete props.id;
+    delete props.type;
+    obj.set(props);
+    // Restore image filters if needed
+    if (obj.type === 'image') {
+        const c = state._filterContrast || 0;
+        const s = state._filterSharpen  || 0;
+        const b = state._filterBlur     || 0;
+        obj._filterContrast = c; obj._filterSharpen = s; obj._filterBlur = b;
+        _applyImgFilters(obj, c, s, b);
+    }
+    obj.setCoords();
+}
 
 const settings = {
     pen: { color: '#000000', width: 2 },
@@ -1718,30 +1801,52 @@ function closeAllMenus() {
 }
 
 function addToHistory(obj) {
-    if(obj && obj.id) undoStack.push(obj.id);
+    if (obj && obj.id) {
+        _undoPush({ type: 'add', entries: [{ id: obj.id, state: _undoSnapshot(obj) }] });
+    }
 }
 
 function undo() {
-	 // 🔥 НОВОЕ: Проверка режима MQTT
-   if (connectionMode === 'mqtt') return;
-    const lastAction = undoStack.pop();
-    if (!lastAction) return;
+    if (connectionMode === 'mqtt') return;
+    const action = _undoStack.pop();
+    if (!action) return;
 
-    if (typeof lastAction === 'string') {
-        const obj = canvas.getObjects().find(o => o.id === lastAction);
-        if (obj) {
-            canvas.remove(obj);
-            broadcast('delete', { id: lastAction });
-        }
+    if (action.type === 'add') {
+        // Undo add → remove the object(s)
+        action.entries.forEach(e => {
+            const obj = canvas.getObjects().find(o => o.id === e.id);
+            if (obj) { obj.__isLocal = true; canvas.remove(obj); broadcast('delete', { id: e.id }); }
+        });
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
     }
-    else if (typeof lastAction === 'object' && lastAction.type === 'deletion') {
-        fabric.util.enlivenObjects([lastAction.data], (objs) => {
-            objs.forEach((o) => {
+    else if (action.type === 'delete') {
+        // Undo delete → re-add the object(s)
+        const states = action.entries.map(e => e.state);
+        fabric.util.enlivenObjects(states, (objs) => {
+            objs.forEach(o => {
+                o.__isLocal = false;
                 canvas.add(o);
-                broadcast('draw', { data: o.toObject(['id']) });
+                broadcast('draw', { data: o.toObject(_UNDO_PROPS.concat(['id'])) });
             });
             canvas.requestRenderAll();
         });
+    }
+    else if (action.type === 'modify') {
+        // Undo modify → restore before state
+        action.entries.forEach(e => {
+            const obj = canvas.getObjects().find(o => o.id === e.id);
+            if (!obj) return;
+            _applyUndoState(obj, e.before);
+            broadcast('modified', { data: Object.assign({}, e.before, { id: e.id }) });
+        });
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+    }
+    else if (action.type === 'layer') {
+        // Undo layer reorder
+        applyLayerOrder(action.before);
+        broadcast('layer_order', { ids: action.before });
     }
 }
 
@@ -1760,12 +1865,10 @@ function deleteSelected() {
             'hasControls', 'borderColor', 'hoverCursor'
         ];
 
-        toDelete.forEach(o => {
-            undoStack.push({
-                type: 'deletion',
-                data: o.toObject(syncProps)
-            });
+        const deleteEntries = toDelete.map(o => ({ id: o.id, state: _undoSnapshot(o) }));
+        _undoPush({ type: 'delete', entries: deleteEntries });
 
+        toDelete.forEach(o => {
             broadcast('delete', { id: o.id });
             canvas.remove(o);
         });
@@ -2340,6 +2443,7 @@ function startCropMode(targetObj) {
 
 function confirmCrop() {
     if (!cropTarget || !cropRect) { cancelCrop(); return; }
+    const _cropUndoBefore = _undoSnapshot(cropTarget);
     const img   = cropTarget;
     const imgSX = img.scaleX || 1;
     const imgSY = img.scaleY || 1;
@@ -2387,6 +2491,7 @@ function confirmCrop() {
     cleanupCrop();
     canvas.setActiveObject(img);
     canvas.requestRenderAll();
+    _undoPush({ type: 'modify', entries: [{ id: img.id, before: _cropUndoBefore, after: _undoSnapshot(img) }] });
     broadcast('modified', {
         data: img.toObject(['id','cropX','cropY','width','height','left','top','scaleX','scaleY'])
     });
@@ -2567,10 +2672,7 @@ function handleEraser(e) {
                 'hasControls', 'borderColor', 'hoverCursor'
             ];
 
-            undoStack.push({
-                type: 'deletion',
-                data: target.toObject(syncProps)
-            });
+            _undoPush({ type: 'delete', entries: [{ id: target.id, state: _undoSnapshot(target) }] });
 
             canvas.remove(target);
             broadcast('delete', { id: target.id });
@@ -2639,7 +2741,16 @@ canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length > 1) {
         isMultitouch = true;
         canvas.isDrawingMode = false;
-        
+
+        // Abort any in-progress free-drawing brush stroke.
+        // _abortFreeDrawing may not be defined yet at this point in the file
+        // (it's declared later), so we inline the critical reset here too.
+        const brush = canvas.freeDrawingBrush;
+        if (brush) { brush._points = []; }
+        canvas._isCurrentlyDrawing = false;
+        const ctx = canvas.contextTop;
+        if (ctx) ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
         if (isDrawingShape && activeShape) {
             canvas.remove(activeShape);
             activeShape = null;
@@ -3071,14 +3182,26 @@ canvas.on('path:created', (e) => {
 });
 
 // Broadcast textbox content + style when user finishes editing (clicks away)
+canvas.on('text:editing:entered', (e) => {
+    const tb = e.target;
+    if (tb && tb.id) _undoTextBefore = _undoSnapshot(tb);
+});
+
 canvas.on('text:editing:exited', (e) => {
     const tb = e.target;
     if (!tb || tb.type !== 'textbox') return;
     if (!tb.text.trim()) {
-        // Remove empty textboxes on exit
+        // Remove empty textboxes on exit — track as delete for undo
+        if (_undoTextBefore) _undoPush({ type: 'delete', entries: [{ id: tb.id, state: _undoTextBefore }] });
+        _undoTextBefore = null;
         canvas.remove(tb);
         canvas.requestRenderAll();
         return;
+    }
+    if (_undoTextBefore) {
+        const after = _undoSnapshot(tb);
+        _undoPush({ type: 'modify', entries: [{ id: tb.id, before: _undoTextBefore, after }] });
+        _undoTextBefore = null;
     }
     broadcast('draw', { data: tb.toObject(_textSyncProps()) });
 });
@@ -3090,6 +3213,9 @@ const _imgDebounce = {};
 canvas.on('object:modified', (e) => {
     const target = e.target;
     if (!target) return;
+
+    // ── Commit undo entry for this transform ─────────────────────────────────
+    _undoCommit(target);
 
     // Base sync props (position/lock state for all objects)
     const syncProps = [
@@ -3264,11 +3390,34 @@ let touchStartDist = 0;
 let touchStartPoint = { x: 0, y: 0 };
 let isGesturing = false;
 
+// ── Abort any in-progress free-drawing path immediately ──────────────────────
+// Fixes: ghost strokes after multitouch (Bug 1) and dot artifacts (Bug 2).
+// Directly resets Fabric's internal brush state + clears the top canvas.
+function _abortFreeDrawing() {
+    const brush = canvas.freeDrawingBrush;
+    if (brush) {
+        // Reset PencilBrush internal point list
+        brush._points = [];
+        if (brush._hasStraightLine !== undefined) brush._hasStraightLine = false;
+    }
+    // Reset Fabric's own "currently drawing" flag so no path:created fires
+    canvas._isCurrentlyDrawing = false;
+    // Wipe the upper canvas where the in-progress stroke is rendered
+    const ctx = canvas.contextTop;
+    if (ctx) ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+}
+
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
+    if (e.touches.length >= 2) {
         isGesturing = true;
         isMultitouch = true;
-        
+
+        // Bug 1 & 2: abort any brush session that started with the first finger
+        // before we even had a chance to set isMultitouch=true.
+        // Also temporarily disable drawing mode so Fabric doesn't fire path:created.
+        _abortFreeDrawing();
+        canvas.isDrawingMode = false;
+
         touchStartDist = Math.hypot(
             e.touches[0].clientX - e.touches[1].clientX,
             e.touches[0].clientY - e.touches[1].clientY
@@ -3311,7 +3460,7 @@ canvas.upperCanvasEl.addEventListener('touchmove', (e) => {
         vpt[5] += deltaY;
         
         canvas.requestRenderAll();
-		 sendMyViewport();
+        sendMyViewport();
         updatePartnerFrame();
 
         touchStartPoint = currentPoint;
@@ -3323,12 +3472,16 @@ canvas.upperCanvasEl.addEventListener('touchmove', (e) => {
 canvas.upperCanvasEl.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) {
         isGesturing = false;
+        // Bug 1: delay re-enabling drawing so Fabric fully processes the touchend
+        // and does NOT resume from any lingering internal state.
         setTimeout(() => {
+            // Abort once more — some Fabric versions reset _isCurrentlyDrawing late
+            _abortFreeDrawing();
             isMultitouch = false;
             if (currentTool === 'pen' || currentTool === 'highlighter') {
                 canvas.isDrawingMode = true;
             }
-        }, 100);
+        }, 120);
     }
 });
 
@@ -4394,8 +4547,33 @@ function applyRemoteStateDump(stateData, onDone) {
     const imageObjects = (stateData.objects || []).filter(o => o.type === 'image' && o.src);
 
     canvas.loadFromJSON(stateData, function() {
-        // Re-apply textbox control visibility (loadFromJSON doesn't restore it)
+        // Fix: Fabric sets fill:'rgb(0,0,0)' as default for paths on loadFromJSON,
+        // even when the original fill was '' or null (pen strokes, lines, etc.).
+        // Restore the correct fill from the original JSON data by id.
+        const srcById = {};
+        (stateData.objects || []).forEach(o => { if (o.id) srcById[o.id] = o; });
+
         canvas.getObjects().forEach(o => {
+            // Fix path fills
+            if (o.type === 'path') {
+                const src = srcById[o.id];
+                const originalFill = src ? src.fill : undefined;
+                // If original was empty/null/transparent, clear it
+                if (!originalFill || originalFill === '' || originalFill === 'null') {
+                    o.set('fill', '');
+                } else {
+                    o.set('fill', originalFill);
+                }
+            }
+            // Fix group child path fills
+            if (o.type === 'group') {
+                o.getObjects().forEach(child => {
+                    if (child.type === 'path' && (child.fill === 'rgb(0,0,0)' || child.fill === null)) {
+                        child.set('fill', '');
+                    }
+                });
+            }
+            // Re-apply textbox control visibility (loadFromJSON doesn't restore it)
             if (o.type === 'textbox') {
                 o.setControlsVisibility({
                     tl: false, tr: false, bl: false, br: false,
@@ -5131,10 +5309,13 @@ function ctxSetStrokeColor(color) {
     canvas.requestRenderAll();
     // Broadcast with absolute coords so partner object doesn't jump
     targets.forEach(o => broadcast('modified', { data: getStyleBroadcastData(o, ['stroke']) }));
+    _undoCommit(obj);
     hideCtxMenu();
 }
 
 function ctxSetStrokeWidth(val) {
+    const _preObj2 = canvas.getActiveObject();
+    if (_preObj2) _undoCaptureSelection(_preObj2);
     const v = parseInt(val);
     document.getElementById('ctx-stroke-width-val').textContent = v;
     const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
@@ -5144,9 +5325,12 @@ function ctxSetStrokeWidth(val) {
     if (obj.type === 'group') obj.dirty = true;
     canvas.requestRenderAll();
     targets.forEach(o => broadcast('modified', { data: getStyleBroadcastData(o, ['strokeWidth']) }));
+    _undoCommit(obj);
 }
 
 function ctxSetFillOpacity(val) {
+    const _preObj3 = canvas.getActiveObject();
+    if (_preObj3) _undoCaptureSelection(_preObj3);
     const opacity = parseInt(val) / 100;
     document.getElementById('ctx-fill-opacity-val').textContent = val + '%';
     const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
@@ -5185,6 +5369,7 @@ function ctxSetFillOpacity(val) {
     if (obj.type === 'group') obj.dirty = true;
     canvas.requestRenderAll();
     targets.forEach(o => broadcast('modified', { data: getStyleBroadcastData(o, ['fill']) }));
+    _undoCommit(obj);
 }
 
 function ctxGroupSelected()   { hideCtxMenu(); groupSelected(); }
@@ -5199,13 +5384,19 @@ function ctxCrop() {
     startCropMode(obj && obj.type === 'image' ? obj : null);
 }
 
+function _captureLayerOrder() {
+    return canvas.getObjects().filter(o => o.id).map(o => o.id);
+}
+
 function ctxBringToFront() {
     hideCtxMenu();
     const obj = canvas.getActiveObject();
     if (!obj) return;
+    const before = _captureLayerOrder();
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.bringToFront(o));
     canvas.requestRenderAll();
+    _undoPush({ type: 'layer', before, after: _captureLayerOrder() });
     broadcastLayerOrder();
 }
 
@@ -5213,9 +5404,11 @@ function ctxSendToBack() {
     hideCtxMenu();
     const obj = canvas.getActiveObject();
     if (!obj) return;
+    const before = _captureLayerOrder();
     const objs = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
     objs.forEach(o => canvas.sendToBack(o));
     canvas.requestRenderAll();
+    _undoPush({ type: 'layer', before, after: _captureLayerOrder() });
     broadcastLayerOrder();
 }
 
@@ -5256,70 +5449,86 @@ function _textSyncProps() {
 function ctxSetFont() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     obj.set('fontFamily', document.getElementById('ctx-font-family').value);
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxSetFontSize(val) {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     const sz = Math.max(6, Math.min(200, parseInt(val) || 20));
     obj.set('fontSize', sz);
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxToggleBold() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     const next = obj.fontWeight === 'bold' ? 'normal' : 'bold';
     obj.set('fontWeight', next);
     document.getElementById('ctx-bold-btn').classList.toggle('active', next === 'bold');
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxToggleItalic() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     const next = obj.fontStyle === 'italic' ? 'normal' : 'italic';
     obj.set('fontStyle', next);
     document.getElementById('ctx-italic-btn').classList.toggle('active', next === 'italic');
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxToggleUnderline() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     const next = !obj.underline;
     obj.set('underline', next);
     document.getElementById('ctx-underline-btn').classList.toggle('active', next);
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxSetAlign(align) {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     obj.set('textAlign', align);
     ['left','center','right'].forEach(a => {
         document.getElementById('ctx-align-' + a).classList.toggle('active', a === align);
     });
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 function ctxSetTextColor(color) {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     obj.set('fill', color);
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
     hideCtxMenu();
 }
 function ctxSetLineHeight(val) {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
+    _undoCaptureSelection(obj);
     const lh = Math.max(0.8, Math.min(3.0, parseFloat(val)));
     obj.set('lineHeight', lh);
     document.getElementById('ctx-line-height-val').textContent = lh.toFixed(2);
     canvas.requestRenderAll();
+    _undoCommit(obj);
     broadcast('modified', { data: obj.toObject(_textSyncProps()) });
 }
 
@@ -5426,6 +5635,10 @@ fabric.Image.filters.SoapBlur.fromObject = fabric.Image.filters.Despeckle.fromOb
 function ctxApplyImgFilter() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'image') return;
+    // Capture before state once per slider interaction (cleared on mouseup via timer)
+    if (!obj._filterUndoBefore) {
+        obj._filterUndoBefore = _undoSnapshot(obj);
+    }
 
     const contrast = parseInt(document.getElementById('ctx-contrast').value);
     const sharpen  = parseInt(document.getElementById('ctx-sharpen').value);
@@ -5443,6 +5656,11 @@ function ctxApplyImgFilter() {
         obj._filterContrast = contrast;
         obj._filterSharpen  = sharpen;
         obj._filterBlur     = denoise;
+        // Commit undo after slider settles
+        if (obj._filterUndoBefore) {
+            _undoPush({ type: 'modify', entries: [{ id: obj.id, before: obj._filterUndoBefore, after: _undoSnapshot(obj) }] });
+            obj._filterUndoBefore = null;
+        }
         broadcast('modified', { data: {
             id: obj.id,
             _filterContrast: contrast,
@@ -5579,6 +5797,9 @@ canvas.on('before:transform', (e) => {
     const transform = e.transform;
     const target    = transform && transform.target;
     if (!target) return;
+
+    // ── Capture before state for undo ─────────────────────────────────────────
+    _undoCaptureSelection(target);
 
     // ── Auto-group multi-selection on transform start ─────────────────────────
     // toGroup() converts the activeSelection in-place; the SAME object reference
