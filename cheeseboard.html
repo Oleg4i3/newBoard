@@ -568,6 +568,12 @@
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()">✕</button>
     </div>
+    <!-- Row 1b: pivot controls (always visible when menu open) -->
+    <div class="ctx-icon-row" id="ctx-pivot-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:4px;margin-top:-2px;">
+        <span style="font-size:9px;color:rgba(255,255,255,0.45);margin-right:4px;flex-shrink:0;">Pivot</span>
+        <button class="ctx-ic" id="ctx-pivot-set-btn"   data-tooltip="Set rotation pivot (click to place)" onclick="ctxSetPivot()">⊕</button>
+        <button class="ctx-ic" id="ctx-pivot-reset-btn" data-tooltip="Reset pivot to center" onclick="ctxResetPivot()" style="display:none">⊘</button>
+    </div>
 
     <!-- Row 2: stroke colors (hidden for images) -->
     <div id="ctx-stroke-section" class="ctx-swatches-row"></div>
@@ -2888,6 +2894,15 @@ canvas.on('mouse:down', (o) => {
     
     if (isMultitouch) return;
 
+    // ── Pivot placement mode: eat the click and set pivot ────────────────────
+    if (typeof _pivotMode !== 'undefined' && _pivotMode && _pivotTarget) {
+        if (o.e.button !== 2) {
+            const p = canvas.getPointer(o.e);
+            _pivotPlaceAt(p.x, p.y);
+            return;
+        }
+    }
+
     // ── Text tool: click to place a new Textbox ──────────────────────────────
     if (currentTool === 'text') {
         const pointer = canvas.getPointer(o.e);
@@ -4291,6 +4306,9 @@ function setupConn() {
 
         } else if (msg.type === 'layer_order') {
             applyLayerOrder(msg.data.ids);
+
+        } else if (msg.type === 'rotation_viz' || msg.type === 'pivot_set' || msg.type === 'pivot_clear') {
+            if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data || msg);
         }
     }
 }
@@ -4307,20 +4325,19 @@ function initPartnerCursor() {
     
     partnerCursorDiv = document.createElement('div');
     partnerCursorDiv.id = 'partner-cursor';
+    // Cursor arrow: tip of the path is at (0,0) so that left/top
+    // can be set to the exact screen coordinate without any offset transform.
     partnerCursorDiv.innerHTML = `
-        <div style="position: relative;">
-            <svg width="24" height="24" viewBox="0 0 24 24" style="position: absolute; top: -24px; left: 0;">
-                <path d="M1 1L1 23L7 18L18 18Z" fill="#fa3f5e" stroke="#fff" stroke-width="1.5"/>
-                <text x="10" y="16" font-size="6" fill="#f43f5e" font-family="sans-serif" font-weight="bold"></text>
-            </svg>
-        </div>
+        <svg width="22" height="22" viewBox="0 0 22 22" style="display:block;overflow:visible;">
+            <path d="M0 0 L0 18 L5 13 L14 13 Z" fill="#fa3f5e" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
     `;
     partnerCursorDiv.style.cssText = `
         position: absolute;
         pointer-events: none;
         z-index: 10000;
         display: none;
-        transform: translate(-50%, -100%);
+        transform: none;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
     `;
     document.getElementById('canvas-wrapper').appendChild(partnerCursorDiv);
@@ -4387,10 +4404,7 @@ function _animateCursor() {
         partnerCursorDiv.style.opacity  = '1';
         partnerCursorDiv.style.left     = sx + 'px';
         partnerCursorDiv.style.top      = sy + 'px';
-        const cr = partnerCursorDiv.getBoundingClientRect();
-        if (cr.left < 10)                         partnerCursorDiv.style.transform = 'translate(0,-100%)';
-        else if (cr.right > window.innerWidth-10) partnerCursorDiv.style.transform = 'translate(-100%,-100%)';
-        else                                       partnerCursorDiv.style.transform = 'translate(-50%,-100%)';
+        partnerCursorDiv.style.transform = 'none';
         if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
     } else {
         // Hide cursor icon, show edge arrow pointing toward partner
@@ -4554,6 +4568,10 @@ function applyRemoteStateDump(stateData, onDone) {
         (stateData.objects || []).forEach(o => { if (o.id) srcById[o.id] = o; });
 
         canvas.getObjects().forEach(o => {
+            // Restore custom pivot mtr if object had one in state dump
+            if (o._pivotLocal && typeof _installPivotMtr !== 'undefined') {
+                _installPivotMtr(o);
+            }
             // Fix path fills
             if (o.type === 'path') {
                 const src = srcById[o.id];
@@ -4633,7 +4651,8 @@ function applyRemoteStateDump(stateData, onDone) {
 // Ably limit: 64KB per message. PNG data-URLs can be 100-500KB.
 // ==========================================
 async function _sendStateDumpCompressed(syncProps) {
-    const state = canvas.toJSON(syncProps);
+    const extProps = syncProps.concat(['_pivotLocal']);
+    const state = canvas.toJSON(extProps);
 
     // Firebase: send state as-is — no size limit
     if (connectionMode !== 'ws') {
@@ -4820,6 +4839,13 @@ window.addEventListener('keydown', (e) => {
 
     if (e.code === 'Delete' || e.code === 'Backspace') {
         deleteSelected();
+        return;
+    }
+
+    // ESC: cancel pivot mode if active
+    if (e.code === 'Escape' && typeof _pivotMode !== 'undefined' && _pivotMode) {
+        _pivotCancel();
+        e.preventDefault();
         return;
     }
 
@@ -5188,6 +5214,8 @@ function showCtxMenu(x, y) {
         if (rect.right  > window.innerWidth)  ctxMenu.style.left = Math.max(0, x - rect.width)  + 'px';
         if (rect.bottom > window.innerHeight) ctxMenu.style.top  = Math.max(0, y - rect.height) + 'px';
     });
+    // Show/hide pivot reset button based on whether selected object has custom pivot
+    if (typeof _pivotUpdateBtns !== 'undefined') _pivotUpdateBtns();
 }
 
 function hideCtxMenu() { ctxMenu.classList.remove('show'); }
@@ -6757,6 +6785,12 @@ function handleFirebaseMessage(msg) {
             case 'layer_order':
                 applyLayerOrder(msg.data.ids);
                 break;
+
+            case 'rotation_viz':
+            case 'pivot_set':
+            case 'pivot_clear':
+                if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data);
+                break;
                 
             case 'request_state':
                 // Отправляем текущее состояние канвы
@@ -7302,6 +7336,12 @@ function handleWsMessage(msg) {
                 applyLayerOrder(msg.data.ids);
                 break;
 
+            case 'rotation_viz':
+            case 'pivot_set':
+            case 'pivot_clear':
+                if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data);
+                break;
+
             case 'request_state':
                 if (canvas.getObjects().length > 0) {
                     _sendStateDumpCompressed(syncProps);
@@ -7398,6 +7438,384 @@ window.addEventListener('beforeunload', () => {
         }, 8000);
     }
 })();
+
+
+// ══════════════════════════════════════════════════════════════
+// CUSTOM ROTATION PIVOT
+// ── Right-click → ⊕ Set Pivot → click anywhere → custom center
+//    Rays from pivot to corners shown locally AND on partner
+//    with smooth lerp (same system as normal transforms).
+// ══════════════════════════════════════════════════════════════
+
+// ── State ─────────────────────────────────────────────────────────────────
+let _pivotMode      = false;
+let _pivotTarget    = null;
+let _pivotRotating  = false;   // true while mtr drag is in progress
+// Partner: { id, active } — corner coords computed live from lerped object
+let _partnerPivotId     = null;
+let _partnerPivotActive = false;
+
+// ── Overlay canvas ─────────────────────────────────────────────────────────
+let _pivotOvEl = null, _pivotOvCtx = null;
+
+function _pivotInitOverlay() {
+    if (_pivotOvEl) return;
+    const wrapper = document.getElementById('canvas-wrapper');
+    _pivotOvEl = document.createElement('canvas');
+    _pivotOvEl.id = 'pivot-overlay';
+    _pivotOvEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:52;';
+    wrapper.appendChild(_pivotOvEl);
+    _pivotOvCtx = _pivotOvEl.getContext('2d');
+    _pivotResizeOverlay();
+    window.addEventListener('resize', _pivotResizeOverlay);
+}
+
+function _pivotResizeOverlay() {
+    if (!_pivotOvEl) return;
+    const wr = document.getElementById('canvas-wrapper');
+    _pivotOvEl.width  = wr.offsetWidth;
+    _pivotOvEl.height = wr.offsetHeight;
+    _pivotRedraw();
+}
+
+// Fabric canvas coords → wrapper-relative screen coords
+function _fab2scr(x, y) {
+    const vpt = canvas.viewportTransform, z = canvas.getZoom();
+    return { x: x * z + vpt[4], y: y * z + vpt[5] };
+}
+
+// Get pivot in canvas coords from object-local coords
+function _getPivotCanvas(obj) {
+    if (!obj._pivotLocal) return null;
+    const mat = obj.calcTransformMatrix();
+    const pt  = fabric.util.transformPoint(new fabric.Point(obj._pivotLocal.x, obj._pivotLocal.y), mat);
+    return { x: pt.x, y: pt.y };
+}
+
+// Get 4 corners of an object in canvas coords
+function _getObjCorners(obj) {
+    obj.setCoords();
+    const ac = obj.aCoords;
+    if (!ac) return [];
+    return ['tl','tr','br','bl'].map(k => ({ x: ac[k].x, y: ac[k].y }));
+}
+
+// Draw pivot crosshair + rays to corners (all coords are Fabric canvas coords)
+function _drawPivotViz(ctx, pivotFab, cornersFab, color, alpha) {
+    if (!pivotFab) return;
+    const ps = _fab2scr(pivotFab.x, pivotFab.y);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Rays (dashed spokes)
+    if (cornersFab && cornersFab.length) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        cornersFab.forEach(c => {
+            const cs = _fab2scr(c.x, c.y);
+            ctx.beginPath();
+            ctx.moveTo(ps.x, ps.y);
+            ctx.lineTo(cs.x, cs.y);
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+    }
+
+    // Cross
+    const R = 10;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ps.x - R, ps.y); ctx.lineTo(ps.x + R, ps.y);
+    ctx.moveTo(ps.x, ps.y - R); ctx.lineTo(ps.x, ps.y + R);
+    ctx.stroke();
+
+    // Circle fill
+    ctx.beginPath();
+    ctx.arc(ps.x, ps.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// Master redraw — called from after:render (catches pan/zoom) and events
+function _pivotRedraw() {
+    _pivotInitOverlay();
+    const ctx = _pivotOvCtx;
+    ctx.clearRect(0, 0, _pivotOvEl.width, _pivotOvEl.height);
+
+    // ── Pivot placement mode: show preview at object center ──────────────
+    if (_pivotMode && _pivotTarget) {
+        const p = _pivotTarget.getCenterPoint();
+        _drawPivotViz(ctx, p, null, '#2563eb', 0.7);
+        return;
+    }
+
+    // ── Local: active object with custom pivot ────────────────────────────
+    const sel = canvas.getActiveObject();
+    if (sel && sel._pivotLocal) {
+        const p       = _getPivotCanvas(sel);
+        // Always draw rays when rotating; show subtle marker even when idle
+        const corners = _pivotRotating ? _getObjCorners(sel) : [];
+        const alpha   = _pivotRotating ? 0.85 : 0.5;
+        _drawPivotViz(ctx, p, corners, '#2563eb', alpha);
+    }
+
+    // ── Partner pivot: compute live from the partner's object (lerp-updated) ─
+    if (_partnerPivotId) {
+        const obj = findObjectById(_partnerPivotId);
+        if (obj && obj._pivotLocal) {
+            const p       = _getPivotCanvas(obj);
+            // Always draw corners when partner is actively rotating
+            const corners = _partnerPivotActive ? _getObjCorners(obj) : [];
+            const alpha   = _partnerPivotActive ? 0.85 : 0.45;
+            _drawPivotViz(ctx, p, corners, '#f59e0b', alpha);
+        }
+    }
+}
+
+// Redraw every frame (catches pan / zoom without extra events)
+canvas.on('after:render', _pivotRedraw);
+canvas.on('selection:cleared', _pivotRedraw);
+canvas.on('selection:created', _pivotRedraw);
+canvas.on('selection:updated', _pivotRedraw);
+
+// ── Rotation events ────────────────────────────────────────────────────────
+canvas.on('object:rotating', function(e) {
+    const obj = e.target;
+    if (!obj || !obj._pivotLocal) return;
+    _pivotRotating = true;
+    // position + rotation_viz are sent from _pivotRotateHandler directly (Bug 1/2 fix).
+    // No extra work needed here for pivot rotation.
+});
+
+// When rotation ends, send active:false so partner hides the rays
+canvas.on('object:modified', function(e) {
+    if (!_pivotRotating) return;
+    _pivotRotating = false;
+    const obj = e.target;
+    if (obj && obj._pivotLocal) {
+        _pivotSendViz({ id: obj.id, active: false });
+    }
+});
+
+function _pivotSendViz(data) {
+    if (connectionMode === 'firebase' && firebaseRef) sendToFirebase('rotation_viz', data);
+    else if (connectionMode === 'ws') sendToWs('rotation_viz', data);
+    else if (conn && conn.open) conn.send({ type: 'rotation_viz', data });
+}
+
+// ── Install / uninstall custom mtr control ────────────────────────────────
+function _installPivotMtr(obj) {
+    if (!obj._origMtr) {
+        obj._origMtr = obj.controls.mtr;
+        obj.controls = Object.assign({}, obj.controls);
+    }
+    obj.controls.mtr = new fabric.Control({
+        x: 0, y: -0.5,
+        offsetY: -40,
+        cursorStyle: 'crosshair',
+        actionHandler: _pivotRotateHandler,
+        actionName: 'rotate',
+        render: _renderPivotMtrHandle,
+        cornerSize: 28,
+        withConnection: true,
+    });
+    obj.setCoords();
+}
+
+function _uninstallPivotMtr(obj) {
+    if (obj._origMtr) {
+        obj.controls.mtr = obj._origMtr;
+        delete obj._origMtr;
+    }
+    delete obj._pivotLocal;
+    obj.setCoords();
+}
+
+// Custom rotate handler: rotates object center around _pivotLocal in canvas space
+function _pivotRotateHandler(eventData, transform, x, y) {
+    const obj   = transform.target;
+    const pivot = _getPivotCanvas(obj);
+    if (!pivot) return false;
+
+    // Force flag so _pivotRedraw shows rays immediately
+    _pivotRotating = true;
+
+    if (transform._pvLastAngle === undefined) {
+        transform._pvLastAngle = Math.atan2(transform.ey - pivot.y, transform.ex - pivot.x);
+    }
+    const curAngle = Math.atan2(y - pivot.y, x - pivot.x);
+    let deltaRad   = curAngle - transform._pvLastAngle;
+
+    if (eventData.shiftKey) {
+        const totalDeg = obj.angle + fabric.util.radiansToDegrees(deltaRad);
+        const snapped  = Math.round(totalDeg / 15) * 15;
+        deltaRad = fabric.util.degreesToRadians(snapped - obj.angle);
+    }
+
+    const deltaDeg = fabric.util.radiansToDegrees(deltaRad);
+    const c        = obj.getCenterPoint();
+    const cos = Math.cos(deltaRad), sin = Math.sin(deltaRad);
+    const dx  = c.x - pivot.x, dy = c.y - pivot.y;
+
+    obj.setPositionByOrigin(
+        new fabric.Point(pivot.x + dx * cos - dy * sin, pivot.y + dx * sin + dy * cos),
+        'center', 'center'
+    );
+    obj.rotate(obj.angle + deltaDeg);
+    obj.setCoords();
+
+    transform._pvLastAngle = curAngle;
+
+    // ── Bug 1 fix: explicit live sync ───────────────────────────────────────
+    // Fabric may not fire object:rotating reliably for custom control actions,
+    // so we broadcast the updated position directly from the handler.
+    // Throttled at 100 ms (same as MOVE_THROTTLE_MS) → ~10 fps live update.
+    // ── Bug 2 fix: reliable rotation_viz ────────────────────────────────────
+    // Send rotation_viz here so partner always sees the pivot overlay moving.
+    const _pvNow = Date.now();
+    if (!_pivotRotateHandler._lastSync || _pvNow - _pivotRotateHandler._lastSync >= 100) {
+        _pivotRotateHandler._lastSync = _pvNow;
+        broadcast('modified', { data: obj.toObject(['id', 'isPinned']) });
+        _pivotSendViz({ id: obj.id, active: true });
+    }
+
+    return true;
+}
+
+// Blue-dot mtr handle: signals custom pivot is active
+function _renderPivotMtrHandle(ctx, left, top) {
+    ctx.save();
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.arc(left, top, 7, 0, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(left + 7, top - 5);
+    ctx.lineTo(left + 12, top);
+    ctx.lineTo(left + 7, top + 1);
+    ctx.closePath();
+    ctx.fillStyle = '#2563eb';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(left, top, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#2563eb';
+    ctx.fill();
+    ctx.restore();
+}
+
+// ── ctx-menu actions ──────────────────────────────────────────────────────
+function ctxSetPivot() {
+    hideCtxMenu();
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type === 'activeSelection') {
+        setStatus('Select a single object to set its pivot', 'err');
+        return;
+    }
+    _pivotInitOverlay();
+    _pivotMode   = true;
+    _pivotTarget = obj;
+    canvas.discardActiveObject();
+    canvas.defaultCursor = 'crosshair';
+    canvas.selection     = false;
+    _pivotRedraw();
+    setStatus('Click anywhere to place rotation pivot. ESC to cancel.', 'ok');
+}
+
+function ctxResetPivot() {
+    hideCtxMenu();
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    const id = obj.id;
+    _uninstallPivotMtr(obj);
+    _pivotRotating = false;
+    _pivotRedraw();
+    const clearData = { id };
+    if (connectionMode === 'firebase' && firebaseRef) sendToFirebase('pivot_clear', clearData);
+    else if (connectionMode === 'ws') sendToWs('pivot_clear', clearData);
+    else if (conn && conn.open) conn.send({ type: 'pivot_clear', data: clearData });
+    _pivotUpdateBtns();
+}
+
+function _pivotUpdateBtns() {
+    const obj = canvas.getActiveObject();
+    const hasCustom = obj && obj._pivotLocal;
+    const setBtn   = document.getElementById('ctx-pivot-set-btn');
+    const resetBtn = document.getElementById('ctx-pivot-reset-btn');
+    if (setBtn)   setBtn.style.display   = 'flex';
+    if (resetBtn) resetBtn.style.display = hasCustom ? 'flex' : 'none';
+}
+
+function _pivotPlaceAt(cx, cy) {
+    if (!_pivotMode || !_pivotTarget) return;
+    const obj = _pivotTarget;
+    const invMat  = fabric.util.invertTransform(obj.calcTransformMatrix());
+    const localPt = fabric.util.transformPoint(new fabric.Point(cx, cy), invMat);
+    obj._pivotLocal = { x: localPt.x, y: localPt.y };
+    _installPivotMtr(obj);
+    canvas.defaultCursor = 'default';
+    canvas.selection     = true;
+    const savedObj = obj;
+    _pivotMode   = false;
+    _pivotTarget = null;
+    canvas.setActiveObject(savedObj);
+    canvas.requestRenderAll();
+    _pivotRedraw();
+    const setData = { id: savedObj.id, localX: localPt.x, localY: localPt.y };
+    if (connectionMode === 'firebase' && firebaseRef) sendToFirebase('pivot_set', setData);
+    else if (connectionMode === 'ws') sendToWs('pivot_set', setData);
+    else if (conn && conn.open) conn.send({ type: 'pivot_set', data: setData });
+    setStatus('Pivot set. Right-click → ⊘ to reset.', 'ok');
+}
+
+function _pivotCancel() {
+    _pivotMode   = false;
+    _pivotTarget = null;
+    canvas.defaultCursor = 'default';
+    canvas.selection     = true;
+    _pivotRedraw();
+    setStatus('Pivot placement cancelled', 'ok');
+}
+
+// ── Partner message handler ───────────────────────────────────────────────
+function handlePivotMessage(type, data) {
+    if (!data) return;
+    if (type === 'rotation_viz') {
+        // Partner signals active rotation — we track which object, not coords.
+        // Coords come naturally via the existing lerp system (modified messages).
+        _partnerPivotId     = data.id || _partnerPivotId;
+        _partnerPivotActive = !!data.active;
+        _pivotInitOverlay();
+        _pivotRedraw();
+        // If partner stopped rotating, schedule cleanup
+        if (!data.active) {
+            setTimeout(() => {
+                if (!_partnerPivotActive) { _pivotRedraw(); }
+            }, 400);
+        }
+    } else if (type === 'pivot_set') {
+        const obj = findObjectById(data.id);
+        if (!obj) return;
+        obj._pivotLocal = { x: data.localX, y: data.localY };
+        _installPivotMtr(obj);
+        _partnerPivotId = data.id;
+        canvas.requestRenderAll();
+        _pivotRedraw();
+    } else if (type === 'pivot_clear') {
+        const obj = findObjectById(data.id);
+        if (obj) { _uninstallPivotMtr(obj); canvas.requestRenderAll(); }
+        if (_partnerPivotId === data.id) { _partnerPivotId = null; _partnerPivotActive = false; }
+        _pivotRedraw();
+    }
+}
 
 // ══════════════════════════════════════════════════════════════
 // UNIVERSAL TOOLTIP — zero delay, mouse + Apple Pencil (pen proximity)
