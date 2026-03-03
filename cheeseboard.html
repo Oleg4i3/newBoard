@@ -190,7 +190,7 @@
             flex-direction: column;
             gap: 6px;
             min-width: 0;
-            max-width: 280px;
+            max-width: 290px;
         }
         #ctx-menu.show { display: flex; }
 
@@ -471,7 +471,7 @@
 
         <div class="bar-section" style="position: relative;">
 		
-            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" data-tooltip="Select (V)">🠝</button>
+            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" data-tooltip="Select (V)">👆</button>
             
             <div style="position: relative;">
                 <button class="tool-btn" id="btn-pen" onclick="toggleSubmenu('pen-menu'); activateTool('pen', true)" data-tooltip="Pen (P)">✎</button>
@@ -2174,93 +2174,165 @@ const UNGROUP_EXTRA_PROPS = [
 ];
 
 // Snapshot absolute positions of items currently inside a group.
+//
+// FIX: Use obj.calcTransformMatrix() which returns the full canvas-space matrix
+// (group transform × object own matrix). qrDecompose gives correct translateX/Y,
+// scaleX/Y and angle even for rotated or non-uniformly scaled parent groups.
+// The old approach (transformPoint + grpDec.scaleX * obj.scaleX) was an
+// approximation that breaks whenever the group has combined rotation + scale.
 function snapshotGroupItems(group) {
-    const groupMtx = group.calcTransformMatrix();
-    const grpDec   = fabric.util.qrDecompose(groupMtx);
     return group.getObjects().map(obj => {
         if (!obj.id) obj.id = Math.random().toString(36).substr(2, 9);
         const data = obj.toObject(UNGROUP_EXTRA_PROPS);
-        const absOrigin = fabric.util.transformPoint({ x: obj.left, y: obj.top }, groupMtx);
-        data.left   = absOrigin.x;
-        data.top    = absOrigin.y;
-        data.scaleX = obj.scaleX * grpDec.scaleX;
-        data.scaleY = obj.scaleY * grpDec.scaleY;
-        data.angle  = obj.angle  + grpDec.angle;
+        // calcTransformMatrix() already multiplies group matrix × own matrix
+        const fullMtx = obj.calcTransformMatrix();
+        const dec = fabric.util.qrDecompose(fullMtx);
+        data.left    = dec.translateX;
+        data.top     = dec.translateY;
+        data.scaleX  = dec.scaleX;
+        data.scaleY  = dec.scaleY;
+        data.angle   = dec.angle;
+        // Positions are expressed as center-origin (qrDecompose returns the
+        // center point). Receivers must apply them with originX/Y = 'center'.
+        data.originX = 'center';
+        data.originY = 'center';
         return data;
     });
 }
 
 // Apply a 'group_objects' payload on the receiving side.
+//
+// IMPORTANT: fabric.Group.async = true, so enlivenObjects([groupData]) is ALWAYS
+// asynchronous — the callback fires on a future tick.  Meanwhile enlivenObjects
+// for plain objects (path/rect/…) is synchronous.  This created a race:
+//   1. group_objects  → async enlivenObjects starts
+//   2. ungroup_objects → findObjectById(groupId) returns null (not added yet!)
+//      → items added synchronously
+//   3. group callback fires → group added ON TOP of items
+// Fix: build the group SYNCHRONOUSLY from the live canvas objects.
 function applyGroupOp(payload) {
-    // Remove each old top-level object
+    const prevFB   = isSendingToFirebase;
+    const prevMqtt = isSendingToMqtt;
+    const prevWs   = isSendingToWs;
+    isSendingToFirebase = true;
+    isSendingToMqtt     = true;
+    isSendingToWs       = true;
+
+    // Collect live objects in the order given by oldIds, remove them from canvas.
+    const oldObjects = [];
     payload.oldIds.forEach(id => {
         const o = findObjectById(id);
-        if (o && !o.group) canvas.remove(o);
+        if (o) {
+            oldObjects.push(o);
+            canvas.remove(o);
+        }
     });
-    // Enliven and add the new group.
-    // enlivenObjects is async; wrap canvas.add in isSendingToFirebase/isSendingToMqtt
-    // guards so the add event doesn't echo back to the network.
-    fabric.util.enlivenObjects([payload.groupData], (objs) => {
-        const g = objs[0];
-        // Guarantee no solid fill on the group wrapper (it may have been serialized
-        // with the fabric.Object default fill:'rgb(0,0,0)').
-        g.set({ selectable: true, evented: true, __isLocal: true, fill: '', backgroundColor: '' });
-        // Also sanitize child path fills: pen/line paths should never have solid fill.
+
+    if (oldObjects.length > 0) {
+        // Build the group synchronously from live instances.
+        // new fabric.Group(objects) recalculates bounds from their current canvas
+        // positions, so the group appears in the right place without needing to
+        // deserialise the exact left/top from groupData.
+        const g = new fabric.Group(oldObjects, {
+            id:              payload.groupData.id,
+            selectable:      true,
+            evented:         true,
+            __isLocal:       true,
+            fill:            '',
+            backgroundColor: '',
+        });
+        // Sanitize child path fills.
         g.getObjects().forEach(child => {
             if (child.type === 'path') {
                 const f = child.fill;
-                // Keep intentional fills (shapes drawn with fill), clear accidental ones
                 if (!f || f === 'rgb(0,0,0)' || f === null) child.set('fill', '');
             }
         });
-        const prevFB   = isSendingToFirebase;
-        const prevMqtt = isSendingToMqtt;
-        const prevWs   = isSendingToWs;
-        isSendingToFirebase = true;
-        isSendingToMqtt     = true;
-        isSendingToWs       = true;
         canvas.add(g);
-        isSendingToFirebase = prevFB;
-        isSendingToMqtt     = prevMqtt;
-        isSendingToWs       = prevWs;
-        canvas.requestRenderAll();
-    });
+    }
+
+    isSendingToFirebase = prevFB;
+    isSendingToMqtt     = prevMqtt;
+    isSendingToWs       = prevWs;
+    canvas.requestRenderAll();
 }
 
 // Apply an 'ungroup_objects' payload on the receiving side.
+//
+// applyGroupOp is now synchronous, so by the time this function runs the group
+// is guaranteed to exist on canvas (no more race condition).
+// We also clear child.group = null explicitly: canvas.remove(grp) does NOT clear
+// the back-pointer, leaving it set breaks applyModifiedData (ignores position
+// updates) and applyGroupOp (skips removal on re-group → duplicates).
 function applyUngroupOp(payload) {
-    // Remove the group
+    const prevFB   = isSendingToFirebase;
+    const prevMqtt = isSendingToMqtt;
+    const prevWs   = isSendingToWs;
+    isSendingToFirebase = true;
+    isSendingToMqtt     = true;
+    isSendingToWs       = true;
+
     const grp = findObjectById(payload.groupId);
     if (grp) {
+        // Snapshot live child instances before removing the group.
+        const grpChildren = grp.getObjects().slice();
         grp.__isLocal = true;
-        const prevFB   = isSendingToFirebase;
-        const prevMqtt = isSendingToMqtt;
-        const prevWs   = isSendingToWs;
-        isSendingToFirebase = true;
-        isSendingToMqtt     = true;
-        isSendingToWs       = true;
         canvas.remove(grp);
-        isSendingToFirebase = prevFB;
-        isSendingToMqtt     = prevMqtt;
-        isSendingToWs       = prevWs;
-    }
-    // Enliven each item with absolute coords and add to canvas
-    fabric.util.enlivenObjects(payload.items, (objs) => {
-        const prevFB   = isSendingToFirebase;
-        const prevMqtt = isSendingToMqtt;
-        const prevWs   = isSendingToWs;
-        isSendingToFirebase = true;
-        isSendingToMqtt     = true;
-        isSendingToWs       = true;
-        objs.forEach(o => {
-            o.set({ selectable: true, evented: true, __isLocal: true });
-            canvas.add(o);
+
+        payload.items.forEach(itemData => {
+            const child = grpChildren.find(c => c.id === itemData.id);
+            if (!child) return;
+            // Clear the back-pointer Fabric leaves set after canvas.remove(grp).
+            child.group = null;
+            // itemData.left/top are CENTER coords (snapshotGroupItems uses
+            // qrDecompose which returns the translateX/Y = object center).
+            // Normalize to originX/Y = 'left'/'top' — matching what Fabric
+            // produces on the sender side after toActiveSelection().
+            // Without this, subsequent `modified` broadcasts (left-origin coords)
+            // get misinterpreted as center-origin → objects jump on every move.
+            child.set({
+                scaleX:     itemData.scaleX !== undefined ? itemData.scaleX : child.scaleX,
+                scaleY:     itemData.scaleY !== undefined ? itemData.scaleY : child.scaleY,
+                angle:      itemData.angle  !== undefined ? itemData.angle  : child.angle,
+                selectable: true,
+                evented:    true,
+                __isLocal:  true,
+            });
+            child.set({ originX: 'left', originY: 'top' });
+            child.setPositionByOrigin(
+                new fabric.Point(itemData.left, itemData.top),
+                'center', 'center'
+            );
+            child.setCoords();
+            canvas.add(child);
         });
+    } else {
+        // Fallback: group not on canvas (e.g. late-join replay).
+        // enlivenObjects is synchronous for non-image objects, so this is safe.
         isSendingToFirebase = prevFB;
         isSendingToMqtt     = prevMqtt;
         isSendingToWs       = prevWs;
-        canvas.requestRenderAll();
-    });
+        fabric.util.enlivenObjects(payload.items, objs => {
+            const p1 = isSendingToFirebase, p2 = isSendingToMqtt, p3 = isSendingToWs;
+            isSendingToFirebase = true; isSendingToMqtt = true; isSendingToWs = true;
+            objs.forEach(o => {
+                // payload coords are center-origin; normalize same as main path
+                const cx = o.left, cy = o.top;
+                o.set({ originX: 'left', originY: 'top', selectable: true, evented: true, __isLocal: true });
+                o.setPositionByOrigin(new fabric.Point(cx, cy), 'center', 'center');
+                o.setCoords();
+                if (!findObjectById(o.id)) canvas.add(o);
+            });
+            isSendingToFirebase = p1; isSendingToMqtt = p2; isSendingToWs = p3;
+            canvas.requestRenderAll();
+        });
+        return;
+    }
+
+    isSendingToFirebase = prevFB;
+    isSendingToMqtt     = prevMqtt;
+    isSendingToWs       = prevWs;
+    canvas.requestRenderAll();
 }
 
 function groupSelected() {
@@ -2301,22 +2373,59 @@ function ungroupSelected() {
     const groupId = active.id;
     const items   = snapshotGroupItems(active);  // absolute coords, current styles
 
+    // Block echo-back: toActiveSelection() fires object:removed (group) and
+    // directly manipulates canvas._objects for children. Any leaked event can
+    // broadcast stale group-local coords or — worse — leave isSendingToWs/Firebase
+    // = true so broadcastGroupOp below is silently dropped.
+    // Same pattern as _autoGroupIfMultiSelection / applyGroupOp.
+    const prevFB   = isSendingToFirebase;
+    const prevMqtt = isSendingToMqtt;
+    const prevWs   = isSendingToWs;
+    isSendingToFirebase = true;
+    isSendingToMqtt     = true;
+    isSendingToWs       = true;
+
     active.toActiveSelection();
+    // Discard the active selection immediately after ungroup.
+    // If we leave it as an activeSelection, the user's very next drag will
+    // trigger before:transform → _autoGroupIfMultiSelection() → re-group, which
+    // sends a group_objects message that cancels the ungroup on the partner's
+    // side.  Discarding makes each child object individually selectable and
+    // prevents the spurious re-group broadcast.
+    canvas.discardActiveObject();
+
+    isSendingToFirebase = prevFB;
+    isSendingToMqtt     = prevMqtt;
+    isSendingToWs       = prevWs;
+
     canvas.requestRenderAll();
-    items.forEach(d => addToHistory({ id: d.id }));
+    // Pass actual Fabric objects — snapshotGroupItems() returns plain JS objects,
+    // but addToHistory → _undoSnapshot() calls .toObject() which only exists on
+    // Fabric objects.  Children are standalone on canvas by this point.
+    items.forEach(d => {
+        const obj = findObjectById(d.id);
+        if (obj) addToHistory(obj);
+    });
 
     // Single atomic message: partner removes group and adds each item
     broadcastGroupOp('ungroup_objects', { groupId, items });
+    _suppressAutoGroup = true; // Belt-and-suspenders: block the very next before:transform auto-regroup
 }
 
 // Route group ops through the right transport
 function broadcastGroupOp(type, data) {
-    if (connectionMode === 'firebase' && firebaseRef && !isSendingToFirebase) {
+    // NOTE: this function is only ever called from local operations
+    // (ungroupSelected / groupSelected / _autoGroupIfMultiSelection).
+    // The receiving paths (applyGroupOp / applyUngroupOp) never call it,
+    // so there is no echo-back risk — no isSendingToFirebase guard needed here.
+    if (connectionMode === 'firebase' && firebaseRef) {
         sendToFirebase(type, data);
         return;
     }
     if (connectionMode === 'ws') {
-        if (!isSendingToWs) sendToWs(type, data);
+        // Always send — group ops must never be silently dropped.
+        // isSendingToWs is guarded above, so it is false here during local ops.
+        sendToWs(type, data);
         return;
     }
     if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
@@ -5772,11 +5881,18 @@ function _showAutoGroupToast() {
  * it to a permanent group and broadcast the operation atomically.
  * Returns the new group, or the existing active object if no grouping was done.
  */
+let _suppressAutoGroup = false;
+
 function _autoGroupIfMultiSelection() {
     const active = canvas.getActiveObject();
     if (!active || active.type !== 'activeSelection') return active;
     if (active.getObjects().length < 2)               return active;
     if (connectionMode === 'mqtt')                     return active;
+    // Belt-and-suspenders: if ungroupSelected() just ran (and somehow didn't
+    // discard the selection), suppress auto-regroup for this one event so the
+    // ungroup_objects message has a chance to reach the partner before any
+    // group_objects message is sent.  The flag is cleared on next selection change.
+    if (_suppressAutoGroup) { _suppressAutoGroup = false; return active; }
 
     const oldIds = active.getObjects().map(o => o.id);
 
@@ -7823,6 +7939,7 @@ function handlePivotMessage(type, data) {
 (function initTooltips() {
     // pointerenter fires immediately — no setTimeout needed
     document.addEventListener('pointerenter', function(e) {
+        if (!e.target || e.target.nodeType !== 1) return;
         const el = e.target.closest('[data-tooltip]');
         if (!el) return;
         // 'touch' = finger; 'mouse' or 'pen' (Apple Pencil) = show tip
@@ -7831,11 +7948,13 @@ function handlePivotMessage(type, data) {
     }, true);
 
     document.addEventListener('pointerleave', function(e) {
+        if (!e.target || e.target.nodeType !== 1) return;
         const el = e.target.closest('[data-tooltip]');
         if (el) el.classList.remove('tt-show');
     }, true);
 
     document.addEventListener('pointerdown', function(e) {
+        if (!e.target || e.target.nodeType !== 1) return;
         const el = e.target.closest('[data-tooltip]');
         if (el) el.classList.remove('tt-show');
     }, true);
