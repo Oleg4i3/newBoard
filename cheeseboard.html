@@ -221,20 +221,26 @@
         }
         .ctx-ic:hover { background: rgba(255,255,255,0.18); }
         .ctx-ic.danger:hover { background: rgba(220,38,38,0.5); }
-        .ctx-ic[title]:hover::after {
-            content: attr(title);
+        /* ── Universal tooltip (no browser-title delay, works mouse + Apple Pencil) ── */
+        [data-tooltip] { position: relative; }
+        [data-tooltip]::after {
+            content: attr(data-tooltip);
             position: absolute;
-            top: 36px; left: 50%;
+            top: calc(100% + 4px); left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
+            background: rgba(20,20,20,0.88);
             color: #fff;
             font-size: 10px;
-            padding: 2px 6px;
+            padding: 2px 7px;
             border-radius: 4px;
             white-space: nowrap;
             pointer-events: none;
             z-index: 10000;
+            opacity: 0;
+            /* NO transition-delay — opacity animates instantly */
+            transition: opacity 0.05s ease;
         }
+        [data-tooltip].tt-show::after { opacity: 1; }
 
         /* Color swatches row */
         .ctx-swatches-row {
@@ -325,10 +331,10 @@
                 <div style="position: relative; display: flex; align-items: center;">
                     <input type="text" id="share-link-display" class="id-box" readonly 
                            style="width: 60px; min-width: 30px;" 
-                           title="Share this link with your partner"
+                           data-tooltip="Share this link with your partner"
                            onclick="copyShareLink()">
                     <button class="btn btn-copy" onclick="copyShareLink()">Copy Link</button>
-                    <button class="btn btn-qr" onclick="showQR('share-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+                    <button class="btn btn-qr" onclick="showQR('share-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     <button class="spoiler-toggle" onclick="toggleManualConnect()">Manual</button>
                 </div>
             </div>
@@ -337,7 +343,7 @@
             <div id="manual-connect-spoiler" class="spoiler" style="position: absolute; top: 40px; left: 10px; z-index: 102;">
                 <div style="font-size: 12px; margin-bottom: 8px; color: #666; font-weight: bold; display:flex; justify-content:space-between; align-items:center;">
                     <span>Connection Settings</span>
-                    <button onclick="toggleManualConnect()" title="Close" style="background:none;border:none;cursor:pointer;font-size:14px;color:#999;padding:0 2px;line-height:1;" onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">✕</button>
+                    <button onclick="toggleManualConnect()" data-tooltip="Close" style="background:none;border:none;cursor:pointer;font-size:14px;color:#999;padding:0 2px;line-height:1;" onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">✕</button>
                 </div>
                 
                 <div class="mode-switcher">
@@ -356,7 +362,7 @@
 					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
 					Firebase (iOS compatible)
-					<a href="FIREBASE_CLEANER.html" target="_blank" title="Open Firebase Cleaner — clears stale room data" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#fff3e0;border:1px solid #ffb74d;color:#e65100;font-size:11px;text-decoration:none;flex-shrink:0;margin-left:2px;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">🧹</a>
+					<a href="FIREBASE_CLEANER.html" target="_blank" data-tooltip="Open Firebase Cleaner — clears stale room data" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#fff3e0;border:1px solid #ffb74d;color:#e65100;font-size:11px;text-decoration:none;flex-shrink:0;margin-left:2px;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">🧹</a>
 					</label>
                 </div>
                 
@@ -394,7 +400,7 @@
                     <div style="display:flex;gap:5px;align-items:center;">
                         <input type="text" id="ws-link-display" class="id-box" readonly style="width:180px;" onclick="copyWsLink()">
                         <button class="btn btn-copy" onclick="copyWsLink()">Copy</button>
-                        <button class="btn btn-qr" onclick="showQR('ws-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('ws-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                 </div>
 
@@ -407,7 +413,7 @@
                     <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
                         <input type="text" id="p2p-link-display" class="id-box" readonly style="width: 180px;" onclick="this.select();navigator.clipboard.writeText(this.value)">
                         <button class="btn btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('p2p-link-display').value)">Copy</button>
-                        <button class="btn btn-qr" onclick="showQR('p2p-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('p2p-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                     <div style="font-size: 10px; color: #888; margin-top: 5px;">Or connect manually:</div>
                     <div style="display: flex; gap: 5px; align-items: center; margin-top: 3px;">
@@ -427,7 +433,7 @@
     <div style="display: flex; gap: 5px; align-items: center;">
         <input type="text" id="firebase-link-display" class="id-box" readonly style="width: 180px;" onclick="copyFirebaseLink()">
         <button class="btn btn-copy" onclick="copyFirebaseLink()">Copy</button>
-        <button class="btn btn-qr" onclick="showQR('firebase-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+        <button class="btn btn-qr" onclick="showQR('firebase-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
     </div>
 </div>
                 <!-- MQTT секция -->
@@ -441,7 +447,7 @@
                     <div style="display: flex; gap: 5px; align-items: center;">
                         <input type="text" id="mqtt-link-display" class="id-box" readonly style="width: 180px;" onclick="copyMqttLink()">
                         <button class="btn btn-copy" onclick="copyMqttLink()">Copy</button>
-                        <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" title="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+                        <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                 </div>
             </div>
@@ -450,25 +456,25 @@
 		 <div class="divider"></div>
 
         <div class="bar-section">
-          <button class="tool-btn" id="btn-undo" onclick="undo()" title="Undo (Ctrl+Z)">↶</button>
-			<button class="tool-btn" id="btn-duplicate" onclick="duplicateSelected()" title="Duplicate selected">❐</button>
-			<button class="tool-btn" id="btn-pin" onclick="togglePin()" title="Pin/UnPin">📌</button>
-            <button class="tool-btn" id="btn-group" onclick="groupSelected()" title="Group selected (Ctrl+G)">🪢</button>
-            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" title="Ungroup (Ctrl+Shift+G)">⛓️</button>
-            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" title="Crop image">✂️</button>
-		<button class="tool-btn" id="btn-delete" onclick="deleteSelected()" title="Delete Selected (Del)">❌</button>
+          <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↶</button>
+			<button class="tool-btn" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
+			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
+            <button class="tool-btn" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
+            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
+            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
+		<button class="tool-btn" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
             
-            <button class="tool-btn" onclick="document.getElementById('img-input').click()" title="Import Image/PDF">🖼</button>
+            <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
         </div>
 		     <div class="divider"></div>
 
         <div class="bar-section" style="position: relative;">
 		
-            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" title="Select (V)">🠝</button>
+            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" data-tooltip="Select (V)">🠝</button>
             
             <div style="position: relative;">
-                <button class="tool-btn" id="btn-pen" onclick="toggleSubmenu('pen-menu'); activateTool('pen', true)" title="Pen (P)">✎</button>
+                <button class="tool-btn" id="btn-pen" onclick="toggleSubmenu('pen-menu'); activateTool('pen', true)" data-tooltip="Pen (P)">✎</button>
               
                 <div class="submenu" id="pen-menu">
                     <h4>Pen Color</h4>
@@ -487,7 +493,7 @@
             </div>
 
             <div style="position: relative;">
-                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" title="Highlighter (H)">🖍️</button>
+                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" data-tooltip="Highlighter (H)">🖍️</button>
                 <div class="submenu" id="highlighter-menu">
                     <h4>Highlight Color</h4>
                     <div class="color-row" id="highlighter-colors"></div>
@@ -496,28 +502,28 @@
                 </div>
             </div>
             
-            <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" title="Eraser (E)">🧼</button>
-            <button class="tool-btn" id="btn-text" onclick="activateTool('text')" title="Text (T)">T</button>
+            <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" data-tooltip="Eraser (E)">🧼</button>
+            <button class="tool-btn" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
           
             <div style="position: relative;">
-                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" title="Shapes & Lines">📐</button>
+                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
                     <h4>Shape Type</h4>
                     <div class="shape-grid">
-                        <div class="shape-item active" onclick="setShapeType('rect')" title="Rectangle (R)"><span class="shape-icon">▭</span>Rect</div>
-                        <div class="shape-item" onclick="setShapeType('circle')" title="Circle (C)"><span class="shape-icon">○</span>Elips</div>
-                        <div class="shape-item" onclick="setShapeType('triangle')" title="Isosceles Triangle"><span class="shape-icon">△</span>Isos</div>
-                        <div class="shape-item" onclick="setShapeType('rightTriangle')" title="Right Triangle"><span class="shape-icon">⊿</span>Right</div>
-                        <div class="shape-item" onclick="setShapeType('scalene')" title="Scalene Triangle"><span class="shape-icon">▻</span>Scalene</div>
-                        <div class="shape-item" onclick="setShapeType('trapezoid')" title="Trapezoid"><span class="shape-icon">⏢</span>Trap</div>
-                        <div class="shape-item" onclick="setShapeType('rhombus')" title="Rhombus"><span class="shape-icon">◇</span>Rhom</div>
-                        <div class="shape-item" onclick="setShapeType('parallelogram')" title="Parallelogram"><span class="shape-icon">▱</span>Para</div>
-                        <div class="shape-item" onclick="setShapeType('pentagon')" title="Pentagon"><span class="shape-icon">⬠</span>Pent</div>
-                        <div class="shape-item" onclick="setShapeType('hexagon')" title="Hexagon"><span class="shape-icon">⬡</span>Hex</div>
-                        <div class="shape-item" onclick="setShapeType('outlineArrow')" title="Outline Arrow"><span class="shape-icon">⇨</span>O-Arr</div>
-                        <div class="shape-item" onclick="setShapeType('line')" title="Line (L)"><span class="shape-icon">╱</span>Line</div>
-                        <div class="shape-item" onclick="setShapeType('arrow')" title="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
-                        <div class="shape-item" onclick="setShapeType('dashed')" title="Dashed"><span class="shape-icon">---</span>Dash</div>
+                        <div class="shape-item active" onclick="setShapeType('rect')" data-tooltip="Rectangle (R)"><span class="shape-icon">▭</span>Rect</div>
+                        <div class="shape-item" onclick="setShapeType('circle')" data-tooltip="Circle (C)"><span class="shape-icon">○</span>Elips</div>
+                        <div class="shape-item" onclick="setShapeType('triangle')" data-tooltip="Isosceles Triangle"><span class="shape-icon">△</span>Isos</div>
+                        <div class="shape-item" onclick="setShapeType('rightTriangle')" data-tooltip="Right Triangle"><span class="shape-icon">⊿</span>Right</div>
+                        <div class="shape-item" onclick="setShapeType('scalene')" data-tooltip="Scalene Triangle"><span class="shape-icon">▻</span>Scalene</div>
+                        <div class="shape-item" onclick="setShapeType('trapezoid')" data-tooltip="Trapezoid"><span class="shape-icon">⏢</span>Trap</div>
+                        <div class="shape-item" onclick="setShapeType('rhombus')" data-tooltip="Rhombus"><span class="shape-icon">◇</span>Rhom</div>
+                        <div class="shape-item" onclick="setShapeType('parallelogram')" data-tooltip="Parallelogram"><span class="shape-icon">▱</span>Para</div>
+                        <div class="shape-item" onclick="setShapeType('pentagon')" data-tooltip="Pentagon"><span class="shape-icon">⬠</span>Pent</div>
+                        <div class="shape-item" onclick="setShapeType('hexagon')" data-tooltip="Hexagon"><span class="shape-icon">⬡</span>Hex</div>
+                        <div class="shape-item" onclick="setShapeType('outlineArrow')" data-tooltip="Outline Arrow"><span class="shape-icon">⇨</span>O-Arr</div>
+                        <div class="shape-item" onclick="setShapeType('line')" data-tooltip="Line (L)"><span class="shape-icon">╱</span>Line</div>
+                        <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
+                        <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
                     </div>
                     <br>
                     <h4>Color & Border</h4>
@@ -527,12 +533,12 @@
             </div>
         </div>
         <div class="bar-section">
-            <button class="tool-btn" onclick="saveBoard()" title="Save Board">💾</button>
-            <button class="tool-btn" onclick="document.getElementById('file-input').click()" title="Open Board">📁</button>
+            <button class="tool-btn" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
+            <button class="tool-btn" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
-			<input type="checkbox" id="show-partner-frame" title="Show partner viewport frame" checked>
-            <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" title="Fit with partner's view screen">🎯</button>
+			<input type="checkbox" id="show-partner-frame" data-tooltip="Show partner viewport frame" checked>
+            <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
    
 
@@ -550,17 +556,17 @@
 <div id="ctx-menu">
     <!-- Row 1: action icons -->
     <div class="ctx-icon-row">
-        <button class="ctx-ic" title="Bring to Front" onclick="ctxBringToFront()">⬆</button>
-        <button class="ctx-ic" title="Send to Back"   onclick="ctxSendToBack()">⬇</button>
+        <button class="ctx-ic" data-tooltip="Bring to Front" onclick="ctxBringToFront()">⬆</button>
+        <button class="ctx-ic" data-tooltip="Send to Back"   onclick="ctxSendToBack()">⬇</button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic" title="Group"     onclick="ctxGroupSelected()">⊞</button>
-        <button class="ctx-ic" title="Ungroup"   onclick="ctxUngroupSelected()">⊟</button>
+        <button class="ctx-ic" data-tooltip="Group"     onclick="ctxGroupSelected()">⊞</button>
+        <button class="ctx-ic" data-tooltip="Ungroup"   onclick="ctxUngroupSelected()">⊟</button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic" id="ctx-pin-btn"  title="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
-        <button class="ctx-ic" title="Clone"     onclick="ctxClone()">❐</button>
-        <button class="ctx-ic" id="ctx-crop-btn" title="Crop image" onclick="ctxCrop()">✂</button>
+        <button class="ctx-ic" id="ctx-pin-btn"  data-tooltip="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
+        <button class="ctx-ic" data-tooltip="Clone"     onclick="ctxClone()">❐</button>
+        <button class="ctx-ic" id="ctx-crop-btn" data-tooltip="Crop image" onclick="ctxCrop()">✂</button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic danger" title="Delete" onclick="ctxDelete()">✕</button>
+        <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()">✕</button>
     </div>
 
     <!-- Row 2: stroke colors (hidden for images) -->
@@ -594,17 +600,17 @@
                 <option value="Impact">Impact</option>
                 <option value="Comic Sans MS">Comic Sans MS</option>
             </select>
-            <input type="number" id="ctx-font-size" value="20" min="6" max="200" oninput="ctxSetFontSize(this.value)" title="Font size">
+            <input type="number" id="ctx-font-size" value="20" min="6" max="200" oninput="ctxSetFontSize(this.value)" data-tooltip="Font size">
         </div>
         <!-- Bold / Italic / Underline + alignment -->
         <div class="ctx-font-row">
-            <button class="ctx-fmt-btn" id="ctx-bold-btn"      onclick="ctxToggleBold()"      title="Bold"><b>B</b></button>
-            <button class="ctx-fmt-btn" id="ctx-italic-btn"    onclick="ctxToggleItalic()"    title="Italic"><i>I</i></button>
-            <button class="ctx-fmt-btn" id="ctx-underline-btn" onclick="ctxToggleUnderline()" title="Underline"><u>U</u></button>
+            <button class="ctx-fmt-btn" id="ctx-bold-btn"      onclick="ctxToggleBold()"      data-tooltip="Bold"><b>B</b></button>
+            <button class="ctx-fmt-btn" id="ctx-italic-btn"    onclick="ctxToggleItalic()"    data-tooltip="Italic"><i>I</i></button>
+            <button class="ctx-fmt-btn" id="ctx-underline-btn" onclick="ctxToggleUnderline()" data-tooltip="Underline"><u>U</u></button>
             <div style="width:1px;height:18px;background:rgba(255,255,255,0.2);margin:0 3px;flex-shrink:0;"></div>
-            <button class="ctx-align-btn" id="ctx-align-left"   onclick="ctxSetAlign('left')"   title="Align Left">≡</button>
-            <button class="ctx-align-btn" id="ctx-align-center" onclick="ctxSetAlign('center')" title="Center">☰</button>
-            <button class="ctx-align-btn" id="ctx-align-right"  onclick="ctxSetAlign('right')"  title="Align Right">≣</button>
+            <button class="ctx-align-btn" id="ctx-align-left"   onclick="ctxSetAlign('left')"   data-tooltip="Align Left">≡</button>
+            <button class="ctx-align-btn" id="ctx-align-center" onclick="ctxSetAlign('center')" data-tooltip="Center">☰</button>
+            <button class="ctx-align-btn" id="ctx-align-right"  onclick="ctxSetAlign('right')"  data-tooltip="Align Right">≣</button>
         </div>
         <!-- Line height slider -->
         <div class="ctx-slider-wrap">
@@ -2789,7 +2795,7 @@ canvas.on('mouse:down', (o) => {
             fontSize:     20,
             fontFamily:   'Arial',
             fill:         '#000000',
-            textAlign:    'justify',   // auto-justify width by default
+            textAlign:    'justify-left',   // auto-justify width by default
             lineHeight:   1.16,
             editable:     true,
             lockUniScaling: false,
@@ -6038,7 +6044,7 @@ window.addEventListener('paste', async (e) => {
                     fontSize:   20,
                     fontFamily: 'Arial',
                     fill:       '#000000',
-                    textAlign:  'justify',
+                    textAlign:  'justify-left',
                     lineHeight: 1.16,
                     editable:   true,
                     lockUniScaling: false,
@@ -7172,6 +7178,29 @@ window.addEventListener('beforeunload', () => {
     }
 })();
 
+// ══════════════════════════════════════════════════════════════
+// UNIVERSAL TOOLTIP — zero delay, mouse + Apple Pencil (pen proximity)
+// ══════════════════════════════════════════════════════════════
+(function initTooltips() {
+    // pointerenter fires immediately — no setTimeout needed
+    document.addEventListener('pointerenter', function(e) {
+        const el = e.target.closest('[data-tooltip]');
+        if (!el) return;
+        // 'touch' = finger; 'mouse' or 'pen' (Apple Pencil) = show tip
+        if (e.pointerType === 'touch') return;
+        el.classList.add('tt-show');
+    }, true);
+
+    document.addEventListener('pointerleave', function(e) {
+        const el = e.target.closest('[data-tooltip]');
+        if (el) el.classList.remove('tt-show');
+    }, true);
+
+    document.addEventListener('pointerdown', function(e) {
+        const el = e.target.closest('[data-tooltip]');
+        if (el) el.classList.remove('tt-show');
+    }, true);
+})();
 </script>
 </body>
 </html>
