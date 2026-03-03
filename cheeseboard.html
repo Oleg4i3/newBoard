@@ -462,7 +462,7 @@
             <button class="tool-btn" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
             <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
             <button class="tool-btn" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
-		<button class="tool-btn" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
+		    <button class="tool-btn" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
@@ -505,6 +505,7 @@
             <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" data-tooltip="Eraser (E)">🧼</button>
             <button class="tool-btn" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
           
+
             <div style="position: relative;">
                 <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
@@ -524,6 +525,8 @@
                         <div class="shape-item" onclick="setShapeType('line')" data-tooltip="Line (L)"><span class="shape-icon">╱</span>Line</div>
                         <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
+						  <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
+
                     </div>
                     <br>
                     <h4>Color & Border</h4>
@@ -7770,11 +7773,12 @@ function _pivotRotateHandler(eventData, transform, x, y) {
     const curAngle = Math.atan2(y - pivot.y, x - pivot.x);
     let deltaRad   = curAngle - transform._pvLastAngle;
 
-    if (eventData.shiftKey) {
-        const totalDeg = obj.angle + fabric.util.radiansToDegrees(deltaRad);
-        const snapped  = Math.round(totalDeg / 15) * 15;
-        deltaRad = fabric.util.degreesToRadians(snapped - obj.angle);
-    }
+   if (eventData.shiftKey || snapEnabled) {
+      const totalDeg = obj.angle + fabric.util.radiansToDegrees(deltaRad);
+      const snapped  = Math.round(totalDeg / 15) * 15;
+      deltaRad = fabric.util.degreesToRadians(snapped - obj.angle);
+  }
+
 
     const deltaDeg = fabric.util.radiansToDegrees(deltaRad);
     const c        = obj.getCenterPoint();
@@ -7959,6 +7963,110 @@ function handlePivotMessage(type, data) {
         if (el) el.classList.remove('tt-show');
     }, true);
 })();
+
+
+// ==========================================
+// SNAP TO GRID  🧲
+// ==========================================
+let snapEnabled = false;
+
+function toggleSnap() {
+    snapEnabled = !snapEnabled;
+    const btn = document.getElementById('btn-magnet');
+    if (btn) btn.classList.toggle('active', snapEnabled);
+    setStatus(snapEnabled ? '🧲 Snap to grid ON' : 'Snap to grid OFF', 'ok');
+}
+
+/** Round v to the nearest grid line. */
+function _snapV(v) { return Math.round(v / gridSize) * gridSize; }
+
+// ── Moving: snap top-left corner to grid ─────────────────────
+canvas.on('object:moving', function (e) {
+    if (!snapEnabled) return;
+    const o = e.target; if (!o) return;
+    o.left = _snapV(o.left);
+    o.top  = _snapV(o.top);
+    o.setCoords();
+});
+
+// ── Scaling: snap scaled width/height to grid ─────────────────
+canvas.on('object:scaling', function (e) {
+    if (!snapEnabled) return;
+    const o = e.target; if (!o || !o.width || !o.height) return;
+    const sw = Math.max(gridSize, _snapV(o.getScaledWidth()));
+    const sh = Math.max(gridSize, _snapV(o.getScaledHeight()));
+    o.scaleX = sw / o.width;
+    o.scaleY = sh / o.height;
+    o.setCoords();
+});
+
+// ── Rotating: 15° steps (standard mtr only; pivot handled in _pivotRotateHandler) ─
+canvas.on('object:rotating', function (e) {
+    if (!snapEnabled) return;
+    const o = e.target; if (!o) return;
+    if (o._pivotLocal) return;          // pivot path already snaps via CHANGE 2
+    o.angle = Math.round(o.angle / 15) * 15;
+    o.setCoords();
+});
+
+// ── Shape drawing: Shift = snap to grid for non-line shapes ───
+// Lines/arrows already use Shift for H/V snap (kept intact).
+// Freehand paths use Shift as straightener (kept intact).
+// This handler fires AFTER the main mouse:move handler and
+// overrides the shape's position/size with snapped values.
+canvas.on('mouse:move', function (o) {
+    if (!isDrawingShape || !activeShape) return;
+    const type = settings.shape.type;
+    // Lines use their own Shift logic — skip
+    if (['line', 'dashed', 'arrow'].includes(type)) return;
+
+    const useSnap = snapEnabled || o.e.shiftKey;
+    if (!useSnap) return;
+
+    const ptr = canvas.getPointer(o.e);
+    const ox  = _snapV(shapeOrigX);
+    const oy  = _snapV(shapeOrigY);
+    const px  = _snapV(ptr.x);
+    const py  = _snapV(ptr.y);
+
+    if (['rightTriangle','scalene','trapezoid','rhombus',
+         'parallelogram','pentagon','hexagon','outlineArrow'].includes(type)) {
+        // Complex path shapes: rebuild with snapped corner coords
+        canvas.remove(activeShape);
+        activeShape = createComplexShapePath(type, ox, oy, px, py);
+        activeShape.set({ selectable: false, evented: false, objectCaching: false });
+        canvas.add(activeShape);
+
+    } else if (['rect', 'triangle'].includes(type)) {
+        let w = px - ox, h = py - oy;
+        let l = ox, t = oy;
+        if (w < 0) { l = ox + w; w = Math.abs(w); }
+        if (h < 0) { t = oy + h; h = Math.abs(h); }
+        activeShape.set({ left: l, top: t, width: Math.max(w, 0), height: Math.max(h, 0) });
+
+    } else if (type === 'circle') {
+        const w = px - ox, h = py - oy;
+        const rx = w / 2, ry = h / 2;
+        activeShape.set({
+            left: ox + (rx < 0 ? rx * 2 : 0),
+            top:  oy + (ry < 0 ? ry * 2 : 0),
+            rx:   Math.abs(rx),
+            ry:   Math.abs(ry)
+        });
+    }
+    canvas.requestRenderAll();
+});
+
+// ── Keyboard shortcut: M = toggle magnet ─────────────────────
+window.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.code === 'KeyM' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Don't intercept M while a textbox is being edited
+        const active = canvas.getActiveObject();
+        if (canvas.isEditing || (active && active.isEditing)) return;
+        toggleSnap();
+    }
+});
 </script>
 </body>
 </html>
