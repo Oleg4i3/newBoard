@@ -453,10 +453,10 @@
           <button class="tool-btn" id="btn-undo" onclick="undo()" title="Undo (Ctrl+Z)">↶</button>
 			<button class="tool-btn" id="btn-duplicate" onclick="duplicateSelected()" title="Duplicate selected">❐</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" title="Pin/UnPin">📌</button>
-            <button class="tool-btn" id="btn-group" onclick="groupSelected()" title="Group selected (Ctrl+G)">⊞</button>
-            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" title="Ungroup (Ctrl+Shift+G)">⊟</button>
-            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" title="Crop image">✂</button>
-		<button class="tool-btn" id="btn-delete" onclick="deleteSelected()" title="Delete Selected (Del)">✕</button>
+            <button class="tool-btn" id="btn-group" onclick="groupSelected()" title="Group selected (Ctrl+G)">🪢</button>
+            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" title="Ungroup (Ctrl+Shift+G)">⛓️</button>
+            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" title="Crop image">✂️</button>
+		<button class="tool-btn" id="btn-delete" onclick="deleteSelected()" title="Delete Selected (Del)">❌</button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" title="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
@@ -465,7 +465,7 @@
 
         <div class="bar-section" style="position: relative;">
 		
-            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" title="Select (V)">⇖</button>
+            <button class="tool-btn active" id="btn-select" onclick="activateTool('select')" title="Select (V)">🠝</button>
             
             <div style="position: relative;">
                 <button class="tool-btn" id="btn-pen" onclick="toggleSubmenu('pen-menu'); activateTool('pen', true)" title="Pen (P)">✎</button>
@@ -487,7 +487,7 @@
             </div>
 
             <div style="position: relative;">
-                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" title="Highlighter (H)">✒</button>
+                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" title="Highlighter (H)">🖍️</button>
                 <div class="submenu" id="highlighter-menu">
                     <h4>Highlight Color</h4>
                     <div class="color-row" id="highlighter-colors"></div>
@@ -496,18 +496,18 @@
                 </div>
             </div>
             
-            <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" title="Eraser (E)">▧</button>
+            <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" title="Eraser (E)">🧼</button>
             <button class="tool-btn" id="btn-text" onclick="activateTool('text')" title="Text (T)">T</button>
           
             <div style="position: relative;">
-                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" title="Shapes & Lines">⦳</button>
+                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" title="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
                     <h4>Shape Type</h4>
                     <div class="shape-grid">
-                        <div class="shape-item active" onclick="setShapeType('rect')" title="Rectangle (R)"><span class="shape-icon">⌷</span>Rect</div>
+                        <div class="shape-item active" onclick="setShapeType('rect')" title="Rectangle (R)"><span class="shape-icon">▭</span>Rect</div>
                         <div class="shape-item" onclick="setShapeType('circle')" title="Circle (C)"><span class="shape-icon">○</span>Elips</div>
                         <div class="shape-item" onclick="setShapeType('triangle')" title="Isosceles Triangle"><span class="shape-icon">△</span>Isos</div>
-                        <div class="shape-item" onclick="setShapeType('rightTriangle')" title="Right Triangle"><span class="shape-icon">◢</span>Right</div>
+                        <div class="shape-item" onclick="setShapeType('rightTriangle')" title="Right Triangle"><span class="shape-icon">⊿</span>Right</div>
                         <div class="shape-item" onclick="setShapeType('scalene')" title="Scalene Triangle"><span class="shape-icon">▻</span>Scalene</div>
                         <div class="shape-item" onclick="setShapeType('trapezoid')" title="Trapezoid"><span class="shape-icon">⏢</span>Trap</div>
                         <div class="shape-item" onclick="setShapeType('rhombus')" title="Rhombus"><span class="shape-icon">◇</span>Rhom</div>
