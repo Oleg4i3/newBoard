@@ -48,7 +48,7 @@
         .submenu {
             position: absolute; top: 55px; left: 50%; transform: translateX(-50%);
             background: white; border: 1px solid #ddd; padding: 10px; border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15); width: 280px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); width: 320px;
             display: none; flex-direction: column; gap: 8px; z-index: 101;
         }
         .submenu.show { display: flex; }
@@ -515,7 +515,6 @@
                         <div class="shape-item" onclick="setShapeType('circle')" data-tooltip="Circle (C)"><span class="shape-icon">○</span>Elips</div>
                         <div class="shape-item" onclick="setShapeType('triangle')" data-tooltip="Isosceles Triangle"><span class="shape-icon">△</span>Isos</div>
                         <div class="shape-item" onclick="setShapeType('rightTriangle')" data-tooltip="Right Triangle"><span class="shape-icon">⊿</span>Right</div>
-                        <div class="shape-item" onclick="setShapeType('scalene')" data-tooltip="Scalene Triangle"><span class="shape-icon">▻</span>Scalene</div>
                         <div class="shape-item" onclick="setShapeType('trapezoid')" data-tooltip="Trapezoid"><span class="shape-icon">⏢</span>Trap</div>
                         <div class="shape-item" onclick="setShapeType('rhombus')" data-tooltip="Rhombus"><span class="shape-icon">◇</span>Rhom</div>
                         <div class="shape-item" onclick="setShapeType('parallelogram')" data-tooltip="Parallelogram"><span class="shape-icon">▱</span>Para</div>
@@ -525,8 +524,27 @@
                         <div class="shape-item" onclick="setShapeType('line')" data-tooltip="Line (L)"><span class="shape-icon">╱</span>Line</div>
                         <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
-						  <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
-
+					  <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
+                    </div>
+                    <br>
+                    <h4>3D Shapes</h4>
+                    <div class="shape-grid">
+                        <div class="shape-item" onclick="insert3DShape('cube')" data-tooltip="Cube">
+                            <span class="shape-icon"><svg width="20" height="17" viewBox="0 0 180 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><rect x="2" y="30" width="110" height="110"/><rect x="68" y="2" width="110" height="110"/><line x1="2" y1="30" x2="68" y2="2"/><line x1="112" y1="30" x2="178" y2="2"/><line x1="2" y1="140" x2="68" y2="112"/><line x1="112" y1="140" x2="178" y2="112"/></svg></span>Cube</div>
+                        <div class="shape-item" onclick="insert3DShape('cylinder')" data-tooltip="Cylinder">
+                            <span class="shape-icon"><svg width="16" height="20" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
+                        <div class="shape-item" onclick="insert3DShape('cone')" data-tooltip="Cone">
+                            <span class="shape-icon"><svg width="16" height="20" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
+                        <div class="shape-item" onclick="insert3DShape('pyramid')" data-tooltip="Pyramid (isometric)">
+                            <span class="shape-icon"><svg width="20" height="20" viewBox="0 0 170 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="85" y1="12" x2="20" y2="110"/><line x1="85" y1="12" x2="150" y2="110"/><line x1="85" y1="12" x2="85" y2="155"/><line x1="20" y1="110" x2="85" y2="155"/><line x1="150" y1="110" x2="85" y2="155"/><line x1="85" y1="12" x2="85" y2="65" stroke-dasharray="8,5"/><line x1="20" y1="110" x2="85" y2="65" stroke-dasharray="8,5"/><line x1="150" y1="110" x2="85" y2="65" stroke-dasharray="8,5"/></svg></span>Pyr</div>
+                    </div>
+                    <br>
+                    <h4>Objects (PNG)</h4>
+                    <div class="shape-grid">
+                        <div class="shape-item" onclick="insertPngShape('sphere.png')" data-tooltip="Sphere"><span class="shape-icon">🔵</span>Sphere</div>
+                        <div class="shape-item" onclick="insertPngShape('ball.png')" data-tooltip="Ball"><span class="shape-icon">⚽</span>Ball</div>
+                        <div class="shape-item" onclick="insertPngShape('ruler.png')" data-tooltip="Ruler"><span class="shape-icon">📏</span>Ruler</div>
+                        <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">📐</span>Prot</div>
                     </div>
                     <br>
                     <h4>Color & Border</h4>
@@ -1206,7 +1224,10 @@ function handleMqttMessage(type, data) {
                 
                 if (existing) {
                     console.log('⚠️ Object already exists, updating:', data.id);
-                    existing.set(obj);
+                    // FIX: используем plain data, а не Fabric-объект obj
+                    existing.set(data);
+                    existing.set({ selectable: true, evented: true, __isLocal: true });
+                    if (existing.type === 'textbox') existing.initDimensions();
                     existing.setCoords();
                 } else {
                     obj.set({
@@ -1997,12 +2018,50 @@ function applyModifiedData(data) {
         return true;
     }
 
-    // Textbox: apply all text props immediately, no lerp (text content can't lerp)
+    // Textbox: split position-only live-drag packets from full content updates.
     if (obj.type === 'textbox') {
-        obj.set(data);
-        obj.initDimensions();  // recompute auto-height after text/font change
+        // GUARD 1: never touch a textbox being edited locally —
+        // any obj.set() call during editing resets cursor/selection.
+        if (obj.isEditing) return true;
+
+        // GUARD 2: pinned textboxes must not be repositioned remotely.
+        const isPosOnly = (data.text === undefined);   // position-only = live drag
+
+        if (isPosOnly) {
+            // Live-drag: only update geometry, skip initDimensions entirely.
+            // initDimensions() on every 100ms tick = text-layout chaos & "jumping".
+            if (!obj.isPinned) {
+                const posData = {};
+                ['left','top','scaleX','scaleY','angle','width'].forEach(k => {
+                    if (data[k] !== undefined) posData[k] = data[k];
+                });
+                if (Object.keys(posData).length) _lerpSetTarget(obj, posData);
+            }
+            return true;
+        }
+
+        // Full content update (object:modified / text:editing:exited):
+        const TEXTBOX_POS_KEYS = new Set(['left','top','scaleX','scaleY','angle','skewX','skewY']);
+        const styleData = {};
+        const posData   = {};
+        Object.keys(data).forEach(k => {
+            if (TEXTBOX_POS_KEYS.has(k)) posData[k] = data[k];
+            else styleData[k] = data[k];
+        });
+        if (Object.keys(styleData).length > 1) obj.set(styleData);
+        obj.initDimensions();   // once, after all style changes
         obj.setCoords();
+        if (Object.keys(posData).length && !obj.isPinned) _lerpSetTarget(obj, posData);
         canvas.requestRenderAll();
+        return true;
+    }
+
+    // Pinned objects: never reposition remotely (all types).
+    if (obj.isPinned) {
+        const POS_KEYS = new Set(['left','top','scaleX','scaleY','angle','skewX','skewY']);
+        const safeData = {};
+        Object.keys(data).forEach(k => { if (!POS_KEYS.has(k)) safeData[k] = data[k]; });
+        if (Object.keys(safeData).length > 1) { obj.set(safeData); obj.setCoords(); canvas.requestRenderAll(); }
         return true;
     }
 
@@ -2728,6 +2787,168 @@ window.setShapeType = (t) => {
 
 
 // ==========================================
+// 3D SHAPES — proper Fabric grouped objects
+// ==========================================
+// Built as fabric.Group([path/ellipse...]) so:
+//  • sync works: broadcast('draw', group.toObject()) → enlivenObjects on partner ✓
+//  • stroke/color editing works: getStyleTargets(group) → children → applyModifiedData ✓
+//  • findObjectById searches inside groups recursively ✓
+//
+// strokeWidth 2 matches the app default for all shapes.
+
+function _uid() { return Math.random().toString(36).substr(2, 9); }
+
+function _placeGroupOnCanvas(grp) {
+    const vpt  = canvas.viewportTransform;
+    const zoom = canvas.getZoom();
+    const cx   = (canvas.width  / 2 - vpt[4]) / zoom;
+    const cy   = (canvas.height / 2 - vpt[5]) / zoom;
+    grp.set({
+        left: cx - grp.getScaledWidth()  / 2,
+        top:  cy - grp.getScaledHeight() / 2,
+        id:   '3d-' + _uid()
+    });
+    // Every child needs its own id so per-child style sync works via findObjectById.
+    grp.getObjects().forEach(child => {
+        if (!child.id) child.id = '3dc-' + _uid();
+    });
+    canvas.add(grp);
+    canvas.setActiveObject(grp);
+    addToHistory(grp);
+    // Broadcast as Fabric group — partner reconstructs via enlivenObjects
+    broadcast('draw', { data: grp.toObject(['id']) });
+    activateTool('select');
+    toggleSubmenu('shapes-menu');
+}
+
+function insert3DShape(name) {
+    const stroke = settings.shape.stroke || '#222222';
+    const sw = 2;   // default line width = 2pt
+    const base = {
+        fill: 'transparent',
+        stroke: stroke,
+        strokeWidth: sw,
+        strokeLineCap: 'round',
+        strokeLineJoin: 'round'
+    };
+
+    if (name === 'cube') {
+        // Two offset rects (front + back faces) + 4 diagonal connecting edges.
+        // Defined at 180×150px. Front rect: (2,30)–(112,140), Back: (68,2)–(178,112)
+        const pathStr =
+            'M 2 30 L 112 30 L 112 140 L 2 140 Z ' +          // front face
+            'M 68 2 L 178 2 L 178 112 L 68 112 Z ' +          // back face
+            'M 2 30 L 68 2 ' +                                  // top-left edge
+            'M 112 30 L 178 2 ' +                               // top-right edge
+            'M 2 140 L 68 112 ' +                               // bottom-left edge
+            'M 112 140 L 178 112';                              // bottom-right edge
+        const grp = new fabric.Group([
+            new fabric.Path(pathStr, { ...base })
+        ]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'cylinder') {
+        // Top ellipse (full, solid) + bottom ellipse (full, solid) + 2 side lines.
+        // cx=60, rx=52, ry=18; top center y=28, bottom center y=142; height=170px
+        const topEll = new fabric.Ellipse({
+            ...base, left: 8, top: 10, rx: 52, ry: 18
+        });
+        const botEll = new fabric.Ellipse({
+            ...base, left: 8, top: 124, rx: 52, ry: 18
+        });
+        // Side lines: left at x=8, right at x=112, from y=28 to y=142
+        const sides = new fabric.Path('M 8 28 L 8 142 M 112 28 L 112 142', { ...base });
+        const grp = new fabric.Group([topEll, botEll, sides]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'cone') {
+        // Bottom ellipse (full, solid) + 2 slant lines to apex.
+        // cx=60, rx=52, ry=18; bottom center y=142; apex at (60,8)
+        const botEll = new fabric.Ellipse({
+            ...base, left: 8, top: 124, rx: 52, ry: 18
+        });
+        // Slant lines from apex (60,8) to left (8,142) and right (112,142)
+        const slants = new fabric.Path('M 60 8 L 8 142 M 60 8 L 112 142', { ...base });
+        const grp = new fabric.Group([botEll, slants]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'pyramid') {
+        // Isometric square pyramid. Vertices:
+        //   Apex:   (85, 12)
+        //   Front:  (85, 155)
+        //   Left:   (20, 110)
+        //   Right:  (150, 110)
+        //   Back:   (85, 65)   ← hidden
+        //
+        // Visible faces: left-front triangle + right-front triangle
+        // Visible solid edges:
+        //   apex→left, apex→front, apex→right,
+        //   left→front, right→front
+        // Hidden dashed edges:
+        //   apex→back, left→back, right→back
+        const visStr =
+            'M 85 12 L 20 110 ' +
+            'M 85 12 L 85 155 ' +
+            'M 85 12 L 150 110 ' +
+            'M 20 110 L 85 155 ' +
+            'M 150 110 L 85 155';
+        const hidStr =
+            'M 85 12 L 85 65 ' +
+            'M 20 110 L 85 65 ' +
+            'M 150 110 L 85 65';
+        const visPath = new fabric.Path(visStr, { ...base });
+        const hidPath = new fabric.Path(hidStr, {
+            ...base,
+            strokeDashArray: [8, 5]
+        });
+        const grp = new fabric.Group([visPath, hidPath]);
+        _placeGroupOnCanvas(grp);
+    }
+}
+
+// ==========================================
+// PNG OBJECTS — load from same folder as HTML
+// ==========================================
+function insertPngShape(filename) {
+    // Build absolute URL relative to the current page so relative paths
+    // resolve correctly under any protocol (file://, http://, etc.)
+    const base = window.location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+    const url  = base + filename;
+
+    // Native Image probe gives a clear "not found" error before Fabric tries.
+    const probe = new Image();
+    probe.onload = function() {
+        fabric.Image.fromURL(url, function(img) {
+            if (!img || !img.getElement()) {
+                setStatus('⚠️ Failed to load: ' + filename, 'error');
+                return;
+            }
+            if (img.width > 500) img.scaleToWidth(500);
+
+            const vpt  = canvas.viewportTransform;
+            const zoom = canvas.getZoom();
+            const cx   = (canvas.width  / 2 - vpt[4]) / zoom;
+            const cy   = (canvas.height / 2 - vpt[5]) / zoom;
+            img.set({
+                id:   'png-' + _uid(),
+                left: cx - img.getScaledWidth()  / 2,
+                top:  cy - img.getScaledHeight() / 2
+            });
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            addToHistory(img);
+            _broadcastImageWithJpegSrc(img, filename);
+            activateTool('select');
+            toggleSubmenu('shapes-menu');
+        }, { crossOrigin: 'anonymous' });
+    };
+    probe.onerror = function() {
+        setStatus('⚠️ ' + filename + ' not found — place it in the same folder as the HTML file', 'error');
+    };
+    probe.src = url;
+}
+
+// ==========================================
 // ЛОГИКА PIN / UNPIN
 // ==========================================
 function togglePin() {
@@ -3443,37 +3664,55 @@ function handleLiveSync(e) {
     const target = e.target;
     if (!target) return;
 
-    // Images / PDFs: skip ALL intermediate live-sync frames.
-    // Only the final position (object:modified on mouseup) will be broadcast,
-    // with an additional 500ms debounce to avoid flicker on rapid re-grabs.
     if (target.type === 'image') return;
     if (target.type === 'activeSelection' &&
         target.getObjects().some(o => o.type === 'image')) return;
-
-    // activeSelection should never reach here during normal use because
-    // before:transform auto-converts multi-selections to groups.
-    // If it somehow does (e.g. MQTT mode), skip to avoid desync.
     if (target.type === 'activeSelection') return;
 
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
 
+    // TEXTBOX CRITICAL FIX: Fabric's toObject() always includes the full text/style
+    // props regardless of what additionalProps you pass — it's an ADDITIVE parameter.
+    // Sending full textbox state at 10fps causes initDimensions() chaos on receiver.
+    // Manually build a position-only packet so only geometry travels during live drag.
+    if (target.type === 'textbox') {
+        broadcast('modified', { data: {
+            id:     target.id,
+            type:   target.type,
+            left:   target.left,
+            top:    target.top,
+            scaleX: target.scaleX,
+            scaleY: target.scaleY,
+            angle:  target.angle,
+            width:  target.width   // keep width so text reflow stays in sync
+        }});
+        lastMoveSend = now;
+        return;
+    }
+
     const syncProps = [
         'id', 'isPinned',
         'lockMovementX', 'lockMovementY',
-        'lockRotation',
-        'lockScalingX', 'lockScalingY',
+        'lockRotation', 'lockScalingX', 'lockScalingY',
         'hasControls', 'borderColor', 'hoverCursor'
     ];
-
     broadcast('modified', { data: target.toObject(syncProps) });
-
     lastMoveSend = now;
 }
 
 canvas.on('object:moving', handleLiveSync);
 canvas.on('object:scaling', handleLiveSync);
 canvas.on('object:rotating', handleLiveSync);
+
+// Double-click any textbox to enter editing — works regardless of who created it.
+canvas.on('mouse:dblclick', (o) => {
+    const hit = canvas.findTarget(o.e);
+    if (!hit || hit.type !== 'textbox' || hit.isEditing) return;
+    canvas.setActiveObject(hit);
+    hit.enterEditing();
+    canvas.requestRenderAll();
+});
 
 // ── Grid-snap for straight (horizontal / vertical) lines & arrows ─────────────
 // When moving a line/arrow that is nearly H or V we snap the perpendicular axis
@@ -4597,7 +4836,14 @@ function applyRemoteDrawObject(d, onDone) {
         obj.set({ selectable: true, evented: true });
         const existing = findObjectById(d.id);
         if (existing && !existing.group) {
-            existing.set(obj);
+            // FIX: используем исходный plain-объект d, а не Fabric-объект obj.
+            // existing.set(obj) копировал внутренние свойства Fabric (в т.ч. canvas:null),
+            // что разрывало связь объекта с холстом и делало его неинтерактивным.
+            existing.set(d);
+            existing.set({ selectable: true, evented: true, __isLocal: true });
+            if (existing.type === 'textbox') {
+                existing.initDimensions();
+            }
             existing.setCoords();
         } else if (!existing) {
             canvas.add(obj);
