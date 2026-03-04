@@ -64,9 +64,9 @@
         .color-swatch.selected { border-color: #333; transform: scale(1.1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .width-slider { width: 100%; cursor: pointer; }
         
-        .shape-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 4px; }
+        .shape-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 4px; }
         .shape-item { 
-            border: 1px solid #eee; background: #fff; padding: 6px 2px; cursor: pointer; 
+            border: 1px solid #eee; background: #fff; padding: 2px 2px; cursor: pointer; 
             text-align: center; font-size: 10px; border-radius: 4px; display: flex; flex-direction: column; align-items: center;
         }
         .shape-item:hover { background: #f5f5f5; }
@@ -526,7 +526,6 @@
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
 					  <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
                     </div>
-                    <br>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insert3DShape('cube')" data-tooltip="Cube">
@@ -535,10 +534,19 @@
                             <span class="shape-icon"><svg width="16" height="20" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
                         <div class="shape-item" onclick="insert3DShape('cone')" data-tooltip="Cone">
                             <span class="shape-icon"><svg width="16" height="20" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
-                        <div class="shape-item" onclick="insert3DShape('pyramid')" data-tooltip="Pyramid (isometric)">
-                            <span class="shape-icon"><svg width="20" height="20" viewBox="0 0 170 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="85" y1="12" x2="20" y2="110"/><line x1="85" y1="12" x2="150" y2="110"/><line x1="85" y1="12" x2="85" y2="155"/><line x1="20" y1="110" x2="85" y2="155"/><line x1="150" y1="110" x2="85" y2="155"/><line x1="85" y1="12" x2="85" y2="65" stroke-dasharray="8,5"/><line x1="20" y1="110" x2="85" y2="65" stroke-dasharray="8,5"/><line x1="150" y1="110" x2="85" y2="65" stroke-dasharray="8,5"/></svg></span>Pyr</div>
+                        <div class="shape-item" onclick="insert3DShape('pyramid')" data-tooltip="Pyramid">
+                            <span class="shape-icon"><svg width="20" height="18" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
+                        <div class="shape-item" onclick="insert3DShape('tetrahedron')" data-tooltip="Tetrahedron">
+                            <span class="shape-icon"><svg width="19" height="18" viewBox="0 0 148 148" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="5" y1="138" x2="125" y2="138"/><line x1="5" y1="138" x2="65" y2="5"/><line x1="125" y1="138" x2="65" y2="5"/><line x1="92" y1="105" x2="65" y2="5"/><line x1="5" y1="138" x2="92" y2="105" stroke-width="3"/><line x1="125" y1="138" x2="92" y2="105" stroke-width="3"/></svg></span>Tetra</div>
+                        <div class="shape-item" onclick="insert3DShape('triPrism')" data-tooltip="Triangular Prism">
+                            <span class="shape-icon"><svg width="20" height="18" viewBox="0 0 155 148" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><rect x="5" y="40" width="100" height="100"/><line x1="5" y1="140" x2="75" y2="118"/><line x1="105" y1="140" x2="75" y2="118"/><line x1="5" y1="40" x2="75" y2="18"/><line x1="105" y1="40" x2="75" y2="18"/><line x1="75" y1="118" x2="75" y2="18" stroke-width="3"/></svg></span>TPrism</div>
+                        <div class="shape-item" onclick="insert3DShape('octahedron')" data-tooltip="Octahedron">
+                            <span class="shape-icon"><svg width="19" height="19" viewBox="0 0 155 160" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="72" y1="5" x2="5" y2="80"/><line x1="72" y1="5" x2="145" y2="80"/><line x1="72" y1="5" x2="72" y2="120"/><line x1="72" y1="5" x2="95" y2="55"/><line x1="5" y1="80" x2="72" y2="120"/><line x1="145" y1="80" x2="72" y2="120"/><line x1="72" y1="155" x2="5" y2="80"/><line x1="72" y1="155" x2="145" y2="80"/><line x1="72" y1="155" x2="72" y2="120"/><line x1="5" y1="80" x2="95" y2="55"/><line x1="145" y1="80" x2="95" y2="55"/><line x1="72" y1="155" x2="95" y2="55" stroke-width="3"/></svg></span>Octa</div>
+                        <div class="shape-item" onclick="insert3DShape('hemisphere')" data-tooltip="Hemisphere">
+                            <span class="shape-icon"><svg width="19" height="16" viewBox="0 0 140 115" fill="none" stroke="currentColor" stroke-width="7"><path d="M 8 90 A 62 62 0 0 1 132 90"/><path d="M 8 90 A 62 20 0 0 0 132 90"/><path d="M 132 90 A 62 20 0 0 0 8 90" stroke-width="3"/></svg></span>Hemi</div>
+                        <div class="shape-item" onclick="insert3DShape('frustum')" data-tooltip="Truncated Pyramid">
+                            <span class="shape-icon"><svg width="21" height="18" viewBox="0 0 150 158" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="5" y1="148" x2="112" y2="148"/><line x1="112" y1="148" x2="138" y2="122"/><line x1="5" y1="148" x2="38" y2="68"/><line x1="112" y1="148" x2="100" y2="68"/><line x1="138" y1="122" x2="122" y2="50"/><line x1="38" y1="68" x2="100" y2="68"/><line x1="100" y1="68" x2="122" y2="50"/><line x1="5" y1="148" x2="31" y2="122" stroke-width="3"/><line x1="31" y1="122" x2="138" y2="122" stroke-width="3"/><line x1="31" y1="122" x2="58" y2="50" stroke-width="3"/><line x1="122" y1="50" x2="58" y2="50" stroke-width="3"/><line x1="58" y1="50" x2="38" y2="68" stroke-width="3"/></svg></span>Frust</div>
                     </div>
-                    <br>
                     <h4>Objects (PNG)</h4>
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insertPngShape('sphere.png')" data-tooltip="Sphere"><span class="shape-icon">🔵</span>Sphere</div>
@@ -546,7 +554,7 @@
                         <div class="shape-item" onclick="insertPngShape('ruler.png')" data-tooltip="Ruler"><span class="shape-icon">📏</span>Ruler</div>
                         <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">📐</span>Prot</div>
                     </div>
-                    <br>
+                    
                     <h4>Color & Border</h4>
                     <div class="color-row" id="shape-colors"></div>
                     <input type="range" min="1" max="20" value="2" class="width-slider" oninput="updateShapeBorder(this.value)">
@@ -2873,35 +2881,139 @@ function insert3DShape(name) {
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'pyramid') {
-        // Isometric square pyramid. Vertices:
-        //   Apex:   (85, 12)
-        //   Front:  (85, 155)
-        //   Left:   (20, 110)
-        //   Right:  (150, 110)
-        //   Back:   (85, 65)   ← hidden
+        // Square pyramid — фронтальная диметрия (frontal dimetry).
+        // Front face is a true square; depth axis goes at 45°, scale 0.5.
+        // All edges are solid (no dashed lines).
         //
-        // Visible faces: left-front triangle + right-front triangle
-        // Visible solid edges:
-        //   apex→left, apex→front, apex→right,
-        //   left→front, right→front
-        // Hidden dashed edges:
-        //   apex→back, left→back, right→back
+        // Base vertices (frontal dimetry, depth offset = 28px at 45°):
+        //   A(8,148)  — front-left
+        //   B(120,148) — front-right
+        //   C(148,120) — back-right  [B + (28,−28)]
+        //   D(36,120)  — back-left   [A + (28,−28)]
+        // Apex T(74,8) — above centroid of base (74,134)
+        const pathStr =
+            'M 8 148 L 120 148 L 148 120 L 36 120 Z ' +  // base
+            'M 8 148 L 74 8 ' +    // A→T
+            'M 120 148 L 74 8 ' +  // B→T
+            'M 148 120 L 74 8 ' +  // C→T
+            'M 36 120 L 74 8';     // D→T
+        const grp = new fabric.Group([
+            new fabric.Path(pathStr, { ...base })
+        ]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'tetrahedron') {
+        // Regular tetrahedron — oblique projection.
+        // Front base edge A-B at bottom, back base vertex D (depth-shifted from midpoint of AB), apex T above.
+        // Orientation: одно ребро впереди (A-B), два рёбра сзади (A-D, B-D).
+        //   A(8,138)  — front-left
+        //   B(118,138) — front-right
+        //   D(88,108)  — back vertex (midpoint of A-B shifted +25, -30)
+        //   T(63,8)    — apex
+        // Solid (full sw): A-B, A-T, B-T, D-T
+        // Thin solid (sw=1): A-D, B-D  — the two "back" base edges
         const visStr =
-            'M 85 12 L 20 110 ' +
-            'M 85 12 L 85 155 ' +
-            'M 85 12 L 150 110 ' +
-            'M 20 110 L 85 155 ' +
-            'M 150 110 L 85 155';
-        const hidStr =
-            'M 85 12 L 85 65 ' +
-            'M 20 110 L 85 65 ' +
-            'M 150 110 L 85 65';
-        const visPath = new fabric.Path(visStr, { ...base });
-        const hidPath = new fabric.Path(hidStr, {
-            ...base,
-            strokeDashArray: [8, 5]
-        });
-        const grp = new fabric.Group([visPath, hidPath]);
+            'M 8 138 L 118 138 ' +   // A-B front base
+            'M 8 138 L 63 8 ' +      // A-T
+            'M 118 138 L 63 8 ' +    // B-T
+            'M 88 108 L 63 8';       // D-T
+        const thinStr =
+            'M 8 138 L 88 108 ' +    // A-D back-left base
+            'M 118 138 L 88 108';    // B-D back-right base
+        const visPath  = new fabric.Path(visStr,  { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'triPrism') {
+        // Triangular prism — frontal view.
+        // Orientation: прямоугольная грань вертикально (facing viewer), треугольные грани горизонтально (top/bottom).
+        // Front rectangular face: A(8,138) B(108,138) C(108,38) D(8,38)
+        // Back apex bottom: E(78,118)  [behind midpoint of AB, offset +25, -20]
+        // Back apex top:    F(78, 18)  [behind midpoint of DC, same offset]
+        // Solid: front rect ABCD, lateral edges A-E, B-E, D-F, C-F
+        // Thin solid (sw=1): back edge E-F
+        const visStr =
+            'M 8 138 L 108 138 ' +    // A-B bottom front
+            'M 108 138 L 108 38 ' +   // B-C right front
+            'M 108 38 L 8 38 ' +      // C-D top front
+            'M 8 38 L 8 138 ' +       // D-A left front
+            'M 8 138 L 78 118 ' +     // A-E bottom-left lateral
+            'M 108 138 L 78 118 ' +   // B-E bottom-right lateral
+            'M 8 38 L 78 18 ' +       // D-F top-left lateral
+            'M 108 38 L 78 18';       // C-F top-right lateral
+        const thinStr = 'M 78 118 L 78 18'; // E-F back vertical edge
+        const visPath  = new fabric.Path(visStr,  { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'octahedron') {
+        // Regular octahedron — oblique projection.
+        // 6 vertices: T(78,5), Bo(78,158), L(8,82), R(148,82), F(78,122), Bk(100,58)
+        // 12 edges. Only Bo-Bk is a hidden back edge → thin solid (sw=1).
+        const visStr =
+            'M 78 5 L 8 82 ' +       // T-L
+            'M 78 5 L 148 82 ' +     // T-R
+            'M 78 5 L 78 122 ' +     // T-F
+            'M 78 5 L 100 58 ' +     // T-Bk
+            'M 8 82 L 78 122 ' +     // L-F
+            'M 148 82 L 78 122 ' +   // R-F
+            'M 78 158 L 8 82 ' +     // Bo-L
+            'M 78 158 L 148 82 ' +   // Bo-R
+            'M 78 158 L 78 122 ' +   // Bo-F
+            'M 8 82 L 100 58 ' +     // L-Bk
+            'M 148 82 L 100 58';     // R-Bk
+        const thinStr = 'M 78 158 L 100 58'; // Bo-Bk hidden
+        const visPath  = new fabric.Path(visStr,  { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'hemisphere') {
+        // Hemisphere: dome arc + base rim ellipse.
+        // cx=70, cy=90, base rx=62, ry=20; dome radius=62.
+        // Solid: dome semicircle + front half of base rim.
+        // Thin solid (sw=1): back half of base rim.
+        const solidPath = new fabric.Path(
+            'M 8 90 A 62 62 0 0 1 132 90 ' +   // dome semicircle
+            'M 8 90 A 62 20 0 0 0 132 90',      // front half of base rim
+            { ...base }
+        );
+        const thinPath = new fabric.Path(
+            'M 132 90 A 62 20 0 0 0 8 90',      // back half of base rim
+            { ...base, strokeWidth: 1 }
+        );
+        const grp = new fabric.Group([solidPath, thinPath]);
+        _placeGroupOnCanvas(grp);
+
+    } else if (name === 'frustum') {
+        // Truncated square pyramid — фронтальная диметрия.
+        // Bottom base (larger): A(8,150) B(120,150) C(148,122) D(36,122)
+        // Top base (smaller):   E(34,68)  F(100,68)  G(122,50)  H(56,50)
+        // Lateral solid:   A-E, B-F, C-G
+        // Lateral thin:    D-H
+        // Bottom solid:    A-B, B-C
+        // Bottom thin:     C-D, D-A
+        // Top solid:       E-F, F-G
+        // Top thin:        G-H, H-E
+        const visStr =
+            'M 8 150 L 120 150 ' +    // A-B bottom front
+            'M 120 150 L 148 122 ' +  // B-C bottom right
+            'M 8 150 L 34 68 ' +      // A-E lateral front-left
+            'M 120 150 L 100 68 ' +   // B-F lateral front-right
+            'M 148 122 L 122 50 ' +   // C-G lateral back-right
+            'M 34 68 L 100 68 ' +     // E-F top front
+            'M 100 68 L 122 50';      // F-G top right
+        const thinStr =
+            'M 8 150 L 36 122 ' +     // D-A bottom left
+            'M 36 122 L 148 122 ' +   // C-D bottom back
+            'M 36 122 L 56 50 ' +     // D-H lateral back-left
+            'M 122 50 L 56 50 ' +     // G-H top back
+            'M 56 50 L 34 68';        // H-E top left
+        const visPath  = new fabric.Path(visStr,  { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
     }
 }
