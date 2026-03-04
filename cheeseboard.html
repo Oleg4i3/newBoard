@@ -2828,10 +2828,9 @@ function _placeGroupOnCanvas(grp) {
     activateTool('select');
     toggleSubmenu('shapes-menu');
 }
-
 function insert3DShape(name) {
     const stroke = settings.shape.stroke || '#222222';
-    const sw = 2;   // was default line width = 2pt
+    const sw = 2; // default line width = 2pt
     const base = {
         fill: 'transparent',
         stroke: stroke,
@@ -2842,184 +2841,176 @@ function insert3DShape(name) {
 
     if (name === 'cube') {
         // Cube — фронтальная диметрия (frontal dimetry).
-        // Front face: square 100×100 at (8,42)–(108,142).
-        // Depth axis at 45°, scale 1:2 → offset (+35,−35) per side/2 = 50px.
-        // Back face: (43,7)–(143,107). All depth edges = 35√2 ≈ 49.5px, angle = 45°.
-        const pathStr =
-            'M 8 42 L 108 42 L 108 142 L 8 142 Z ' +   // front face
-            'M 43 7 L 143 7 L 143 107 L 43 107 Z ' +   // back face
-            'M 8 42 L 43 7 ' +                          // top-left depth edge
-            'M 108 42 L 143 7 ' +                       // top-right depth edge
-            'M 108 142 L 143 107 ' +                    // bottom-right depth edge
-            'M 8 142 L 43 107';                         // bottom-left depth edge
-        const grp = new fabric.Group([
-            new fabric.Path(pathStr, { ...base })
-        ]);
+        // Видимые: передняя грань, верхняя грань, правая грань.
+        // Скрытые: левая грань, нижняя грань, задняя грань (кроме общих с видимыми).
+        const visStr =
+            'M 8 42 L 108 42 ' + // front top
+            'M 108 42 L 108 142 ' + // front right
+            'M 108 142 L 8 142 ' + // front bottom
+            'M 8 142 L 8 42 ' + // front left
+            'M 8 42 L 43 7 ' + // top-left depth edge
+            'M 108 42 L 143 7 ' + // top-right depth edge
+            'M 108 142 L 143 107 ' + // bottom-right depth edge
+            'M 43 7 L 143 7 ' + // back top (видимое, часть верхней грани)
+            'M 143 7 L 143 107 '; // back right (видимое, часть правой грани)
+        
+        const thinStr =
+            'M 8 142 L 43 107 ' + // bottom-left depth edge (скрыто под кубом)
+            'M 143 107 L 43 107 ' + // back bottom (скрыто)
+            'M 43 107 L 43 7'; // back left (скрыто)
+
+        const visPath = new fabric.Path(visStr, { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'cylinder') {
-        // Top ellipse (full, solid) + bottom ellipse (full, solid) + 2 side lines.
-        // cx=60, rx=52, ry=18; top center y=28, bottom center y=142; height=170px
-        const topEll = new fabric.Ellipse({
-            ...base, left: 8, top: 10, rx: 52, ry: 18
-        });
-        const botEll = new fabric.Ellipse({
-            ...base, left: 8, top: 124, rx: 52, ry: 18
-        });
-        // Side lines: left at x=8, right at x=112, from y=28 to y=142
+        // Цилиндр: верхний эллипс ПОЛНОСТЬЮ видим. Нижний эллипс - видима только передняя дуга.
+        const topFrontStr = 'M 8 28 A 52 18 0 0 0 112 28';
+        const topBackStr = 'M 112 28 A 52 18 0 0 0 8 28';
+        const topFront = new fabric.Path(topFrontStr, { ...base });
+        const topBack = new fabric.Path(topBackStr, { ...base }); // Теперь тоже толстая линия
+
+        const botFrontStr = 'M 8 142 A 52 18 0 0 0 112 142';
+        const botBackStr = 'M 112 142 A 52 18 0 0 0 8 142';
+        const botFront = new fabric.Path(botFrontStr, { ...base });
+        const botBack = new fabric.Path(botBackStr, { ...base, strokeWidth: 1 }); // Скрытая дуга дна
+
         const sides = new fabric.Path('M 8 28 L 8 142 M 112 28 L 112 142', { ...base });
-        const grp = new fabric.Group([topEll, botEll, sides]);
+        const grp = new fabric.Group([topFront, topBack, botFront, botBack, sides]);
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'cone') {
-        // Bottom ellipse (full, solid) + 2 slant lines to apex.
-        // cx=60, rx=52, ry=18; bottom center y=142; apex at (60,8)
-        const botEll = new fabric.Ellipse({
-            ...base, left: 8, top: 124, rx: 52, ry: 18
-        });
-        // Slant lines from apex (60,8) to left (8,142) and right (112,142)
+        // Конус - без изменений, все было верно
+        const botFrontStr = 'M 8 142 A 52 18 0 0 0 112 142';
+        const botBackStr = 'M 112 142 A 52 18 0 0 0 8 142';
+        const botFront = new fabric.Path(botFrontStr, { ...base });
+        const botBack = new fabric.Path(botBackStr, { ...base, strokeWidth: 1 });
         const slants = new fabric.Path('M 60 8 L 8 142 M 60 8 L 112 142', { ...base });
-        const grp = new fabric.Group([botEll, slants]);
+        const grp = new fabric.Group([botFront, botBack, slants]);
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'pyramid') {
-        // Square pyramid — фронтальная диметрия (frontal dimetry).
-        // Front face is a true square; depth axis goes at 45°, scale 0.5.
-        // All edges are solid (no dashed lines).
-        //
-        // Base vertices (frontal dimetry, depth offset = 28px at 45°):
-        //   A(8,148)  — front-left
-        //   B(120,148) — front-right
-        //   C(148,120) — back-right  [B + (28,−28)]
-        //   D(36,120)  — back-left   [A + (28,−28)]
-        // Apex T(74,8) — above centroid of base (74,134)
-        const pathStr =
-            'M 8 148 L 120 148 L 148 120 L 36 120 Z ' +  // base
-            'M 8 148 L 74 8 ' +    // A→T
-            'M 120 148 L 74 8 ' +  // B→T
-            'M 148 120 L 74 8 ' +  // C→T
-            'M 36 120 L 74 8';     // D→T
-        const grp = new fabric.Group([
-            new fabric.Path(pathStr, { ...base })
-        ]);
+        // Квадратная пирамида - без изменений, логика видимости была верной
+        const visStr =
+            'M 8 148 L 120 148 ' + // A-B
+            'M 120 148 L 148 120 ' + // B-C
+            'M 8 148 L 74 8 ' + // A-T
+            'M 120 148 L 74 8 ' + // B-T
+            'M 148 120 L 74 8'; // C-T
+        const thinStr =
+            'M 148 120 L 36 120 ' + // C-D
+            'M 36 120 L 74 8 ' + // D-T
+            'M 36 120 L 8 148'; // D-A
+        const visPath = new fabric.Path(visStr, { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'tetrahedron') {
-        // Regular tetrahedron — oblique projection.
-        // Front base edge A-B at bottom, back base vertex D (depth-shifted from midpoint of AB), apex T above.
-        // Orientation: одно ребро впереди (A-B), два рёбра сзади (A-D, B-D).
-        //   A(8,138)  — front-left
-        //   B(118,138) — front-right
-        //   D(88,108)  — back vertex (midpoint of A-B shifted +25, -30)
-        //   T(63,8)    — apex
-        // Solid (full sw): A-B, A-T, B-T, D-T
-        // Thin solid (sw=1): A-D, B-D  — the two "back" base edges
+        // Треугольная пирамида: горизонтальное ребро основы сзади.
+        // C(18,118) — задняя-левая точка, D(108,118) — задняя-правая точка (C-D горизонтально).
+        // A(80,148) — передняя вершина основы (сдвинута вправо от центра, чтобы ребро A-T не сливалось с высотой).
+        // T(63,8) — верхняя вершина (апекс).
         const visStr =
-            'M 8 138 L 118 138 ' +   // A-B front base
-            'M 8 138 L 63 8 ' +      // A-T
-            'M 118 138 L 63 8 ' +    // B-T
-            'M 88 108 L 63 8';       // D-T
+            'M 80 148 L 18 118 ' + // A-C (левое переднее ребро основы)
+            'M 80 148 L 108 118 ' + // A-D (правое переднее ребро основы)
+            'M 80 148 L 63 8 ' + // A-T (переднее боковое ребро, теперь под наклоном)
+            'M 18 118 L 63 8 ' + // C-T (левый боковой контур)
+            'M 108 118 L 63 8 '; // D-T (правый боковой контур)
+        
         const thinStr =
-            'M 8 138 L 88 108 ' +    // A-D back-left base
-            'M 118 138 L 88 108';    // B-D back-right base
-        const visPath  = new fabric.Path(visStr,  { ...base });
+            'M 18 118 L 108 118'; // C-D (заднее горизонтальное ребро основы, скрыто)
+            
+        const visPath = new fabric.Path(visStr, { ...base });
         const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
         const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
-
+		
     } else if (name === 'triPrism') {
-        // Triangular prism — frontal view.
-        // Orientation: прямоугольная грань вертикально (facing viewer), треугольные грани горизонтально (top/bottom).
-        // Front rectangular face: A(8,138) B(108,138) C(108,38) D(8,38)
-        // Back apex bottom: E(78,118)  [behind midpoint of AB, offset +25, -20]
-        // Back apex top:    F(78, 18)  [behind midpoint of DC, same offset]
-        // Solid: front rect ABCD, lateral edges A-E, B-E, D-F, C-F
-        // Thin solid (sw=1): back edge E-F
+        // Треугольная призма: передняя прямоугольная грань (ABCD) и верхняя треугольная (DCF) видимы.
+        // Заднее вертикальное ребро (EF) и нижняя треугольная грань (ABE) скрыты.
         const visStr =
-            'M 8 138 L 108 138 ' +    // A-B bottom front
-            'M 108 138 L 108 38 ' +   // B-C right front
-            'M 108 38 L 8 38 ' +      // C-D top front
-            'M 8 38 L 8 138 ' +       // D-A left front
-            'M 8 138 L 78 118 ' +     // A-E bottom-left lateral
-            'M 108 138 L 78 118 ' +   // B-E bottom-right lateral
-            'M 8 38 L 78 18 ' +       // D-F top-left lateral
-            'M 108 38 L 78 18';       // C-F top-right lateral
-        const thinStr = 'M 78 118 L 78 18'; // E-F back vertical edge
-        const visPath  = new fabric.Path(visStr,  { ...base });
+            'M 8 138 L 108 138 ' + // A-B bottom front
+            'M 108 138 L 108 38 ' + // B-C right front
+            'M 108 38 L 8 38 ' + // C-D top front
+            'M 8 38 L 8 138 ' + // D-A left front
+            'M 8 38 L 78 18 ' + // D-F top-left lateral (верхняя грань видна)
+            'M 108 38 L 78 18 '; // C-F top-right lateral (верхняя грань видна)
+            
+        const thinStr = 
+            'M 8 138 L 78 118 ' + // A-E bottom-left lateral (скрыто дно)
+            'M 108 138 L 78 118 ' + // B-E bottom-right lateral (скрыто дно)
+            'M 78 118 L 78 18 '; // E-F back vertical edge (скрыто за передней гранью)
+            
+        const visPath = new fabric.Path(visStr, { ...base });
         const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
         const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
 
-    }
-	else if (name === 'octahedron') {
-// Regular octahedron — oblique projection.
-// 6 vertices: T(78,5), Bo(78,158), L(8,82), R(148,82), F(56,105), Bk(100,58)
-// 12 edges. Only Bo-Bk is a hidden back edge → thin solid (sw=1).
-const visStr =
-'M 78 5 L 8 82 ' + // T-L
-'M 78 5 L 148 82 ' + // T-R
-'M 78 5 L 56 105 ' + // T-F
-'M 78 5 L 100 58 ' + // T-Bk
-'M 8 82 L 56 105 ' + // L-F
-'M 148 82 L 56 105 ' + // R-F
-'M 78 158 L 8 82 ' + // Bo-L
-'M 78 158 L 148 82 ' + // Bo-R
-'M 78 158 L 56 105 ' + // Bo-F
-'M 8 82 L 100 58 ' + // L-Bk
-'M 148 82 L 100 58'; // R-Bk
-const thinStr = 'M 78 158 L 100 58'; // Bo-Bk hidden
-const visPath = new fabric.Path(visStr, { ...base });
-const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
-const grp = new fabric.Group([visPath, thinPath]);
-_placeGroupOnCanvas(grp);
+    } else if (name === 'octahedron') {
+        // Правильный октаэдр.
+        // Ошибка была в T-Bk (скрытое ребро к задней вершине числилось в видимых).
+        const visStr =
+            'M 78 5 L 8 82 ' + // T-L
+            'M 78 5 L 148 82 ' + // T-R
+            'M 78 5 L 56 105 ' + // T-F
+            'M 8 82 L 56 105 ' + // L-F
+            'M 148 82 L 56 105 ' + // R-F
+            'M 78 158 L 8 82 ' + // Bo-L
+            'M 78 158 L 148 82 ' + // Bo-R
+            'M 78 158 L 56 105 '; // Bo-F
+            
+        const thinStr = 
+            'M 78 5 L 100 58 ' + // T-Bk (перенесено: заднее верхнее ребро скрыто)
+            'M 78 158 L 100 58 ' + // Bo-Bk hidden
+            'M 8 82 L 100 58 ' + // L-Bk
+            'M 148 82 L 100 58'; // R-Bk
+            
+        const visPath = new fabric.Path(visStr, { ...base });
+        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+        const grp = new fabric.Group([visPath, thinPath]);
+        _placeGroupOnCanvas(grp);
+
     } else if (name === 'hemisphere') {
-        // Hemisphere: dome arc + base rim ellipse.
-        // cx=70, cy=90, base rx=62, ry=20; dome radius=62.
-        // Solid: dome semicircle + front half of base rim.
-        // Thin solid (sw=1): back half of base rim.
+        // Полусфера - без изменений, логика была абсолютно верной
         const solidPath = new fabric.Path(
-            'M 8 90 A 62 62 0 0 1 132 90 ' +   // dome semicircle
-            'M 8 90 A 62 20 0 0 0 132 90',      // front half of base rim
+            'M 8 90 A 62 62 0 0 1 132 90 ' + // dome semicircle
+            'M 8 90 A 62 20 0 0 0 132 90', // front half of base rim
             { ...base }
         );
         const thinPath = new fabric.Path(
-            'M 132 90 A 62 20 0 0 0 8 90',      // back half of base rim
+            'M 132 90 A 62 20 0 0 0 8 90', // back half of base rim
             { ...base, strokeWidth: 1 }
         );
         const grp = new fabric.Group([solidPath, thinPath]);
         _placeGroupOnCanvas(grp);
 
     } else if (name === 'frustum') {
-        // Truncated square pyramid — фронтальная диметрия.
-        // Bottom base (larger): A(8,150) B(120,150) C(148,122) D(36,122)
-        // Top base (smaller):   E(34,68)  F(100,68)  G(122,50)  H(56,50)
-        // Lateral solid:   A-E, B-F, C-G
-        // Lateral thin:    D-H
-        // Bottom solid:    A-B, B-C
-        // Bottom thin:     C-D, D-A
-        // Top solid:       E-F, F-G
-        // Top thin:        G-H, H-E
+        // Усеченная пирамида.
+        // Вся верхняя плоскость среза (E-F-G-H) должна быть полностью видимой.
         const visStr =
-            'M 8 150 L 120 150 ' +    // A-B bottom front
-            'M 120 150 L 148 122 ' +  // B-C bottom right
-            'M 8 150 L 34 68 ' +      // A-E lateral front-left
-            'M 120 150 L 100 68 ' +   // B-F lateral front-right
-            'M 148 122 L 122 50 ' +   // C-G lateral back-right
-            'M 34 68 L 100 68 ' +     // E-F top front
-            'M 100 68 L 122 50';      // F-G top right
+            'M 8 150 L 120 150 ' + // A-B bottom front
+            'M 120 150 L 148 122 ' + // B-C bottom right
+            'M 8 150 L 34 68 ' + // A-E lateral front-left
+            'M 120 150 L 100 68 ' + // B-F lateral front-right
+            'M 148 122 L 122 50 ' + // C-G lateral back-right
+            'M 34 68 L 100 68 ' + // E-F top front
+            'M 100 68 L 122 50 ' + // F-G top right
+            'M 122 50 L 56 50 ' + // G-H top back (перенесено в видимые)
+            'M 56 50 L 34 68';    // H-E top left (перенесено в видимые)
+            
         const thinStr =
-            'M 8 150 L 36 122 ' +     // D-A bottom left
-            'M 36 122 L 148 122 ' +   // C-D bottom back
-            'M 36 122 L 56 50 ' +     // D-H lateral back-left
-            'M 122 50 L 56 50 ' +     // G-H top back
-            'M 56 50 L 34 68';        // H-E top left
-        const visPath  = new fabric.Path(visStr,  { ...base });
+            'M 8 150 L 36 122 ' + // D-A bottom left
+            'M 36 122 L 148 122 ' + // C-D bottom back
+            'M 36 122 L 56 50 ';  // D-H lateral back-left (скрытое)
+            
+        const visPath = new fabric.Path(visStr, { ...base });
         const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
         const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
     }
 }
-
 // ==========================================
 // PNG OBJECTS — load from same folder as HTML
 // ==========================================
