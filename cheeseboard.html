@@ -5358,7 +5358,100 @@ canvas.on('mouse:down', (opt) => {
     }
 });
 
-// Long and double-tap for touch
+// New Long and double-tap for touch
+// Переменные для тапов
+let longTapTimer = null;
+let longTapFired = false;
+let lastTapTime = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+
+// Переменные для отслеживания микросдвигов (исправление для Android)
+let startTouchX = 0;
+let startTouchY = 0;
+
+canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    
+    const touch = e.touches[0];
+    const clientX = touch.clientX;
+    const clientY = touch.clientY;
+    
+    // Запоминаем изначальные координаты для проверки сдвига в touchmove
+    startTouchX = clientX;
+    startTouchY = clientY;
+    
+    longTapFired = false;
+
+    // --- Двойной тап ---
+    const now = Date.now();
+    const dx = clientX - lastTapX;
+    const dy = clientY - lastTapY;
+    
+    // ИСПРАВЛЕНО: Правильная формула вычисления дистанции
+    const dist = Math.sqrt(dx * dx + dy * dy); 
+
+    if (now - lastTapTime < 350 && dist < 30) {
+        // Это двойной тап
+        longTapFired = true;
+        clearTimeout(longTapTimer);
+        
+        // Fabric.js обычно лучше понимает само событие e, а не e.touches[0]
+        const target = canvas.findTarget(e); 
+        if (target) { 
+            canvas.setActiveObject(target); 
+            canvas.requestRenderAll(); 
+        }
+        if (canvas.getActiveObject()) showCtxMenu(clientX, clientY);
+        
+        lastTapTime = 0; // Сбрасываем, чтобы избежать случайного тройного тапа
+        return;
+    }
+    
+    lastTapTime = now;
+    lastTapX = clientX;
+    lastTapY = clientY;
+
+    // --- Долгий тап ---
+    clearTimeout(longTapTimer); // На всякий случай сбрасываем предыдущий
+    longTapTimer = setTimeout(() => {
+        longTapFired = true;
+        const target = canvas.findTarget(e); 
+        if (target) { 
+            canvas.setActiveObject(target); 
+            canvas.requestRenderAll(); 
+        }
+        if (canvas.getActiveObject()) showCtxMenu(clientX, clientY);
+    }, 600);
+    
+}, { passive: true });
+
+// Жесткая отмена (для отпускания пальца)
+const _cancelLongTap = () => { 
+    clearTimeout(longTapTimer); 
+    longTapTimer = null; 
+};
+
+// Мягкая отмена (для движения пальца)
+const _handleTouchMove = (e) => {
+    if (!longTapTimer) return; // Если таймера уже нет, ничего не делаем
+    
+    const touch = e.touches[0];
+    const dx = touch.clientX - startTouchX;
+    const dy = touch.clientY - startTouchY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    // ИСПРАВЛЕНО: Отменяем долгий тап, только если палец съехал более чем на 15 пикселей
+    if (dist > 15) {
+        _cancelLongTap();
+    }
+};
+
+canvas.upperCanvasEl.addEventListener('touchend',    _cancelLongTap, { passive: true });
+canvas.upperCanvasEl.addEventListener('touchcancel', _cancelLongTap, { passive: true });
+// Используем новую функцию для touchmove
+canvas.upperCanvasEl.addEventListener('touchmove',   _handleTouchMove, { passive: true });
+/*
 // Long-tap + double-tap for touch
 let longTapTimer = null;
 let longTapFired = false;
@@ -5404,6 +5497,10 @@ const _cancelLongTap = () => { clearTimeout(longTapTimer); longTapTimer = null; 
 canvas.upperCanvasEl.addEventListener('touchend',    _cancelLongTap, { passive: true });
 canvas.upperCanvasEl.addEventListener('touchmove',   _cancelLongTap, { passive: true });
 canvas.upperCanvasEl.addEventListener('touchcancel', _cancelLongTap, { passive: true });
+
+*/
+
+
 // Helper: get serializable data for an object that may be inside
 // an activeSelection or group — always returns ABSOLUTE canvas coords.
 // 'o.toObject()' alone returns LOCAL coords when inside a selection/group,
