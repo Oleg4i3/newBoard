@@ -549,10 +549,10 @@
                     </div>
                     <h4>Objects (PNG)</h4>
                     <div class="shape-grid">
-                        <div class="shape-item" onclick="insertPngShape('sphere.png')" data-tooltip="Sphere"><span class="shape-icon">🔵</span>Sphere</div>
-                        <div class="shape-item" onclick="insertPngShape('ball.png')" data-tooltip="Ball"><span class="shape-icon">⚽</span>Ball</div>
+                        <div class="shape-item" onclick="insertPngShape('sphere.png')" data-tooltip="Sphere"><span class="shape-icon">🌐</span>Globe</div>
+                        <div class="shape-item" onclick="insertPngShape('ball.png')" data-tooltip="Ball"><span class="shape-icon">🪩</span>Ball</div>
                         <div class="shape-item" onclick="insertPngShape('ruler.png')" data-tooltip="Ruler"><span class="shape-icon">📏</span>Ruler</div>
-                        <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">📐</span>Prot</div>
+                        <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">⊾</span>Prot</div>
                     </div>
                     
                     <h4>Color & Border</h4>
@@ -2831,7 +2831,7 @@ function _placeGroupOnCanvas(grp) {
 
 function insert3DShape(name) {
     const stroke = settings.shape.stroke || '#222222';
-    const sw = 2;   // default line width = 2pt
+    const sw = 2;   // was default line width = 2pt
     const base = {
         fill: 'transparent',
         stroke: stroke,
@@ -5275,7 +5275,7 @@ window.addEventListener('keydown', (e) => {
     if (active && active.type === 'textbox') {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             const passThrough = new Set(['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
-                'Escape','Tab','CapsLock','NumLock','ScrollLock','PrintScreen','Pause']);
+                'Escape','Tab','CapsLock','NumLock','ScrollLock','PrintScreen','Pause','Equal','Minus','NumpadAdd','NumpadSubtract']);
             if (!passThrough.has(e.code)) {
                 // Enter editing mode — don't preventDefault so the keydown reaches Fabric's IText handler
                 active.enterEditing();
