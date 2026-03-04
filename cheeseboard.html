@@ -2841,15 +2841,17 @@ function insert3DShape(name) {
     };
 
     if (name === 'cube') {
-        // Two offset rects (front + back faces) + 4 diagonal connecting edges.
-        // Defined at 180×150px. Front rect: (2,30)–(112,140), Back: (68,2)–(178,112)
+        // Cube — фронтальная диметрия (frontal dimetry).
+        // Front face: square 100×100 at (8,42)–(108,142).
+        // Depth axis at 45°, scale 1:2 → offset (+35,−35) per side/2 = 50px.
+        // Back face: (43,7)–(143,107). All depth edges = 35√2 ≈ 49.5px, angle = 45°.
         const pathStr =
-            'M 2 30 L 112 30 L 112 140 L 2 140 Z ' +          // front face
-            'M 68 2 L 178 2 L 178 112 L 68 112 Z ' +          // back face
-            'M 2 30 L 68 2 ' +                                  // top-left edge
-            'M 112 30 L 178 2 ' +                               // top-right edge
-            'M 2 140 L 68 112 ' +                               // bottom-left edge
-            'M 112 140 L 178 112';                              // bottom-right edge
+            'M 8 42 L 108 42 L 108 142 L 8 142 Z ' +   // front face
+            'M 43 7 L 143 7 L 143 107 L 43 107 Z ' +   // back face
+            'M 8 42 L 43 7 ' +                          // top-left depth edge
+            'M 108 42 L 143 7 ' +                       // top-right depth edge
+            'M 108 142 L 143 107 ' +                    // bottom-right depth edge
+            'M 8 142 L 43 107';                         // bottom-left depth edge
         const grp = new fabric.Group([
             new fabric.Path(pathStr, { ...base })
         ]);
@@ -2948,28 +2950,28 @@ function insert3DShape(name) {
         const grp = new fabric.Group([visPath, thinPath]);
         _placeGroupOnCanvas(grp);
 
-    } else if (name === 'octahedron') {
-        // Regular octahedron — oblique projection.
-        // 6 vertices: T(78,5), Bo(78,158), L(8,82), R(148,82), F(78,122), Bk(100,58)
-        // 12 edges. Only Bo-Bk is a hidden back edge → thin solid (sw=1).
-        const visStr =
-            'M 78 5 L 8 82 ' +       // T-L
-            'M 78 5 L 148 82 ' +     // T-R
-            'M 78 5 L 78 122 ' +     // T-F
-            'M 78 5 L 100 58 ' +     // T-Bk
-            'M 8 82 L 78 122 ' +     // L-F
-            'M 148 82 L 78 122 ' +   // R-F
-            'M 78 158 L 8 82 ' +     // Bo-L
-            'M 78 158 L 148 82 ' +   // Bo-R
-            'M 78 158 L 78 122 ' +   // Bo-F
-            'M 8 82 L 100 58 ' +     // L-Bk
-            'M 148 82 L 100 58';     // R-Bk
-        const thinStr = 'M 78 158 L 100 58'; // Bo-Bk hidden
-        const visPath  = new fabric.Path(visStr,  { ...base });
-        const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
-        const grp = new fabric.Group([visPath, thinPath]);
-        _placeGroupOnCanvas(grp);
-
+    }
+	else if (name === 'octahedron') {
+// Regular octahedron — oblique projection.
+// 6 vertices: T(78,5), Bo(78,158), L(8,82), R(148,82), F(56,105), Bk(100,58)
+// 12 edges. Only Bo-Bk is a hidden back edge → thin solid (sw=1).
+const visStr =
+'M 78 5 L 8 82 ' + // T-L
+'M 78 5 L 148 82 ' + // T-R
+'M 78 5 L 56 105 ' + // T-F
+'M 78 5 L 100 58 ' + // T-Bk
+'M 8 82 L 56 105 ' + // L-F
+'M 148 82 L 56 105 ' + // R-F
+'M 78 158 L 8 82 ' + // Bo-L
+'M 78 158 L 148 82 ' + // Bo-R
+'M 78 158 L 56 105 ' + // Bo-F
+'M 8 82 L 100 58 ' + // L-Bk
+'M 148 82 L 100 58'; // R-Bk
+const thinStr = 'M 78 158 L 100 58'; // Bo-Bk hidden
+const visPath = new fabric.Path(visStr, { ...base });
+const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
+const grp = new fabric.Group([visPath, thinPath]);
+_placeGroupOnCanvas(grp);
     } else if (name === 'hemisphere') {
         // Hemisphere: dome arc + base rim ellipse.
         // cx=70, cy=90, base rx=62, ry=20; dome radius=62.
@@ -3141,7 +3143,8 @@ let lastPosY = 0;
 
 window.addEventListener('keydown', (e) => {
     // Always let browser/Fabric handle keys when a real input or Fabric's hidden textarea has focus
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+	if (e.target.tagName === 'INPUT') return;
+	if (e.target.tagName === 'TEXTAREA' && canvas.isEditing) return;
 
     if (e.code === 'Space' && !isSpacePressed) {
         const active = canvas.getActiveObject();
@@ -3585,7 +3588,7 @@ canvas.on('mouse:up', () => {
             if (type === 'arrow') {
                 const angle = Math.atan2(y2 - y1, x2 - x1);
                 const arrowSize = Math.max(10, settings.shape.width * 2);
-                const arrowAngle = Math.PI / 6;
+                const arrowAngle = Math.PI / 8;
                 
                 const arrowX1 = x2 - arrowSize * Math.cos(angle - arrowAngle);
                 const arrowY1 = y2 - arrowSize * Math.sin(angle - arrowAngle);
@@ -5347,6 +5350,24 @@ window.addEventListener('keydown', (e) => {
         case 'KeyT':
             activateTool('text');
             break;
+        case 'Equal':         // + / = key
+        case 'NumpadAdd': {
+            e.preventDefault();
+            const _z1 = canvas.getZoom();
+            const _nz1 = Math.min(_z1 * 1.1, 10);
+            canvas.zoomToPoint({ x: canvas.width / 2, y: canvas.height / 2 }, _nz1);
+            canvas.requestRenderAll();
+            break;
+        }
+        case 'Minus':
+        case 'NumpadSubtract': {
+            e.preventDefault();
+            const _z2 = canvas.getZoom();
+            const _nz2 = Math.max(_z2 / 1.1, 0.1);
+            canvas.zoomToPoint({ x: canvas.width / 2, y: canvas.height / 2 }, _nz2);
+            canvas.requestRenderAll();
+            break;
+        }
     }
 
     // Group / Ungroup shortcuts
