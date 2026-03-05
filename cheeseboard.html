@@ -2909,19 +2909,18 @@ function insert3DShape(name) {
 
     } else if (name === 'tetrahedron') {
         // Треугольная пирамида: горизонтальное ребро основы сзади.
-        // C(18,118) — задняя-левая точка, D(108,118) — задняя-правая точка (C-D горизонтально).
+        // C(0,118) — задняя-левая точка, D(140,118) — задняя-правая точка (C-D горизонтально).
         // A(80,148) — передняя вершина основы (сдвинута вправо от центра, чтобы ребро A-T не сливалось с высотой).
         // T(63,8) — верхняя вершина (апекс).
-        const visStr =
-            'M 80 148 L 18 118 ' + // A-C (левое переднее ребро основы)
-            'M 80 148 L 108 118 ' + // A-D (правое переднее ребро основы)
+     const visStr =
+            'M 80 148 L 0 118 ' + // A-C (левое переднее ребро основы)
+            'M 80 148 L 140 118 ' + // A-D (правое переднее ребро основы)
             'M 80 148 L 63 8 ' + // A-T (переднее боковое ребро, теперь под наклоном)
-            'M 18 118 L 63 8 ' + // C-T (левый боковой контур)
-            'M 108 118 L 63 8 '; // D-T (правый боковой контур)
+            'M 0 118 L 63 8 ' + // C-T (левый боковой контур)
+            'M 140 118 L 63 8 '; // D-T (правый боковой контур)
         
         const thinStr =
-            'M 18 118 L 108 118'; // C-D (заднее горизонтальное ребро основы, скрыто)
-            
+            'M 0 118 L 140 118'; // C-D (заднее горизонтальное ребро основы, скрыто)
         const visPath = new fabric.Path(visStr, { ...base });
         const thinPath = new fabric.Path(thinStr, { ...base, strokeWidth: 1 });
         const grp = new fabric.Group([visPath, thinPath]);
@@ -8261,32 +8260,44 @@ function _pivotRotateHandler(eventData, transform, x, y) {
     // Force flag so _pivotRedraw shows rays immediately
     _pivotRotating = true;
 
-    if (transform._pvLastAngle === undefined) {
-        transform._pvLastAngle = Math.atan2(transform.ey - pivot.y, transform.ex - pivot.x);
-    }
     const curAngle = Math.atan2(y - pivot.y, x - pivot.x);
-    let deltaRad   = curAngle - transform._pvLastAngle;
 
-   if (eventData.shiftKey || snapEnabled) {
-      const totalDeg = obj.angle + fabric.util.radiansToDegrees(deltaRad);
-      const snapped  = Math.round(totalDeg / 15) * 15;
-      deltaRad = fabric.util.degreesToRadians(snapped - obj.angle);
-  }
+    if (transform._pvLastAngle === undefined) {
+        // Initialise on first call: remember start cursor angle and start object angle
+        transform._pvLastAngle  = Math.atan2(transform.ey - pivot.y, transform.ex - pivot.x);
+        transform._pvAccumAngle = obj.angle; // degrees — accumulated raw target angle
+    }
 
+    // Incremental delta — NORMALISED to [−π, π] to prevent ±180° wrap-around jump
+    let deltaRad = curAngle - transform._pvLastAngle;
+    if (deltaRad >  Math.PI) deltaRad -= 2 * Math.PI;
+    if (deltaRad < -Math.PI) deltaRad += 2 * Math.PI;
 
-    const deltaDeg = fabric.util.radiansToDegrees(deltaRad);
-    const c        = obj.getCenterPoint();
-    const cos = Math.cos(deltaRad), sin = Math.sin(deltaRad);
+    // Accumulate raw angle (degrees) from drag start
+    transform._pvAccumAngle += fabric.util.radiansToDegrees(deltaRad);
+    transform._pvLastAngle   = curAngle;
+
+    // Snap is computed against the ACCUMULATED angle, not incrementally.
+    // This prevents oscillation when the cursor barely crosses a snap boundary.
+    let targetDeg;
+    if (eventData.shiftKey || snapEnabled) {
+        targetDeg = Math.round(transform._pvAccumAngle / 15) * 15;
+    } else {
+        targetDeg = transform._pvAccumAngle;
+    }
+
+    const deltaDeg   = targetDeg - obj.angle;
+    const deltaRadFinal = fabric.util.degreesToRadians(deltaDeg);
+    const c   = obj.getCenterPoint();
+    const cos = Math.cos(deltaRadFinal), sin = Math.sin(deltaRadFinal);
     const dx  = c.x - pivot.x, dy = c.y - pivot.y;
 
     obj.setPositionByOrigin(
         new fabric.Point(pivot.x + dx * cos - dy * sin, pivot.y + dx * sin + dy * cos),
         'center', 'center'
     );
-    obj.rotate(obj.angle + deltaDeg);
+    obj.rotate(targetDeg);
     obj.setCoords();
-
-    transform._pvLastAngle = curAngle;
 
     // ── Bug 1 fix: explicit live sync ───────────────────────────────────────
     // Fabric may not fire object:rotating reliably for custom control actions,
@@ -8487,10 +8498,25 @@ canvas.on('object:moving', function (e) {
 canvas.on('object:scaling', function (e) {
     if (!snapEnabled) return;
     const o = e.target; if (!o || !o.width || !o.height) return;
+
+    // Fabric's scaling transform keeps the OPPOSITE corner fixed.
+    // e.transform.originX/Y tell us which corner is the anchor
+    // ('left'/'right'/'center' and 'top'/'bottom'/'center').
+    // We must save that anchor position BEFORE changing scale, then
+    // restore it AFTER — otherwise left/top go out of sync and the
+    // object jumps wildly when dragging left or top handles.
+    const t = e.transform;
+    const originX = (t && t.originX) ? t.originX : 'left';
+    const originY = (t && t.originY) ? t.originY : 'top';
+    const anchor  = o.translateToOriginPoint(o.getCenterPoint(), originX, originY);
+
     const sw = Math.max(gridSize, _snapV(o.getScaledWidth()));
     const sh = Math.max(gridSize, _snapV(o.getScaledHeight()));
     o.scaleX = sw / o.width;
     o.scaleY = sh / o.height;
+
+    // Restore the fixed corner after the snap so left/top stay consistent.
+    o.setPositionByOrigin(anchor, originX, originY);
     o.setCoords();
 });
 
@@ -8499,7 +8525,15 @@ canvas.on('object:rotating', function (e) {
     if (!snapEnabled) return;
     const o = e.target; if (!o) return;
     if (o._pivotLocal) return;          // pivot path already snaps via CHANGE 2
+
+    // Save center BEFORE changing angle: getCenterPoint() uses the full transform
+    // matrix (left, top, angle, scale…), so it must be called before the angle write.
+    const center = o.getCenterPoint();
     o.angle = Math.round(o.angle / 15) * 15;
+    // Restore the center position after the angle snap.
+    // Without this Fabric's left/top (which encode the top-left corner, not center)
+    // go out of sync with the new angle → object jumps chaotically on every frame.
+    o.setPositionByOrigin(center, 'center', 'center');
     o.setCoords();
 });
 
