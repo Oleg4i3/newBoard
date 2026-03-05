@@ -8471,6 +8471,103 @@ function handlePivotMessage(type, data) {
 
 
 // ==========================================
+// DRAG & DROP FILE IMPORT  🖼
+// ==========================================
+(function initDragDrop() {
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    // Visual drop-zone overlay — shown on drag-enter
+    const overlay = document.createElement('div');
+    overlay.id = 'drop-overlay';
+    Object.assign(overlay.style, {
+        position: 'absolute', inset: '0', zIndex: '9998',
+        display: 'none', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(37,99,235,0.12)',
+        border: '3px dashed #2563eb',
+        borderRadius: '8px',
+        pointerEvents: 'none',
+        fontSize: '28px',
+        color: '#2563eb',
+        fontWeight: '600',
+        gap: '12px',
+        flexDirection: 'column',
+    });
+    overlay.innerHTML = '<span style="font-size:52px">&#x1F5BC;</span><span>Drop image or PDF</span>';
+    wrapper.appendChild(overlay);
+
+    let _dragCounter = 0; // track enter/leave across child elements
+
+    wrapper.addEventListener('dragenter', function (e) {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+        e.preventDefault();
+        _dragCounter++;
+        overlay.style.display = 'flex';
+    });
+
+    wrapper.addEventListener('dragleave', function (e) {
+        _dragCounter--;
+        if (_dragCounter <= 0) { _dragCounter = 0; overlay.style.display = 'none'; }
+    });
+
+    wrapper.addEventListener('dragover', function (e) {
+        // Must prevent default so 'drop' fires (otherwise browser opens the file)
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    wrapper.addEventListener('drop', function (e) {
+        e.preventDefault();
+        _dragCounter = 0;
+        overlay.style.display = 'none';
+
+        const files = e.dataTransfer ? e.dataTransfer.files : null;
+        if (!files || !files.length) return;
+
+        // Canvas coordinates of the drop point
+        const rect = wrapper.getBoundingClientRect();
+        const dropX = (e.clientX - rect.left  - canvas.viewportTransform[4]) / canvas.getZoom();
+        const dropY = (e.clientY - rect.top    - canvas.viewportTransform[5]) / canvas.getZoom();
+
+        Array.from(files).forEach(file => _importDroppedFile(file, dropX, dropY));
+    });
+
+    async function _importDroppedFile(file, dropX, dropY) {
+        if (file.type.includes('image')) {
+            setStatus('Processing image\u2026', 'ok');
+            const doLoad = (dataUrl) => {
+                fabric.Image.fromURL(dataUrl, (img) => {
+                    const sc = img.width > 900 ? 900 / img.width : 1;
+                    img.scale(sc);
+                    img.set({
+                        left: dropX - (img.width  * sc) / 2,
+                        top:  dropY - (img.height * sc) / 2
+                    });
+                    setupImportedImage(img, file.name);
+                    setStatus('Image imported', 'ok');
+                });
+            };
+            try {
+                const optimized = await optimizeImageBeforeImport(file);
+                const reader = new FileReader();
+                reader.onload = (ev) => doLoad(ev.target.result);
+                reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+            } catch (_) {
+                const reader = new FileReader();
+                reader.onload = (ev) => doLoad(ev.target.result);
+                reader.readAsDataURL(file);
+            }
+        } else if (file.type === 'application/pdf') {
+            // Re-use the existing PDF pipeline by faking a file-input object
+            handleImport({ files: [file], value: '' });
+        } else {
+            setStatus('Unsupported file type: ' + file.type, 'err');
+        }
+    }
+})();
+
+
+// ==========================================
 // SNAP TO GRID  🧲
 // ==========================================
 let snapEnabled = false;
