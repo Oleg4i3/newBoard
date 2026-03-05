@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🧀 cheeseboard</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Bad+Script&family=Neucha&family=Pacifico&family=Lobster&family=Pangolin&family=Amatic+SC:wght@400;700&display=swap" rel="stylesheet">
     <style>
         /* --- CSS STYLES --boo- */
         body, html { 
@@ -305,7 +308,168 @@
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
         .ctx-align-btn:hover, .ctx-align-btn.active { background: rgba(255,255,255,0.2); color:#fff; }
+
+        /* ── Custom font picker ──────────────────────────────────── */
+        .font-picker-wrap { position: relative; flex: 1; min-width: 0; }
+        .font-picker-trigger {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 3px 7px; border-radius: 5px; cursor: pointer; user-select: none;
+            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+            color: #fff; font-size: 14px; min-width: 0; overflow: hidden;
+            white-space: nowrap; text-overflow: ellipsis; gap: 4px;
+        }
+        .font-picker-trigger:hover { background: rgba(255,255,255,0.2); }
+        .font-picker-trigger .fp-arrow { font-size: 9px; opacity:.6; flex-shrink:0; }
+        .font-picker-dropdown {
+            position: fixed; z-index: 99999;
+            background: #1e1e1e; border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            overflow-y: auto; max-height: 320px; min-width: 200px;
+            display: none; flex-direction: column; padding: 4px 0;
+        }
+        .font-picker-dropdown.fp-open { display: flex; }
+        .fp-group-label {
+            font-size: 9px; text-transform: uppercase; color: rgba(255,255,255,0.35);
+            padding: 6px 10px 2px; letter-spacing:.06em; pointer-events:none;
+        }
+        .fp-item {
+            padding: 5px 12px; cursor: pointer; font-size: 16px; color: #fff;
+            white-space: nowrap; transition: background .1s;
+        }
+        .fp-item:hover  { background: rgba(255,255,255,0.12); }
+        .fp-item.fp-sel { background: rgba(37,99,235,0.35); }
     </style>
+<script>
+// ══════════════════════════════════════════════════════════════
+// FONT PICKER
+// ══════════════════════════════════════════════════════════════
+var FP_FONTS = [
+    {group:'System',     value:'Arial',           label:'Arial'},
+    {group:'System',     value:'Georgia',          label:'Georgia'},
+    {group:'System',     value:'Courier New',      label:'Courier New'},
+    {group:'System',     value:'Times New Roman',  label:'Times New Roman'},
+    {group:'System',     value:'Verdana',          label:'Verdana'},
+    {group:'System',     value:'Impact',           label:'Impact'},
+    {group:'Handwriting',value:'Caveat',           label:'Caveat'},
+    {group:'Handwriting',value:'Bad Script',       label:'Bad Script'},
+    {group:'Handwriting',value:'Neucha',           label:'Neucha'},
+    {group:'Handwriting',value:'Pacifico',         label:'Pacifico'},
+    {group:'Handwriting',value:'Lobster',          label:'Lobster'},
+    {group:'Handwriting',value:'Pangolin',         label:'Pangolin'},
+    {group:'Handwriting',value:'Amatic SC',        label:'Amatic SC'}
+];
+var _fpOpen = false;
+
+function fpBuild() {
+    // Dropdown is a direct child of <body> — NOT inside ctx-menu.
+    // Reason: ctx-menu has backdrop-filter:blur() which creates a new containing
+    // block, making position:fixed children position relative to ctx-menu instead
+    // of the viewport. Moving to body restores correct viewport positioning.
+    var dd = document.getElementById('fp-dropdown');
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'fp-dropdown';
+        dd.className = 'font-picker-dropdown';
+        document.body.appendChild(dd);
+    }
+    if (dd.childElementCount > 0) return;
+    var lastGroup = null;
+    FP_FONTS.forEach(function(f) {
+        if (f.group !== lastGroup) {
+            var gl = document.createElement('div');
+            gl.className = 'fp-group-label';
+            gl.textContent = f.group;
+            dd.appendChild(gl);
+            lastGroup = f.group;
+        }
+        var item = document.createElement('div');
+        item.className = 'fp-item';
+        item.dataset.value = f.value;
+        item.style.fontFamily = "'" + f.value + "'";
+        item.textContent = f.label;
+        item.addEventListener('mousedown', function(e) {
+            e.stopPropagation();
+            fpSelect(f.value, f.label);
+        });
+        dd.appendChild(item);
+    });
+}
+
+function fpToggle(e) {
+    e.stopPropagation();
+    fpBuild();
+    var dd  = document.getElementById('fp-dropdown');
+    var btn = document.getElementById('fp-trigger');
+    if (!dd || !btn) return;
+    if (_fpOpen) { fpClose(); return; }
+    var r = btn.getBoundingClientRect();
+    dd.style.left  = r.left + 'px';
+    dd.style.top   = (r.bottom + 4) + 'px';
+    dd.style.width = Math.max(r.width, 200) + 'px';
+    dd.classList.add('fp-open');
+    _fpOpen = true;
+    var sel = dd.querySelector('.fp-sel');
+    if (sel) sel.scrollIntoView({block:'nearest'});
+}
+
+function fpClose() {
+    var dd = document.getElementById('fp-dropdown');
+    if (dd) dd.classList.remove('fp-open');
+    _fpOpen = false;
+}
+
+function fpSelect(value, label) {
+    fpClose();
+    document.getElementById('ctx-font-family').value = value;
+    var lbl = document.getElementById('fp-label');
+    if (lbl) { lbl.textContent = label || value; lbl.style.fontFamily = "'" + value + "'"; }
+    document.querySelectorAll('#fp-dropdown .fp-item').forEach(function(el) {
+        el.classList.toggle('fp-sel', el.dataset.value === value);
+    });
+    if (typeof ctxSetFont === 'function') ctxSetFont();
+}
+
+function fpSetValue(value) {
+    document.getElementById('ctx-font-family').value = value;
+    var f   = FP_FONTS.find(function(x){ return x.value === value; });
+    var lbl = document.getElementById('fp-label');
+    if (lbl) { lbl.textContent = f ? f.label : value; lbl.style.fontFamily = "'" + value + "'"; }
+    document.querySelectorAll('#fp-dropdown .fp-item').forEach(function(el) {
+        el.classList.toggle('fp-sel', el.dataset.value === value);
+    });
+}
+
+document.addEventListener('mousedown', function(e) {
+    if (!_fpOpen) return;
+    var wrap = document.getElementById('fp-wrap');
+    var dd   = document.getElementById('fp-dropdown');
+    if (wrap && !wrap.contains(e.target) && dd && !dd.contains(e.target)) fpClose();
+});
+
+// Pre-warm Cyrillic font subsets
+(function() {
+    var families = ['Caveat','Bad Script','Neucha','Pacifico','Lobster','Pangolin','Amatic SC'];
+    var cyrText  = '\u0410\u0430\u0411\u0431\u0412\u0432 Aa';
+    var el = document.createElement('div');
+    el.setAttribute('aria-hidden','true');
+    Object.assign(el.style, {
+        position:'absolute', top:'-9999px', left:'-9999px',
+        opacity:'0', pointerEvents:'none', fontSize:'16px'
+    });
+    families.forEach(function(f) {
+        var span = document.createElement('span');
+        span.style.fontFamily = "'" + f + "'";
+        span.textContent = cyrText;
+        el.appendChild(span);
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+        document.body.appendChild(el);
+        document.fonts.ready.then(function() {
+            if (el.parentNode) el.parentNode.removeChild(el);
+        });
+    });
+})();
+</script>
 </head>
 <body>
 
@@ -625,16 +789,13 @@
     <div id="ctx-text-section" style="display:none; flex-direction:column; gap:5px;">
         <!-- Font family + size -->
         <div class="ctx-font-row">
-            <select id="ctx-font-family" onchange="ctxSetFont()">
-                <option value="Arial">Arial</option>
-                <option value="Georgia">Georgia</option>
-                <option value="Courier New">Courier New</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Verdana">Verdana</option>
-                <option value="Trebuchet MS">Trebuchet MS</option>
-                <option value="Impact">Impact</option>
-                <option value="Comic Sans MS">Comic Sans MS</option>
-            </select>
+            <div class="font-picker-wrap" id="fp-wrap">
+                <div class="font-picker-trigger" id="fp-trigger" onclick="fpToggle(event)">
+                    <span id="fp-label" style="font-family:Arial">Arial</span>
+                    <span class="fp-arrow">&#9660;</span>
+                </div>
+            </div>
+            <input type="hidden" id="ctx-font-family" value="Arial">
             <input type="number" id="ctx-font-size" value="20" min="6" max="200" oninput="ctxSetFontSize(this.value)" data-tooltip="Font size">
         </div>
         <!-- Bold / Italic / Underline + alignment -->
@@ -3123,6 +3284,38 @@ function handleEraser(e) {
     }
 }
 
+// ── Eraser cursor: survive Fabric's per-frame cursor override ────────────────
+// Fabric calls _setCursorFromEvent() on EVERY mousemove and writes the object's
+// hoverCursor ('move') to the canvas element — overriding anything set in
+// mouse:over. The only reliable fix: wrap _setCursorFromEvent so that when
+// eraser is active it always returns our cursor instead of the object's.
+(function patchEraserCursor() {
+    var ERASER_CURSOR = [
+        'url("data:image/svg+xml,',
+        '%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 width%3D%2224%22 height%3D%2224%22%3E',
+        '%3Crect x%3D%222%22 y%3D%2213%22 width%3D%2213%22 height%3D%228%22 rx%3D%222%22 fill%3D%22%23ef4444%22%2F%3E',
+        '%3Crect x%3D%222%22 y%3D%2217%22 width%3D%2213%22 height%3D%224%22 fill%3D%22%23fca5a5%22%2F%3E',
+        '%3Cline x1%3D%222%22 y1%3D%2217%22 x2%3D%2215%22 y2%3D%2217%22 stroke%3D%22%23fff%22 stroke-width%3D%221%22%2F%3E',
+        '%3Cline x1%3D%2214%22 y1%3D%2212%22 x2%3D%2221%22 y2%3D%225%22 stroke%3D%22%23ef4444%22 stroke-width%3D%222.5%22 stroke-linecap%3D%22round%22%2F%3E',
+        '%3C%2Fsvg%3E") 4 20, cell'
+    ].join('');
+
+    var _orig = canvas._setCursorFromEvent.bind(canvas);
+    canvas._setCursorFromEvent = function(e, target) {
+        if (currentTool === 'eraser') {
+            if (target && target.isPinned) {
+                this.setCursor('not-allowed');
+            } else if (target) {
+                this.setCursor(ERASER_CURSOR);
+            } else {
+                this.setCursor('not-allowed');
+            }
+            return;
+        }
+        _orig(e, target);
+    };
+})();
+
 // ==========================================
 // PANNING (SPACEBAR) LOGIC
 // ==========================================
@@ -3624,6 +3817,12 @@ canvas.on('mouse:up', () => {
         addToHistory(activeShape);
         broadcast('draw', { data: activeShape.toObject(['id', 'lineType', 'lineX1', 'lineY1', 'lineX2', 'lineY2']) });
         activeShape = null;
+
+        // After lines/arrows stay on the same tool so user can draw several in a row.
+        // After all other shapes switch to select so the new shape can be moved immediately.
+        if (!['line', 'dashed', 'arrow'].includes(type)) {
+            activateTool('select');
+        }
     }
 });
 
@@ -5640,7 +5839,7 @@ function showCtxMenu(x, y) {
     // ── Populate text controls ────────────────────────────────────────────────
     if (allText) {
         const tb = targets[0] || obj;
-        document.getElementById('ctx-font-family').value = tb.fontFamily || 'Arial';
+        fpSetValue(tb.fontFamily || 'Arial');
         document.getElementById('ctx-font-size').value   = tb.fontSize   || 20;
         document.getElementById('ctx-bold-btn').classList.toggle('active',      tb.fontWeight === 'bold');
         document.getElementById('ctx-italic-btn').classList.toggle('active',    tb.fontStyle  === 'italic');
@@ -6082,11 +6281,21 @@ function _textSyncProps() {
 function ctxSetFont() {
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'textbox') return;
-    _undoCaptureSelection(obj);
-    obj.set('fontFamily', document.getElementById('ctx-font-family').value);
-    canvas.requestRenderAll();
-    _undoCommit(obj);
-    broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+    const fontFamily = document.getElementById('ctx-font-family').value;
+    const cyr = '\u0410\u0430\u0411\u0431\u0412\u0432\u0413\u0433\u0414\u0414\u0415\u0435\u0416\u0436';
+    Promise.all([
+        document.fonts.load('16px "' + fontFamily + '"', cyr),
+        document.fonts.load('16px "' + fontFamily + '"', 'AaBbCc'),
+        document.fonts.load('bold 16px "' + fontFamily + '"', cyr),
+    ]).then(function() {
+        _undoCaptureSelection(obj);
+        obj.set('fontFamily', fontFamily);
+        obj.dirty = true;
+        obj.initDimensions();
+        canvas.requestRenderAll();
+        _undoCommit(obj);
+        broadcast('modified', { data: obj.toObject(_textSyncProps()) });
+    });
 }
 function ctxSetFontSize(val) {
     const obj = canvas.getActiveObject();
