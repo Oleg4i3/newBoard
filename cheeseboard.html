@@ -524,7 +524,12 @@ document.addEventListener('mousedown', function(e) {
             </div>
             
             <div id="host-controls">
-                <button class="btn btn-host" onclick="startHost()">Host</button>
+                 <button class="btn btn-host" onclick="startHost()" data-tooltip="Share board" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                </button>
             </div>
             <div id="join-controls" class="hidden">
                 <div style="display: flex; align-items: center; gap: 4px;">
@@ -563,7 +568,7 @@ document.addEventListener('mousedown', function(e) {
                     </label>
                     <label class="mode-option">
                         <input type="radio" name="connection-mode" value="mqtt" onchange="setConnectionMode('mqtt')">
-                        Cloud MQTT (Bugy)
+                        Cloud MQTT (Paper mode: No undo/erase/move)
                     </label>
 					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
@@ -630,12 +635,12 @@ document.addEventListener('mousedown', function(e) {
                 
 				<!-- Firebase секция -->
 <div id="firebase-section" class="mode-section">
-    <h5>Firebase Room</h5>
+    <h5>Room name</h5>
     <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
         <input type="text" id="firebase-room-id" class="id-box" placeholder="Room ID" style="width: 120px;">
         <button class="btn btn-join" onclick="generateFirebaseLink()">Generate Link</button>
     </div>
-    <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Share this link for iOS compatible collaboration.</div>
+    <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Share this link for collaboration.</div>
     <div style="display: flex; gap: 5px; align-items: center;">
         <input type="text" id="firebase-link-display" class="id-box" readonly style="width: 180px;" onclick="copyFirebaseLink()">
         <button class="btn btn-copy" onclick="copyFirebaseLink()">Copy</button>
