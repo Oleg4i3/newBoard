@@ -399,6 +399,58 @@
         .pp-btns button { padding: 7px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; transition: .15s; }
         #pp-yes  { background: #2563eb; color: #fff; }  #pp-yes:hover  { background: #1d4ed8; }
         #pp-no   { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; } #pp-no:hover { background: #e2e8f0; }
+
+        /* ── MOBILE PHONE UI ────────────────────────────────────── */
+        /* ••• button and toolbar tab hidden by default; shown via data-is-phone */
+        #mob-overflow-wrap  { display: none; }
+        #mob-toolbar-toggle { display: none; }
+        body[data-is-phone] #mob-overflow-wrap  { display: flex !important; align-items: center; }
+        body[data-is-phone] #mob-toolbar-toggle { display: block; }
+
+        /* Compact layout: hide secondary buttons */
+        .mobile-ui .mob-hide { display: none !important; }
+        .mobile-ui .divider  { display: none !important; }
+
+        /* Slide-up toolbar toggle tab   width: 44px; height: 16px;*/
+        #mob-toolbar-toggle {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            top: 35px; width: 64px; height: 28px;
+            background: #fff; border: 1px solid #ddd; border-top: none;
+            border-radius: 0 0 8px 8px; box-shadow: 0 3px 6px rgba(0,0,0,.1);
+            z-index: 103; cursor: pointer; user-select: none;
+            font-size: 16px; color: #aaa; line-height: 26px; text-align: center;
+            transition: top .3s ease;
+        }
+        .top-bar        { transition: transform .2s ease; }
+        #canvas-wrapper { transition: top .2s ease; }
+        body.toolbar-hidden .top-bar            { transform: translateY(-35px); }
+        body.toolbar-hidden #canvas-wrapper     { top: 0 !important; }
+        body.toolbar-hidden #mob-toolbar-toggle { top: 0; }
+        body.toolbar-hidden #mob-overflow-panel { top: 0; }
+
+        /* Overflow panel */
+        #mob-overflow-panel {
+            display: none; position: absolute; top: 35px; left: 0; right: 0;
+            background: #fff; border-bottom: 1px solid #ddd;
+            box-shadow: 0 5px 18px rgba(0,0,0,.13);
+            padding: 10px 12px; z-index: 99;
+            flex-direction: column; gap: 8px; transition: top .2s ease;
+        }
+        #mob-overflow-panel.show { display: flex; }
+        #mob-backdrop { display: none; position: fixed; inset: 0; z-index: 98; }
+        #mob-backdrop.show { display: block; }
+
+        /* Shapes sub-panel inside overflow */
+        #mob-shapes-panel {
+            display: none; flex-direction: column; gap: 6px;
+            border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px;
+        }
+        #mob-shapes-panel.show { display: flex; }
+
+        .mob-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .mob-row-label { font-size: 9px; color: #aaa; text-transform: uppercase;
+                         min-width: 34px; letter-spacing: .04em; }
+        #mob-overflow-btn { font-size: 16px; letter-spacing: 1px; }
     </style>
 <script>
 // ══════════════════════════════════════════════════════════════
@@ -695,6 +747,14 @@ document.addEventListener('mousedown', function(e) {
                             ❓ Keyboard &amp; Navigation Help
                         </button>
                     </div>
+
+                    <!-- Mobile/Desktop toggle — JS shows this only on phones -->
+                    <div id="desktop-mob-toggle-row" style="display:none;">
+                        <button id="desktop-mob-toggle-btn" onclick="togglePcMode()"
+                            style="font-size:11px;background:#f0fff4;border:1px solid #6ee7b7;border-radius:5px;padding:3px 10px;cursor:pointer;color:#065f46;">
+                            📱 Switch to Mobile mode
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -703,12 +763,12 @@ document.addEventListener('mousedown', function(e) {
 
         <div class="bar-section">
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↶</button>
-			<button class="tool-btn" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
+			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
-            <button class="tool-btn" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
-            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
-            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
-		    <button class="tool-btn" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
+            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
+            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
+            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
+		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
@@ -738,8 +798,8 @@ document.addEventListener('mousedown', function(e) {
                 </div>
             </div>
 
-            <div style="position: relative;">
-                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" data-tooltip="Highlighter (H)">🖍️</button>
+            <div id="highlighter-wrap" style="position: relative;">
+                <button class="tool-btn mob-hide" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" data-tooltip="Highlighter (H)">🖍️</button>
                 <div class="submenu" id="highlighter-menu">
                     <h4>Highlight Color</h4>
                     <div class="color-row" id="highlighter-colors"></div>
@@ -749,11 +809,11 @@ document.addEventListener('mousedown', function(e) {
             </div>
             
             <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" data-tooltip="Eraser (E)">🧼</button>
-            <button class="tool-btn" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
+            <button class="tool-btn mob-hide" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
           
 
-            <div style="position: relative;">
-                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
+            <div id="shape-wrap" style="position: relative;">
+                <button class="tool-btn mob-hide" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
                     <h4>Shape Type</h4>
                     <div class="shape-grid">
@@ -807,17 +867,78 @@ document.addEventListener('mousedown', function(e) {
             </div>
         </div>
         <div class="bar-section">
-            <button class="tool-btn" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
-            <button class="tool-btn" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
+            <button class="tool-btn mob-hide" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
+            <button class="tool-btn mob-hide" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
-   
 
-       
+        <!-- Mobile-only ••• button: always visible on phones in both modes -->
+        <div id="mob-overflow-wrap" class="bar-section">
+            <button class="tool-btn" id="mob-overflow-btn" onclick="toggleMobOverflow()" data-tooltip="More tools">•••</button>
+        </div>
 
+    </div><!-- /.top-bar -->
+
+<!-- Mobile: toolbar slide tab -->
+<div id="mob-toolbar-toggle" onclick="toggleMobToolbar()">▲</div>
+<!-- Mobile: outside-tap backdrop -->
+<div id="mob-backdrop" onclick="hideMobOverflow()"></div>
+<!-- Mobile: overflow panel -->
+<div id="mob-overflow-panel">
+    <div class="mob-row">
+        <span class="mob-row-label">Share</span>
+        <button class="tool-btn" onclick="startHost();hideMobOverflow()" data-tooltip="Share / Host">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
     </div>
+    <div class="mob-row">
+        <span class="mob-row-label">Edit</span>
+        <button class="tool-btn" onclick="duplicateSelected();hideMobOverflow()" data-tooltip="Duplicate">❐</button>
+        <button class="tool-btn" onclick="togglePin();hideMobOverflow()" data-tooltip="Pin / Unpin">📌</button>
+        <button class="tool-btn" onclick="groupSelected();hideMobOverflow()" data-tooltip="Group">🪢</button>
+        <button class="tool-btn" onclick="ungroupSelected();hideMobOverflow()" data-tooltip="Ungroup">⛓️</button>
+        <button class="tool-btn" onclick="startCropMode();hideMobOverflow()" data-tooltip="Crop">✂️</button>
+        <button class="tool-btn" onclick="deleteSelected();hideMobOverflow()" data-tooltip="Delete">❌</button>
+    </div>
+    <div class="mob-row">
+        <span class="mob-row-label">Draw</span>
+        <button class="tool-btn" onclick="activateTool('highlighter');hideMobOverflow()" data-tooltip="Highlighter">🖍️</button>
+        <button class="tool-btn" onclick="activateTool('text');hideMobOverflow()" data-tooltip="Text">T</button>
+        <button class="tool-btn" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
+        <button class="tool-btn" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap">🧲</button>
+    </div>
+    <div id="mob-shapes-panel">
+        <div class="mob-row">
+            <span class="mob-row-label">2D</span>
+            <div class="shape-item" onclick="setShapeType('rect');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">▭</span>Rect</div>
+            <div class="shape-item" onclick="setShapeType('circle');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">○</span>Elips</div>
+            <div class="shape-item" onclick="setShapeType('triangle');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">△</span>Tri</div>
+            <div class="shape-item" onclick="setShapeType('line');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">╱</span>Line</div>
+            <div class="shape-item" onclick="setShapeType('arrow');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">↗</span>Arrow</div>
+            <div class="shape-item" onclick="setShapeType('rhombus');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">◇</span>Rhom</div>
+            <div class="shape-item" onclick="setShapeType('hexagon');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">⬡</span>Hex</div>
+            <div class="shape-item" onclick="setShapeType('dashed');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">--</span>Dash</div>
+        </div>
+        <div class="mob-row">
+            <span class="mob-row-label">3D</span>
+            <div class="shape-item" onclick="insert3DShape('cube');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="13" viewBox="0 0 180 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><rect x="2" y="30" width="110" height="110"/><rect x="68" y="2" width="110" height="110"/><line x1="2" y1="30" x2="68" y2="2"/><line x1="112" y1="30" x2="178" y2="2"/><line x1="2" y1="140" x2="68" y2="112"/><line x1="112" y1="140" x2="178" y2="112"/></svg></span>Cube</div>
+            <div class="shape-item" onclick="insert3DShape('cylinder');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
+            <div class="shape-item" onclick="insert3DShape('cone');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
+            <div class="shape-item" onclick="insert3DShape('pyramid');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="14" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
+        </div>
+    </div>
+    <div class="mob-row">
+        <span class="mob-row-label">Board</span>
+        <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save">💾</button>
+        <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open">📁</button>
+    </div>
+    <div class="mob-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:2px;">
+        <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()"
+                style="font-size:11px;width:auto;padding:0 10px;">💻 Desktop mode</button>
+    </div>
+</div>
 
 <!-- HELP MODAL -->
 <div id="help-modal">
@@ -3565,9 +3686,17 @@ let isDrawingShape = false;
 let shapeOrigX, shapeOrigY;
 let activeShape = null;
 let isMultitouch = false;
+// Tracks whether Apple Pencil (pointerType:'pen') is actively drawing.
+// Prevents ghost-touch palm contact from aborting an in-progress Pencil stroke.
+let _isPenDrawing = false;
 
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length > 1) {
+        // If Apple Pencil is currently drawing, ignore phantom palm touches.
+        // The Pencil generates pointerType:'pen' events separately from touch events,
+        // so a second touch is almost certainly an accidental palm contact.
+        if (_isPenDrawing) return;
+
         isMultitouch = true;
         canvas.isDrawingMode = false;
 
@@ -3587,6 +3716,11 @@ canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
         }
     } else {
         isMultitouch = false;
+        // Re-enable drawing mode immediately (may have been disabled by a prior gesture).
+        // Without this, the user has a 120 ms dead zone after every pinch/pan.
+        if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'laser') {
+            canvas.isDrawingMode = true;
+        }
     }
 }, { passive: false });
 
@@ -4282,6 +4416,11 @@ function _abortFreeDrawing() {
 
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length >= 2) {
+        // Apple Pencil guard: a second touch while the Pencil is drawing is almost
+        // always an accidental palm contact — don't abort the stroke or switch to
+        // gesture mode. Two-finger gestures are intentional only when no pen is active.
+        if (_isPenDrawing) return;
+
         isGesturing = true;
         isMultitouch = true;
 
@@ -4344,17 +4483,32 @@ canvas.upperCanvasEl.addEventListener('touchmove', (e) => {
 
 canvas.upperCanvasEl.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) {
+        const wasGesturing = isGesturing;
         isGesturing = false;
-        // Bug 1: delay re-enabling drawing so Fabric fully processes the touchend
-        // and does NOT resume from any lingering internal state.
-        setTimeout(() => {
-            // Abort once more — some Fabric versions reset _isCurrentlyDrawing late
-            _abortFreeDrawing();
+
+        if (wasGesturing) {
+            // After a real two-finger gesture: deferred cleanup to let Fabric fully
+            // settle before we re-enable drawing mode.
+            // Bug 1: delay re-enabling drawing so Fabric fully processes the touchend
+            setTimeout(() => {
+                // Only abort if the user has NOT already started a new stroke.
+                // canvas._isCurrentlyDrawing is true as soon as Fabric's mouse:down
+                // fires in drawing mode — so this guard prevents the deferred abort
+                // from wiping out a fast stroke that began within the cooldown window.
+                if (!canvas._isCurrentlyDrawing) {
+                    _abortFreeDrawing();
+                }
+                isMultitouch = false;
+                if (currentTool === 'pen' || currentTool === 'highlighter') {
+                    canvas.isDrawingMode = true;
+                }
+            }, 80);
+        } else {
+            // Normal single-finger stroke end: no deferred abort needed.
+            // Resetting isMultitouch immediately prevents the 120 ms window
+            // where fast consecutive strokes were being silently dropped.
             isMultitouch = false;
-            if (currentTool === 'pen' || currentTool === 'highlighter') {
-                canvas.isDrawingMode = true;
-            }
-        }, 120);
+        }
     }
 });
 
@@ -6175,9 +6329,14 @@ function showCtxMenu(x, y) {
 function hideCtxMenu() { ctxMenu.classList.remove('show'); }
 
 document.addEventListener('pointerdown', (e) => {
+    // Track Apple Pencil activity so touch handlers can ignore accidental palm contacts.
+    if (e.pointerType === 'pen') _isPenDrawing = true;
     if (e.pointerType === 'touch') return; // тач обрабатывается отдельно
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 });
+// Clear the pen flag on lift or cancel so future palm contacts are handled normally.
+document.addEventListener('pointerup',     (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
+document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
 document.addEventListener('touchstart', (e) => {
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 }, { passive: true });
@@ -9048,39 +9207,64 @@ function handlePivotMessage(type, data) {
         const dropX = (e.clientX - rect.left  - canvas.viewportTransform[4]) / canvas.getZoom();
         const dropY = (e.clientY - rect.top    - canvas.viewportTransform[5]) / canvas.getZoom();
 
-        Array.from(files).forEach(file => _importDroppedFile(file, dropX, dropY));
+        // Process sequentially so multiple images stack vertically
+        (async () => {
+            let curY = dropY;
+            const multi = files.length > 1;
+            for (const file of Array.from(files)) {
+                curY = await _importDroppedFile(file, dropX, curY, multi);
+            }
+        })();
     });
 
-    async function _importDroppedFile(file, dropX, dropY) {
+    // Returns the next Y coordinate.
+    // multi=true  → top-edge placement, Y advances by scaled height + gap.
+    // multi=false → original: image centred on drop point.
+    async function _importDroppedFile(file, dropX, currentY, multi) {
+        const GAP = 40;
+
         if (file.type.includes('image')) {
             setStatus('Processing image\u2026', 'ok');
-            const doLoad = (dataUrl) => {
+
+            const loadImg = (dataUrl) => new Promise(resolve => {
                 fabric.Image.fromURL(dataUrl, (img) => {
                     const sc = img.width > 900 ? 900 / img.width : 1;
                     img.scale(sc);
+                    const sh = img.height * sc;
+                    const sw = img.width  * sc;
                     img.set({
-                        left: dropX - (img.width  * sc) / 2,
-                        top:  dropY - (img.height * sc) / 2
+                        left: dropX - sw / 2,
+                        top:  multi ? currentY : currentY - sh / 2
                     });
                     setupImportedImage(img, file.name);
                     setStatus('Image imported', 'ok');
+                    resolve(multi ? currentY + sh + GAP : currentY);
                 });
-            };
+            });
+
             try {
                 const optimized = await optimizeImageBeforeImport(file);
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                });
+                return await loadImg(dataUrl);
             } catch (_) {
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(file);
+                });
+                return await loadImg(dataUrl);
             }
+
         } else if (file.type === 'application/pdf') {
-            // Re-use the existing PDF pipeline by faking a file-input object
             handleImport({ files: [file], value: '' });
+            return currentY;
         } else {
             setStatus('Unsupported file type: ' + file.type, 'err');
+            return currentY;
         }
     }
 })();
@@ -9344,6 +9528,116 @@ window.addEventListener('keydown', function (e) {
 
     /* Safety: lose focus → laser OFF */
     window.addEventListener('blur', _laserOff);
+})();
+
+// ==========================================
+// MOBILE PHONE UI
+// ==========================================
+(function () {
+    // IDs hidden in mobile compact mode
+    var MOB_HIDE = [
+        'host-controls', 'join-controls', 'session-info',
+        'btn-duplicate', 'btn-group', 'btn-ungroup', 'btn-crop', 'btn-delete',
+        'btn-save', 'btn-open'
+    ];
+    // Note: btn-highlighter, btn-text, btn-shape already carry class mob-hide in HTML;
+    // they are toggled via the class directly without JS re-listing.
+
+    function isPhone() {
+        var t = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        return t && Math.min(screen.width, screen.height) < 550;
+    }
+
+    function applyMobileUI() {
+        document.body.classList.add('mobile-ui');
+        MOB_HIDE.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.add('mob-hide');
+        });
+        _syncToggleBtns(true);
+    }
+
+    function removeMobileUI() {
+        document.body.classList.remove('mobile-ui');
+        MOB_HIDE.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('mob-hide');
+        });
+        hideMobOverflow();
+        _syncToggleBtns(false);
+    }
+
+    function _syncToggleBtns(isMob) {
+        // ••• panel button
+        var b1 = document.getElementById('mob-pc-toggle-btn');
+        if (b1) b1.textContent = isMob ? '💻 Desktop mode' : '📱 Mobile mode';
+        // Desktop share-spoiler button (only visible on phones)
+        var row = document.getElementById('desktop-mob-toggle-row');
+        var b2  = document.getElementById('desktop-mob-toggle-btn');
+        if (row) row.style.display = 'block';   // always show row on phones
+        if (b2)  b2.textContent = isMob ? '💻 Switch to Desktop mode' : '📱 Switch to Mobile mode';
+    }
+
+    // Public: toggles between compact and full UI without page reload
+    window.togglePcMode = function () {
+        if (document.body.classList.contains('mobile-ui')) {
+            localStorage.setItem('cheeseboard-force-pc', '1');
+            removeMobileUI();
+        } else {
+            localStorage.removeItem('cheeseboard-force-pc');
+            applyMobileUI();
+            hideMobOverflow();
+        }
+    };
+
+    // ── overflow panel ──────────────────────────────────────────
+    window.toggleMobOverflow = function () {
+        var p = document.getElementById('mob-overflow-panel');
+        var b = document.getElementById('mob-backdrop');
+        if (!p) return;
+        var open = p.classList.contains('show');
+        if (open) {
+            p.classList.remove('show'); b.classList.remove('show');
+        } else {
+            var sp = document.getElementById('mob-shapes-panel');
+            if (sp) sp.classList.remove('show');
+            p.classList.add('show'); b.classList.add('show');
+        }
+    };
+
+    window.hideMobOverflow = function () {
+        var p = document.getElementById('mob-overflow-panel');
+        var b = document.getElementById('mob-backdrop');
+        var sp = document.getElementById('mob-shapes-panel');
+        if (p)  p.classList.remove('show');
+        if (b)  b.classList.remove('show');
+        if (sp) sp.classList.remove('show');
+    };
+
+    window.toggleMobShapes = function () {
+        var sp = document.getElementById('mob-shapes-panel');
+        if (sp) sp.classList.toggle('show');
+    };
+
+    // ── toolbar slide tab ────────────────────────────────────────
+    window.toggleMobToolbar = function () {
+        var hidden = document.body.classList.toggle('toolbar-hidden');
+        var tab = document.getElementById('mob-toolbar-toggle');
+        if (tab) tab.textContent = hidden ? '▼' : '▲';
+        setTimeout(function () { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 220);
+    };
+
+    // ── init ─────────────────────────────────────────────────────
+    (function init() {
+        if (!isPhone()) return;
+        // data-is-phone is permanent: keeps ••• and slide-tab visible in any mode
+        document.body.setAttribute('data-is-phone', '1');
+        if (localStorage.getItem('cheeseboard-force-pc') === '1') {
+            _syncToggleBtns(false);   // show "📱 Mobile mode" in both buttons
+        } else {
+            applyMobileUI();
+        }
+    })();
 })();
 </script>
 </body>
