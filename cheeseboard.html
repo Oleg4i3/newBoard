@@ -6920,7 +6920,7 @@ canvas.on('before:transform', (e) => {
 // 6. SAVE & LOAD SYSTEM
 // ==========================================
 function saveBoard() {
-    const json = JSON.stringify(canvas.toJSON());
+    const json = JSON.stringify(canvas.toJSON(['id', 'isPinned']));
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     
