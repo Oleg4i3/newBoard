@@ -309,7 +309,49 @@
         }
         .ctx-align-btn:hover, .ctx-align-btn.active { background: rgba(255,255,255,0.2); color:#fff; }
 
-        /* ── Custom font picker ──────────────────────────────────── */
+        /* ── Help floating modal ── */
+        #help-modal {
+            display: none;
+            position: fixed;
+            top: 50px; right: 16px;
+            width: 240px;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(0,0,0,0.10);
+            border-radius: 12px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+            z-index: 500;
+            color: #1e293b;
+            font-size: 11px;
+            line-height: 1.7;
+            user-select: none;
+        }
+        #help-modal.show { display: block; }
+        #help-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 11px 6px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            cursor: move;
+        }
+        #help-modal-header span { font-weight: 700; font-size: 11.5px; color: #2563eb; }
+        #help-modal-close {
+            background: none; border: none; color: rgba(0,0,0,0.35);
+            font-size: 14px; cursor: pointer; line-height: 1; padding: 0 2px;
+        }
+        #help-modal-close:hover { color: #111; }
+        #help-modal-body { padding: 8px 12px 10px; overflow-y: auto; max-height: calc(100vh - 100px); }
+        .hm-section { margin-bottom: 9px; }
+        .hm-section b.hm-head { display: block; color: #2563eb; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+        .hm-row { display: flex; gap: 5px; align-items: baseline; }
+        .hm-key {
+            display: inline-block; background: #f1f5f9;
+            border: 1px solid #cbd5e1; border-radius: 3px;
+            padding: 0px 5px; font-size: 10px; font-family: monospace;
+            color: #0f172a; white-space: nowrap; flex-shrink: 0;
+        }
+        .hm-desc { color: #475569; font-size: 10.5px; }
+    
         .font-picker-wrap { position: relative; flex: 1; min-width: 0; }
         .font-picker-trigger {
             display: flex; align-items: center; justify-content: space-between;
@@ -513,7 +555,7 @@ document.addEventListener('mousedown', function(e) {
                 <div class="mode-switcher">
                     <label class="mode-option">
                         <input type="radio" name="connection-mode" value="ws" onchange="setConnectionMode('ws')">
-                        ⭐ Relay (Recommended)
+                        Relay 
                     </label>
                     <label class="mode-option">
                         <input type="radio" name="connection-mode" value="p2p" onchange="setConnectionMode('p2p')">
@@ -614,6 +656,22 @@ document.addEventListener('mousedown', function(e) {
                         <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                 </div>
+
+                <!-- Опции и помощь (всегда видны внутри спойлера) -->
+                <div style="border-top:1px solid #eee;margin-top:8px;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="show-partner-frame" checked>
+                        Show partner viewport frame
+                    </label>
+
+                    <!-- Help → opens floating modal -->
+                    <div>
+                        <button onclick="toggleHelpModal()"
+                            style="font-size:11px;background:#f0f4ff;border:1px solid #c7d4f7;border-radius:5px;padding:3px 10px;cursor:pointer;color:#2563eb;">
+                            ❓ Keyboard &amp; Navigation Help
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 		
@@ -681,14 +739,12 @@ document.addEventListener('mousedown', function(e) {
                         <div class="shape-item" onclick="setShapeType('rightTriangle')" data-tooltip="Right Triangle"><span class="shape-icon">⊿</span>Right</div>
                         <div class="shape-item" onclick="setShapeType('trapezoid')" data-tooltip="Trapezoid"><span class="shape-icon">⏢</span>Trap</div>
                         <div class="shape-item" onclick="setShapeType('rhombus')" data-tooltip="Rhombus"><span class="shape-icon">◇</span>Rhom</div>
-                        <div class="shape-item" onclick="setShapeType('parallelogram')" data-tooltip="Parallelogram"><span class="shape-icon">▱</span>Para</div>
                         <div class="shape-item" onclick="setShapeType('pentagon')" data-tooltip="Pentagon"><span class="shape-icon">⬠</span>Pent</div>
                         <div class="shape-item" onclick="setShapeType('hexagon')" data-tooltip="Hexagon"><span class="shape-icon">⬡</span>Hex</div>
                         <div class="shape-item" onclick="setShapeType('outlineArrow')" data-tooltip="Outline Arrow"><span class="shape-icon">⇨</span>O-Arr</div>
                         <div class="shape-item" onclick="setShapeType('line')" data-tooltip="Line (L)"><span class="shape-icon">╱</span>Line</div>
                         <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
-					  <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
                     </div>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
@@ -717,6 +773,7 @@ document.addEventListener('mousedown', function(e) {
                         <div class="shape-item" onclick="insertPngShape('ball.png')" data-tooltip="Ball"><span class="shape-icon">🪩</span>Ball</div>
                         <div class="shape-item" onclick="insertPngShape('ruler.png')" data-tooltip="Ruler"><span class="shape-icon">📏</span>Ruler</div>
                         <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">⊾</span>Prot</div>
+                        <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
                     </div>
                     
                     <h4>Color & Border</h4>
@@ -730,7 +787,6 @@ document.addEventListener('mousedown', function(e) {
             <button class="tool-btn" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
-			<input type="checkbox" id="show-partner-frame" data-tooltip="Show partner viewport frame" checked>
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
    
@@ -738,6 +794,53 @@ document.addEventListener('mousedown', function(e) {
        
 
     </div>
+
+<!-- HELP MODAL -->
+<div id="help-modal">
+    <div id="help-modal-header">
+        <span>⌨️ Keyboard &amp; Navigation</span>
+        <button id="help-modal-close" onclick="toggleHelpModal()" data-tooltip="Close">✕</button>
+    </div>
+    <div id="help-modal-body">
+        <div class="hm-section">
+            <b class="hm-head">🛠 Tools</b>
+            <div class="hm-row"><span class="hm-key">V</span><span class="hm-desc">Select</span></div>
+            <div class="hm-row"><span class="hm-key">P</span><span class="hm-desc">Pen</span></div>
+            <div class="hm-row"><span class="hm-key">H</span><span class="hm-desc">Highlighter</span></div>
+            <div class="hm-row"><span class="hm-key">E</span><span class="hm-desc">Eraser</span></div>
+            <div class="hm-row"><span class="hm-key">T</span><span class="hm-desc">Text</span></div>
+            <div class="hm-row"><span class="hm-key">M</span><span class="hm-desc">Toggle snap to grid</span></div>
+            <div class="hm-row"><span class="hm-key">R</span><span class="hm-desc">Rectangle</span></div>
+            <div class="hm-row"><span class="hm-key">C</span><span class="hm-desc">Circle / Ellipse</span></div>
+            <div class="hm-row"><span class="hm-key">L</span><span class="hm-desc">Line</span></div>
+            <div class="hm-row"><span class="hm-key">A</span><span class="hm-desc">Arrow</span></div>
+            <div class="hm-row"><span class="hm-key" style="color:#dc2626;">Hold Ctrl</span><span class="hm-desc">🔴 Laser pointer</span></div>
+        </div>
+        <div class="hm-section">
+            <b class="hm-head">✏️ Editing</b>
+            <div class="hm-row"><span class="hm-key">Ctrl+Z</span><span class="hm-desc">Undo</span></div>
+            <div class="hm-row"><span class="hm-key">Del / ⌫</span><span class="hm-desc">Delete selected</span></div>
+            <div class="hm-row"><span class="hm-key">Ctrl+G</span><span class="hm-desc">Group selected</span></div>
+            <div class="hm-row"><span class="hm-key">Ctrl+⇧+G</span><span class="hm-desc">Ungroup</span></div>
+            <div class="hm-row"><span class="hm-key">Ctrl+C / V</span><span class="hm-desc">Copy / Paste</span></div>
+        </div>
+        <div class="hm-section">
+            <b class="hm-head">🗺 Navigation</b>
+            <div class="hm-row"><span class="hm-key">Space+drag</span><span class="hm-desc">Pan canvas</span></div>
+            <div class="hm-row"><span class="hm-key">Middle drag</span><span class="hm-desc">Pan canvas</span></div>
+            <div class="hm-row"><span class="hm-key">Scroll wheel</span><span class="hm-desc">Zoom in / out</span></div>
+            <div class="hm-row"><span class="hm-key">+ / −</span><span class="hm-desc">Zoom in / out</span></div>
+            <div class="hm-row"><span class="hm-key">Arrow keys</span><span class="hm-desc">Nudge object 1 px</span></div>
+            <div class="hm-row"><span class="hm-key">⇧+Arrows</span><span class="hm-desc">Nudge object 10 px</span></div>
+        </div>
+        <div class="hm-section">
+            <b class="hm-head">🖱 Context Menu</b>
+            <div class="hm-row"><span class="hm-key">Right-click</span><span class="hm-desc">Context menu on object</span></div>
+            <div class="hm-row"><span class="hm-key">Long tap</span><span class="hm-desc">Context menu (touch)</span></div>
+            <div class="hm-desc" style="margin-top:3px;color:#94a3b8;">Bring/send layers, group, clone, crop…</div>
+        </div>
+    </div>
+</div>
 
    <div id="canvas-wrapper">
     <canvas id="c"></canvas>
@@ -777,6 +880,9 @@ document.addEventListener('mousedown', function(e) {
         <input type="range" id="ctx-stroke-width" min="1" max="20" value="2" oninput="ctxSetStrokeWidth(this.value)">
         <span id="ctx-stroke-width-val">2</span>
     </div>
+
+    <!-- Row 3b: fill color swatches (only for closed shapes) -->
+    <div id="ctx-fill-color-section" class="ctx-swatches-row" style="display:none"></div>
 
     <!-- Row 4: fill opacity (only for closed shapes) -->
     <div id="ctx-fill-section" class="ctx-slider-wrap" style="display:none">
@@ -3770,15 +3876,16 @@ canvas.on('mouse:up', () => {
             
             if (type === 'arrow') {
                 const angle = Math.atan2(y2 - y1, x2 - x1);
-                const arrowSize = Math.max(10, settings.shape.width * 2);
-                const arrowAngle = Math.PI / 8;
+                const arrowSize = Math.max(10, settings.shape.width * 2.5);
+                const arrowAngle = Math.PI / 7;
                 
                 const arrowX1 = x2 - arrowSize * Math.cos(angle - arrowAngle);
                 const arrowY1 = y2 - arrowSize * Math.sin(angle - arrowAngle);
                 const arrowX2 = x2 - arrowSize * Math.cos(angle + arrowAngle);
                 const arrowY2 = y2 - arrowSize * Math.sin(angle + arrowAngle);
                 
-                pathStr = `M ${x1} ${y1} L ${x2} ${y2} M ${x2} ${y2} L ${arrowX1} ${arrowY1} M ${x2} ${y2} L ${arrowX2} ${arrowY2}`;
+                // Connected V-path for arrowhead → proper miter join at tip
+                pathStr = `M ${x1} ${y1} L ${x2} ${y2} M ${arrowX1} ${arrowY1} L ${x2} ${y2} L ${arrowX2} ${arrowY2}`;
             } else {
                 pathStr = `M ${x1} ${y1} L ${x2} ${y2}`;
             }
@@ -3788,6 +3895,9 @@ canvas.on('mouse:up', () => {
                 strokeWidth: settings.shape.width,
                 fill: '',
                 strokeDashArray: type === 'dashed' ? [10, 5] : null,
+                strokeLinejoin: type === 'arrow' ? 'miter' : 'round',
+                strokeMiterLimit: 10,
+                strokeLineCap: 'butt',
                 selectable: false,
                 evented: false,
                 objectCaching: true,
@@ -3828,6 +3938,13 @@ canvas.on('mouse:up', () => {
 
 canvas.on('path:created', (e) => {
     if (isMultitouch) { canvas.remove(e.path); return; }
+    // Laser pointer: ephemeral — no history, but DO broadcast so partner sees it too
+    if (window._laserMode) {
+        e.path.set({ isLaser: true });
+        _laserAnimatePath(e.path);
+        broadcast('draw', { data: Object.assign(e.path.toObject(['id']), { isLaser: true, fill: '' }) });
+        return;
+    }
     e.path.id = Math.random().toString(36).substr(2, 9);
     addToHistory(e.path);
     broadcast('draw', { data: e.path.toObject(['id']) });
@@ -4913,7 +5030,17 @@ function setupConn() {
             handlePartnerViewport(msg);
 
         } else if (msg.type === 'draw') {
-            if (msg.data.type === 'image' && msg.data.src) {
+            if (msg.data.isLaser) {
+                // Remote laser pointer: add to canvas first, then animate (blink + remove)
+                fabric.util.enlivenObjects([msg.data], (objs) => {
+                    objs.forEach(o => {
+                        o.set({ selectable: false, evented: false, opacity: 1, fill: '' });
+                        canvas.add(o);
+                        _laserAnimatePath(o);
+                    });
+                    canvas.requestRenderAll();
+                });
+            } else if (msg.data.type === 'image' && msg.data.src) {
                 fabric.Image.fromURL(msg.data.src, (img) => {
                     img.set({
                         id: msg.data.id,
@@ -5134,6 +5261,20 @@ canvas.on('after:render', function() {
 // ==========================================
 function applyRemoteDrawObject(d, onDone) {
     if (!d) { if (onDone) onDone(); return; }
+
+    // Laser pointer: ephemeral — add then animate, never persist in history
+    if (d.isLaser) {
+        fabric.util.enlivenObjects([d], function(objs) {
+            objs.forEach(function(o) {
+                o.set({ selectable: false, evented: false, opacity: 1, fill: '' });
+                canvas.add(o);
+                _laserAnimatePath(o);
+            });
+            canvas.requestRenderAll();
+            if (onDone) onDone();
+        });
+        return;
+    }
 
     function addToCanvas(obj) {
         obj.__isLocal = true;
@@ -5622,13 +5763,14 @@ function rebuildLinePath(obj) {
     let pathStr;
     if (type === 'arrow') {
         const angle = Math.atan2(y2 - y1, x2 - x1);
-        const arrowSize = Math.max(10, (obj.strokeWidth || 2) * 2);
-        const aAngle = Math.PI / 6;
+        const arrowSize = Math.max(10, (obj.strokeWidth || 2) * 2.5);
+        const aAngle = Math.PI / 7;
         const ax1 = x2 - arrowSize * Math.cos(angle - aAngle);
         const ay1 = y2 - arrowSize * Math.sin(angle - aAngle);
         const ax2 = x2 - arrowSize * Math.cos(angle + aAngle);
         const ay2 = y2 - arrowSize * Math.sin(angle + aAngle);
-        pathStr = `M ${x1} ${y1} L ${x2} ${y2} M ${x2} ${y2} L ${ax1} ${ay1} M ${x2} ${y2} L ${ax2} ${ay2}`;
+        // Connected V-path → miter join produces sharp tip
+        pathStr = `M ${x1} ${y1} L ${x2} ${y2} M ${ax1} ${ay1} L ${x2} ${y2} L ${ax2} ${ay2}`;
     } else {
         pathStr = `M ${x1} ${y1} L ${x2} ${y2}`;
     }
@@ -5640,6 +5782,9 @@ function rebuildLinePath(obj) {
     obj.initialize(parsed, {
         stroke: obj.stroke, strokeWidth: obj.strokeWidth,
         fill: obj.fill, strokeDashArray: obj.strokeDashArray,
+        strokeLinejoin: type === 'arrow' ? 'miter' : 'round',
+        strokeMiterLimit: 10,
+        strokeLineCap: 'butt',
         selectable: obj.selectable, evented: obj.evented,
         objectCaching: obj.objectCaching, id: obj.id,
         lineType: obj.lineType,
@@ -5775,6 +5920,45 @@ function buildCtxColorSwatches() {
 }
 buildCtxColorSwatches();
 
+function buildCtxFillSwatches() {
+    const el = document.getElementById('ctx-fill-color-section');
+    el.innerHTML = '';
+    ctxColors.forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
+        d.style.background = c;
+        d.title = c;
+        d.onclick = () => {
+            ctxSetFillColor(c);
+            el.querySelectorAll('.ctx-swatch').forEach(s => s.classList.remove('selected'));
+            d.classList.add('selected');
+        };
+        el.appendChild(d);
+    });
+
+    // Custom rainbow picker — identical to stroke custom swatch
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = '#ff0000';
+    picker.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+
+    const custom = document.createElement('div');
+    custom.className = 'ctx-swatch';
+    custom.title = 'Custom fill color';
+    custom.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+    custom.appendChild(picker);
+
+    picker.oninput = () => {
+        const c = picker.value;
+        custom.style.background = c;
+        ctxSetFillColor(c);
+        el.querySelectorAll('.ctx-swatch').forEach(s => s.classList.remove('selected'));
+        custom.classList.add('selected');
+    };
+    custom.onclick = (e) => { picker.click(); e.stopPropagation(); };
+    el.appendChild(custom);
+}
+
 function showCtxMenu(x, y) {
     const obj = canvas.getActiveObject();
     if (!obj) return;
@@ -5803,6 +5987,7 @@ function showCtxMenu(x, y) {
     strokeSection.style.display      = (allImg || allText) ? 'none' : 'flex';
     strokeWidthSection.style.display = (allImg || allText) ? 'none' : 'flex';
     fillSection.style.display        = hasClosed ? 'flex' : 'none';
+    document.getElementById('ctx-fill-color-section').style.display = hasClosed ? 'flex' : 'none';
     textSection.style.display        = allText ? 'flex' : 'none';
     imgSection.style.display         = allImg  ? 'flex' : 'none';
 
@@ -5833,6 +6018,9 @@ function showCtxMenu(x, y) {
             }
             document.getElementById('ctx-fill-opacity').value = opacity;
             document.getElementById('ctx-fill-opacity-val').textContent = opacity + '%';
+
+            // Build fill color swatches (mirrors stroke palette)
+            buildCtxFillSwatches();
         }
     }
 
@@ -6204,7 +6392,43 @@ function ctxSetFillOpacity(val) {
     _undoCommit(obj);
 }
 
-function ctxGroupSelected()   { hideCtxMenu(); groupSelected(); }
+function ctxSetFillColor(color) {
+    const _preObj = canvas.getActiveObject();
+    if (_preObj) _undoCaptureSelection(_preObj);
+    const obj = _autoGroupIfMultiSelection() || canvas.getActiveObject();
+    if (!obj) return;
+    const targets = getStyleTargets(obj);
+    targets.forEach(o => {
+        if (color === 'transparent') {
+            o.set('fill', 'transparent');
+            // Sync alpha slider to 0
+            document.getElementById('ctx-fill-opacity').value = 0;
+            document.getElementById('ctx-fill-opacity-val').textContent = '0%';
+        } else {
+            // Preserve current alpha, change only the RGB
+            let alpha = 1;
+            const curFill = o.fill;
+            if (curFill && curFill !== 'transparent') {
+                try { alpha = new fabric.Color(curFill).getAlpha(); } catch(e) {}
+            } else {
+                // Was transparent → default to fully opaque
+                alpha = 1;
+                document.getElementById('ctx-fill-opacity').value = 100;
+                document.getElementById('ctx-fill-opacity-val').textContent = '100%';
+            }
+            try {
+                const col = new fabric.Color(color);
+                col.setAlpha(alpha);
+                o.set('fill', col.toRgba());
+            } catch(e) { o.set('fill', color); }
+        }
+        o.dirty = true;
+    });
+    if (obj.type === 'group') obj.dirty = true;
+    canvas.requestRenderAll();
+    targets.forEach(o => broadcast('modified', { data: getStyleBroadcastData(o, ['fill']) }));
+    _undoCommit(obj);
+}
 function ctxUngroupSelected() { hideCtxMenu(); ungroupSelected(); }
 function ctxClone()           { hideCtxMenu(); duplicateSelected(); }
 function ctxDelete()          { hideCtxMenu(); deleteSelected(); }
@@ -8891,7 +9115,46 @@ canvas.on('mouse:move', function (o) {
     canvas.requestRenderAll();
 });
 
-// ── Keyboard shortcut: M = toggle magnet ─────────────────────
+// ==========================================
+// HELP MODAL  ❓ (floating, draggable)
+// ==========================================
+(function () {
+    function toggleHelpModal() {
+        const m = document.getElementById('help-modal');
+        m.classList.toggle('show');
+    }
+    window.toggleHelpModal = toggleHelpModal;
+
+    // ── Draggable header ──────────────────────────────
+    const modal  = document.getElementById('help-modal');
+    const header = document.getElementById('help-modal-header');
+    let dragging = false, startX, startY, origLeft, origTop;
+
+    header.addEventListener('mousedown', function (e) {
+        if (e.target.id === 'help-modal-close') return;
+        dragging = true;
+        const rect = modal.getBoundingClientRect();
+        startX = e.clientX; startY = e.clientY;
+        origLeft = rect.left; origTop = rect.top;
+        // Switch to absolute positioning based on current screen pos
+        modal.style.right = 'auto';
+        modal.style.left  = origLeft + 'px';
+        modal.style.top   = origTop  + 'px';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', function (e) {
+        if (!dragging) return;
+        modal.style.left = (origLeft + e.clientX - startX) + 'px';
+        modal.style.top  = (origTop  + e.clientY - startY) + 'px';
+    });
+
+    document.addEventListener('mouseup', function () {
+        dragging = false;
+        document.body.style.userSelect = '';
+    });
+})();
+
 window.addEventListener('keydown', function (e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.code === 'KeyM' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -8901,6 +9164,101 @@ window.addEventListener('keydown', function (e) {
         toggleSnap();
     }
 });
+
+
+// ==========================================
+// LASER POINTER 🔴  (hold Ctrl → temporary red pen)
+// ==========================================
+(function () {
+    window._laserMode = false;
+    let _laserPrevTool   = null;
+    let _laserActivated  = false;
+    let _laserCancelledThisCycle = false;
+
+    /* ── Animate a laser path: show 2 s, blink ×2, remove ── */
+    window._laserAnimatePath = function (path) {
+        path.set({ selectable: false, evented: false, opacity: 1 });
+        canvas.requestRenderAll();
+
+        // 2 full blinks = 5 half-cycles: 1→0→1→0→1→(remove while hidden)
+        // Pattern: tick1=hide, tick2=show, tick3=hide, tick4=show, tick5=hide+remove
+        setTimeout(function () {
+            let tick = 0;
+            const iv = setInterval(function () {
+                tick++;
+                const visible = (tick % 2 === 0); // even = show, odd = hide
+                path.set('opacity', visible ? 1 : 0);
+                canvas.requestRenderAll();
+                if (tick >= 5) {
+                    clearInterval(iv);
+                    canvas.remove(path);
+                    canvas.requestRenderAll();
+                }
+            }, 160);
+        }, 2000);
+    };
+
+    /* ── Activate laser drawing mode ── */
+    function _laserOn() {
+        if (_laserActivated) return;
+        _laserActivated   = true;
+        window._laserMode = true;
+        _laserPrevTool    = currentTool;
+
+        currentTool = 'laser';
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+        canvas.isDrawingMode    = true;
+        canvas.selection        = false;
+        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush.color = '#ff2020';
+        canvas.freeDrawingBrush.width = 3;
+        canvas.defaultCursor    = 'crosshair';
+
+        canvas.forEachObject(function (o) { o.selectable = false; o.evented = false; });
+    }
+
+    /* ── Deactivate laser, restore previous tool ── */
+    function _laserOff() {
+        if (!_laserActivated) return;
+        _laserActivated   = false;
+        window._laserMode = false;
+        const prev = _laserPrevTool || 'select';
+        _laserPrevTool = null;
+        activateTool(prev, true);
+    }
+
+    /* ── keydown handler ── */
+    window.addEventListener('keydown', function (e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        const active = canvas.getActiveObject();
+        if (canvas.isEditing || (active && active.isEditing)) return;
+
+        if (e.key === 'Control' || e.key === 'Meta') {
+            /* Pure Ctrl press. Use setTimeout(0) so that if Ctrl+Z etc.
+               fires in the same tick, _laserCancelledThisCycle is set first. */
+            setTimeout(function () {
+                if (!_laserCancelledThisCycle) _laserOn();
+                _laserCancelledThisCycle = false;
+            }, 0);
+        } else if (e.ctrlKey || e.metaKey) {
+            /* Ctrl + another key = shortcut → cancel laser */
+            _laserCancelledThisCycle = true;
+            _laserOff();
+        }
+    });
+
+    /* ── keyup: Ctrl released → laser OFF ── */
+    window.addEventListener('keyup', function (e) {
+        if (e.key === 'Control' || e.key === 'Meta') {
+            _laserCancelledThisCycle = false;
+            _laserOff();
+        }
+    });
+
+    /* Safety: lose focus → laser OFF */
+    window.addEventListener('blur', _laserOff);
+})();
 </script>
 </body>
 </html>
