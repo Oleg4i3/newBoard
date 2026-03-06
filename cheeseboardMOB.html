@@ -381,42 +381,36 @@
         .fp-item:hover  { background: rgba(255,255,255,0.12); }
         .fp-item.fp-sel { background: rgba(37,99,235,0.35); }
         /* ── MOBILE PHONE UI ─────────────────────────── */
-        #mob-overflow-wrap    { display: none; }
-        #mob-toolbar-toggle   { display: none; }
+        #mob-overflow-wrap  { display: none; }
+        #mob-toolbar-toggle { display: none; }
 
-        /* JS adds .mobile-ui to <body> when phone + mobile mode active */
-        /* JS adds data-is-phone="1" to <body> whenever on a phone (permanent) */
         body[data-is-phone] #mob-overflow-wrap  { display: flex !important; align-items: center; }
-        .mobile-ui .mob-hide           { display: none !important; }
-        .mobile-ui .divider            { display: none !important; }
+        body[data-is-phone] #mob-toolbar-toggle { display: block; }
 
-        /* Floating tab to show/hide top-bar (always visible on mobile) */
+        .mobile-ui .mob-hide  { display: none !important; }
+        .mobile-ui .divider   { display: none !important; }
+
+        /* Toolbar hide/show tab */
         #mob-toolbar-toggle {
             position: absolute; left: 50%; transform: translateX(-50%);
-            top: 35px;
-            width: 44px; height: 16px;
+            top: 35px; width: 44px; height: 16px;
             background: #fff; border: 1px solid #ddd; border-top: none;
             border-radius: 0 0 8px 8px;
             box-shadow: 0 3px 6px rgba(0,0,0,0.1);
             z-index: 103; cursor: pointer;
             font-size: 9px; color: #aaa; line-height: 16px; text-align: center;
-            transition: top 0.2s ease;
-            user-select: none;
+            transition: top 0.2s ease; user-select: none;
         }
-        body[data-is-phone] #mob-toolbar-toggle { display: block; }
-
-        /* When toolbar is hidden */
         body.toolbar-hidden .top-bar            { transform: translateY(-35px); }
         body.toolbar-hidden #canvas-wrapper     { top: 0 !important; }
         body.toolbar-hidden #mob-toolbar-toggle { top: 0; }
         body.toolbar-hidden #mob-overflow-panel { top: 0; }
-        .top-bar { transition: transform 0.2s ease; }
+        .top-bar        { transition: transform 0.2s ease; }
         #canvas-wrapper { transition: top 0.2s ease; }
 
         /* Overflow panel */
         #mob-overflow-panel {
-            display: none; position: absolute;
-            top: 35px; left: 0; right: 0;
+            display: none; position: absolute; top: 35px; left: 0; right: 0;
             background: #fff; border-bottom: 1px solid #ddd;
             box-shadow: 0 5px 18px rgba(0,0,0,0.13);
             padding: 10px 12px; z-index: 99;
@@ -424,27 +418,18 @@
             transition: top 0.2s ease;
         }
         #mob-overflow-panel.show { display: flex; }
-
-        /* Backdrop to close panel on outside-tap */
-        #mob-backdrop {
-            display: none; position: fixed; inset: 0; z-index: 98;
-        }
+        #mob-backdrop { display: none; position: fixed; inset: 0; z-index: 98; }
         #mob-backdrop.show { display: block; }
 
-        /* Shapes sub-panel inside overflow */
+        /* Shapes sub-panel */
         #mob-shapes-panel {
             display: none; flex-direction: column; gap: 6px;
             border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px;
         }
         #mob-shapes-panel.show { display: flex; }
 
-        .mob-row {
-            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
-        }
-        .mob-row-label {
-            font-size: 9px; color: #aaa; text-transform: uppercase;
-            min-width: 34px; letter-spacing: .04em;
-        }
+        .mob-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .mob-row-label { font-size: 9px; color: #aaa; text-transform: uppercase; min-width: 34px; letter-spacing: .04em; }
         #mob-overflow-btn { font-size: 16px; letter-spacing: 1px; }
     </style>
 <script>
@@ -742,6 +727,14 @@ document.addEventListener('mousedown', function(e) {
                             ❓ Keyboard &amp; Navigation Help
                         </button>
                     </div>
+
+                    <!-- Mobile / Desktop mode toggle (visible on phones that switched to desktop) -->
+                    <div id="desktop-mob-toggle-row" style="display:none;">
+                        <button id="desktop-mob-toggle-btn" onclick="togglePcMode()"
+                            style="font-size:11px;background:#f0fff4;border:1px solid #6ee7b7;border-radius:5px;padding:3px 10px;cursor:pointer;color:#065f46;">
+                            📱 Switch to Mobile mode
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -861,32 +854,23 @@ document.addEventListener('mousedown', function(e) {
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
 
-        <!-- Mobile-only ••• button — visible on phones in BOTH modes -->
+        <!-- Mobile-only ••• button — always visible on phones regardless of mode -->
         <div id="mob-overflow-wrap" class="bar-section">
             <button class="tool-btn" id="mob-overflow-btn" onclick="toggleMobOverflow()" data-tooltip="More tools">•••</button>
         </div>
 
     </div><!-- /.top-bar -->
 
-<!-- Mobile toolbar hide/show tab -->
 <div id="mob-toolbar-toggle" onclick="toggleMobToolbar()">▲</div>
-
-<!-- Mobile backdrop -->
 <div id="mob-backdrop" onclick="hideMobOverflow()"></div>
 
-<!-- Mobile overflow panel -->
 <div id="mob-overflow-panel">
-    <!-- Share row -->
     <div class="mob-row" id="mob-share-row">
         <span class="mob-row-label">Share</span>
         <button class="tool-btn" onclick="startHost();hideMobOverflow()" data-tooltip="Share / Host">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-            </svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         </button>
     </div>
-    <!-- Edit row -->
     <div class="mob-row">
         <span class="mob-row-label">Edit</span>
         <button class="tool-btn" onclick="duplicateSelected();hideMobOverflow()" data-tooltip="Duplicate">❐</button>
@@ -896,15 +880,13 @@ document.addEventListener('mousedown', function(e) {
         <button class="tool-btn" onclick="startCropMode();hideMobOverflow()" data-tooltip="Crop">✂️</button>
         <button class="tool-btn" onclick="deleteSelected();hideMobOverflow()" data-tooltip="Delete">❌</button>
     </div>
-    <!-- Draw row -->
     <div class="mob-row">
         <span class="mob-row-label">Draw</span>
-        <button class="tool-btn" id="mob-btn-highlighter" onclick="activateTool('highlighter');hideMobOverflow()" data-tooltip="Highlighter">🖍️</button>
-        <button class="tool-btn" id="mob-btn-text" onclick="activateTool('text');hideMobOverflow()" data-tooltip="Text">T</button>
-        <button class="tool-btn" id="mob-btn-shape" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
-        <button class="tool-btn" id="mob-btn-magnet" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap to grid">🧲</button>
+        <button class="tool-btn" onclick="activateTool('highlighter');hideMobOverflow()" data-tooltip="Highlighter">🖍️</button>
+        <button class="tool-btn" onclick="activateTool('text');hideMobOverflow()" data-tooltip="Text">T</button>
+        <button class="tool-btn" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
+        <button class="tool-btn" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap to grid">🧲</button>
     </div>
-    <!-- Shapes sub-panel -->
     <div id="mob-shapes-panel">
         <div class="mob-row">
             <span class="mob-row-label">2D</span>
@@ -925,13 +907,11 @@ document.addEventListener('mousedown', function(e) {
             <div class="shape-item" onclick="insert3DShape('pyramid');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="14" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
         </div>
     </div>
-    <!-- Board row -->
     <div class="mob-row">
         <span class="mob-row-label">Board</span>
         <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save Board">💾</button>
         <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open Board">📁</button>
     </div>
-    <!-- PC/Mobile toggle row -->
     <div class="mob-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:2px;">
         <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()"
                 style="font-size:11px;width:auto;padding:0 10px;">💻 Desktop mode</button>
@@ -9105,64 +9085,39 @@ function handlePivotMessage(type, data) {
         const dropX = (e.clientX - rect.left  - canvas.viewportTransform[4]) / canvas.getZoom();
         const dropY = (e.clientY - rect.top    - canvas.viewportTransform[5]) / canvas.getZoom();
 
-        // Process sequentially so multiple files stack vertically
-        (async () => {
-            let currentY = dropY;
-            const multi = files.length > 1;
-            for (const file of Array.from(files)) {
-                currentY = await _importDroppedFile(file, dropX, currentY, multi);
-            }
-        })();
+        Array.from(files).forEach(file => _importDroppedFile(file, dropX, dropY));
     });
 
-    // Returns the Y for the next item.
-    // multiDrop=true  → top-edge placement, advances Y by height + gap.
-    // multiDrop=false → original: centre on drop point.
-    async function _importDroppedFile(file, dropX, currentY, multiDrop) {
-        const GAP = 40;
-
+    async function _importDroppedFile(file, dropX, dropY) {
         if (file.type.includes('image')) {
             setStatus('Processing image\u2026', 'ok');
-
-            const loadImage = (dataUrl) => new Promise(resolve => {
+            const doLoad = (dataUrl) => {
                 fabric.Image.fromURL(dataUrl, (img) => {
                     const sc = img.width > 900 ? 900 / img.width : 1;
                     img.scale(sc);
-                    const scaledH = img.height * sc;
-                    const scaledW = img.width  * sc;
                     img.set({
-                        left: dropX - scaledW / 2,
-                        top:  multiDrop ? currentY : currentY - scaledH / 2
+                        left: dropX - (img.width  * sc) / 2,
+                        top:  dropY - (img.height * sc) / 2
                     });
                     setupImportedImage(img, file.name);
                     setStatus('Image imported', 'ok');
-                    resolve(multiDrop ? currentY + scaledH + GAP : currentY);
                 });
-            });
-
+            };
             try {
                 const optimized = await optimizeImageBeforeImport(file);
                 const reader = new FileReader();
-                const dataUrl = await new Promise(res => {
-                    reader.onload = ev => res(ev.target.result);
-                    reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
-                });
-                return await loadImage(dataUrl);
+                reader.onload = (ev) => doLoad(ev.target.result);
+                reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
             } catch (_) {
                 const reader = new FileReader();
-                const dataUrl = await new Promise(res => {
-                    reader.onload = ev => res(ev.target.result);
-                    reader.readAsDataURL(file);
-                });
-                return await loadImage(dataUrl);
+                reader.onload = (ev) => doLoad(ev.target.result);
+                reader.readAsDataURL(file);
             }
-
         } else if (file.type === 'application/pdf') {
+            // Re-use the existing PDF pipeline by faking a file-input object
             handleImport({ files: [file], value: '' });
-            return currentY;
         } else {
             setStatus('Unsupported file type: ' + file.type, 'err');
-            return currentY;
         }
     }
 })();
@@ -9441,21 +9396,19 @@ window.addEventListener('keydown', function (e) {
         'btn-save', 'btn-open'
     ];
 
-    // ── device detection (runs once) ──────────────────────────
     function isPhone() {
         var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         if (!hasTouch) return false;
         return Math.min(screen.width, screen.height) < 550;
     }
 
-    // ── apply / remove compact UI ─────────────────────────────
     function applyMobileUI() {
         document.body.classList.add('mobile-ui');
         MOB_HIDE_IDS.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.classList.add('mob-hide');
         });
-        _updateToggleBtn(true);
+        _updateToggleBtns(true);
     }
 
     function removeMobileUI() {
@@ -9465,19 +9418,24 @@ window.addEventListener('keydown', function (e) {
             if (el) el.classList.remove('mob-hide');
         });
         hideMobOverflow();
-        _updateToggleBtn(false);
+        _updateToggleBtns(false);
     }
 
-    function _updateToggleBtn(isMobile) {
-        var btn = document.getElementById('mob-pc-toggle-btn');
-        if (!btn) return;
-        btn.textContent = isMobile ? '💻 Desktop mode' : '📱 Mobile mode';
+    // Update ALL toggle buttons (overflow panel + desktop spoiler)
+    function _updateToggleBtns(isMobile) {
+        // Button inside ••• overflow panel
+        var b1 = document.getElementById('mob-pc-toggle-btn');
+        if (b1) b1.textContent = isMobile ? '💻 Desktop mode' : '📱 Mobile mode';
+
+        // Button inside desktop share spoiler — only show on phones
+        var row = document.getElementById('desktop-mob-toggle-row');
+        var b2  = document.getElementById('desktop-mob-toggle-btn');
+        if (row && b2) {
+            row.style.display = 'block';   // always show row on phones
+            b2.textContent = isMobile ? '💻 Switch to Desktop mode' : '📱 Switch to Mobile mode';
+        }
     }
 
-    // ── public: in-page PC ↔ Mobile toggle ───────────────────
-    // KEY FIX: we do NOT touch data-is-phone here.
-    // data-is-phone controls ••• button visibility (always on for phones).
-    // mobile-ui class controls compact layout (toggleable by user).
     window.togglePcMode = function () {
         var isMob = document.body.classList.contains('mobile-ui');
         if (isMob) {
@@ -9490,16 +9448,17 @@ window.addEventListener('keydown', function (e) {
         }
     };
 
-    // ── overflow panel ────────────────────────────────────────
     window.toggleMobOverflow = function () {
         var panel    = document.getElementById('mob-overflow-panel');
         var backdrop = document.getElementById('mob-backdrop');
+        if (!panel) return;
         var open = panel.classList.contains('show');
         if (open) {
             panel.classList.remove('show');
             backdrop.classList.remove('show');
         } else {
-            document.getElementById('mob-shapes-panel').classList.remove('show');
+            var sp = document.getElementById('mob-shapes-panel');
+            if (sp) sp.classList.remove('show');
             panel.classList.add('show');
             backdrop.classList.add('show');
         }
@@ -9514,12 +9473,11 @@ window.addEventListener('keydown', function (e) {
         if (sp) sp.classList.remove('show');
     };
 
-    // ── shapes sub-panel ──────────────────────────────────────
     window.toggleMobShapes = function () {
-        document.getElementById('mob-shapes-panel').classList.toggle('show');
+        var sp = document.getElementById('mob-shapes-panel');
+        if (sp) sp.classList.toggle('show');
     };
 
-    // ── toolbar hide/show tab ─────────────────────────────────
     window.toggleMobToolbar = function () {
         var hidden = document.body.classList.toggle('toolbar-hidden');
         var tab = document.getElementById('mob-toolbar-toggle');
@@ -9527,17 +9485,15 @@ window.addEventListener('keydown', function (e) {
         setTimeout(function () { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 220);
     };
 
-    // ── init ──────────────────────────────────────────────────
     function init() {
         if (!isPhone()) return;
 
-        // Mark body as "phone" permanently — keeps ••• always visible
+        // Permanent phone marker — keeps ••• and toolbar-tab visible in any mode
         document.body.setAttribute('data-is-phone', '1');
 
-        // Apply compact UI unless user previously chose desktop mode
         var forcePC = localStorage.getItem('cheeseboard-force-pc') === '1';
         if (forcePC) {
-            _updateToggleBtn(false);  // show "📱 Mobile mode" button in overflow
+            _updateToggleBtns(false);   // show "📱 Mobile mode" everywhere
         } else {
             applyMobileUI();
         }
