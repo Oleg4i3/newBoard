@@ -384,15 +384,16 @@
         #mob-overflow-wrap    { display: none; }
         #mob-toolbar-toggle   { display: none; }
 
-        /* JS sets .mobile-ui on <body> for phones */
-        .mobile-ui #mob-overflow-wrap  { display: flex !important; align-items: center; }
+        /* JS adds .mobile-ui to <body> when phone + mobile mode active */
+        /* JS adds data-is-phone="1" to <body> whenever on a phone (permanent) */
+        body[data-is-phone] #mob-overflow-wrap  { display: flex !important; align-items: center; }
         .mobile-ui .mob-hide           { display: none !important; }
         .mobile-ui .divider            { display: none !important; }
 
         /* Floating tab to show/hide top-bar (always visible on mobile) */
         #mob-toolbar-toggle {
             position: absolute; left: 50%; transform: translateX(-50%);
-            top: 35px; /* moves with toolbar */
+            top: 35px;
             width: 44px; height: 16px;
             background: #fff; border: 1px solid #ddd; border-top: none;
             border-radius: 0 0 8px 8px;
@@ -402,7 +403,7 @@
             transition: top 0.2s ease;
             user-select: none;
         }
-        .mobile-ui #mob-toolbar-toggle { display: block; }
+        body[data-is-phone] #mob-toolbar-toggle { display: block; }
 
         /* When toolbar is hidden */
         body.toolbar-hidden .top-bar            { transform: translateY(-35px); }
@@ -430,7 +431,7 @@
         }
         #mob-backdrop.show { display: block; }
 
-        /* Shapes sub-panel inside overflow (mobile only) */
+        /* Shapes sub-panel inside overflow */
         #mob-shapes-panel {
             display: none; flex-direction: column; gap: 6px;
             border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px;
@@ -860,7 +861,7 @@ document.addEventListener('mousedown', function(e) {
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
 
-        <!-- Mobile-only: ••• overflow trigger -->
+        <!-- Mobile-only ••• button — visible on phones in BOTH modes -->
         <div id="mob-overflow-wrap" class="bar-section">
             <button class="tool-btn" id="mob-overflow-btn" onclick="toggleMobOverflow()" data-tooltip="More tools">•••</button>
         </div>
@@ -870,12 +871,12 @@ document.addEventListener('mousedown', function(e) {
 <!-- Mobile toolbar hide/show tab -->
 <div id="mob-toolbar-toggle" onclick="toggleMobToolbar()">▲</div>
 
-<!-- Mobile backdrop (closes overflow panel on outside tap) -->
+<!-- Mobile backdrop -->
 <div id="mob-backdrop" onclick="hideMobOverflow()"></div>
 
 <!-- Mobile overflow panel -->
 <div id="mob-overflow-panel">
-    <!-- Share row (mirrors host-controls/session-info) -->
+    <!-- Share row -->
     <div class="mob-row" id="mob-share-row">
         <span class="mob-row-label">Share</span>
         <button class="tool-btn" onclick="startHost();hideMobOverflow()" data-tooltip="Share / Host">
@@ -903,7 +904,7 @@ document.addEventListener('mousedown', function(e) {
         <button class="tool-btn" id="mob-btn-shape" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
         <button class="tool-btn" id="mob-btn-magnet" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap to grid">🧲</button>
     </div>
-    <!-- Shapes sub-panel (expands inline) -->
+    <!-- Shapes sub-panel -->
     <div id="mob-shapes-panel">
         <div class="mob-row">
             <span class="mob-row-label">2D</span>
@@ -930,10 +931,10 @@ document.addEventListener('mousedown', function(e) {
         <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save Board">💾</button>
         <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open Board">📁</button>
     </div>
-    <!-- PC / Mobile toggle -->
-    <div class="mob-row" style="border-top:1px solid #eee; padding-top:8px; margin-top:2px;">
-        <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()" style="font-size:11px; width:auto; padding:0 10px;"
-                data-tooltip="Switch to desktop interface">💻 Desktop mode</button>
+    <!-- PC/Mobile toggle row -->
+    <div class="mob-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:2px;">
+        <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()"
+                style="font-size:11px;width:auto;padding:0 10px;">💻 Desktop mode</button>
     </div>
 </div>
 
@@ -9104,39 +9105,64 @@ function handlePivotMessage(type, data) {
         const dropX = (e.clientX - rect.left  - canvas.viewportTransform[4]) / canvas.getZoom();
         const dropY = (e.clientY - rect.top    - canvas.viewportTransform[5]) / canvas.getZoom();
 
-        Array.from(files).forEach(file => _importDroppedFile(file, dropX, dropY));
+        // Process sequentially so multiple files stack vertically
+        (async () => {
+            let currentY = dropY;
+            const multi = files.length > 1;
+            for (const file of Array.from(files)) {
+                currentY = await _importDroppedFile(file, dropX, currentY, multi);
+            }
+        })();
     });
 
-    async function _importDroppedFile(file, dropX, dropY) {
+    // Returns the Y for the next item.
+    // multiDrop=true  → top-edge placement, advances Y by height + gap.
+    // multiDrop=false → original: centre on drop point.
+    async function _importDroppedFile(file, dropX, currentY, multiDrop) {
+        const GAP = 40;
+
         if (file.type.includes('image')) {
             setStatus('Processing image\u2026', 'ok');
-            const doLoad = (dataUrl) => {
+
+            const loadImage = (dataUrl) => new Promise(resolve => {
                 fabric.Image.fromURL(dataUrl, (img) => {
                     const sc = img.width > 900 ? 900 / img.width : 1;
                     img.scale(sc);
+                    const scaledH = img.height * sc;
+                    const scaledW = img.width  * sc;
                     img.set({
-                        left: dropX - (img.width  * sc) / 2,
-                        top:  dropY - (img.height * sc) / 2
+                        left: dropX - scaledW / 2,
+                        top:  multiDrop ? currentY : currentY - scaledH / 2
                     });
                     setupImportedImage(img, file.name);
                     setStatus('Image imported', 'ok');
+                    resolve(multiDrop ? currentY + scaledH + GAP : currentY);
                 });
-            };
+            });
+
             try {
                 const optimized = await optimizeImageBeforeImport(file);
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                });
+                return await loadImage(dataUrl);
             } catch (_) {
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(file);
+                });
+                return await loadImage(dataUrl);
             }
+
         } else if (file.type === 'application/pdf') {
-            // Re-use the existing PDF pipeline by faking a file-input object
             handleImport({ files: [file], value: '' });
+            return currentY;
         } else {
             setStatus('Unsupported file type: ' + file.type, 'err');
+            return currentY;
         }
     }
 })();
@@ -9407,7 +9433,6 @@ window.addEventListener('keydown', function (e) {
 // ==========================================
 (function () {
 
-    // IDs of elements to hide in mobile mode
     var MOB_HIDE_IDS = [
         'host-controls', 'join-controls', 'session-info',
         'btn-duplicate', 'btn-pin', 'btn-group', 'btn-ungroup',
@@ -9416,21 +9441,21 @@ window.addEventListener('keydown', function (e) {
         'btn-save', 'btn-open'
     ];
 
-    // ---------- device detection ----------
+    // ── device detection (runs once) ──────────────────────────
     function isPhone() {
         var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         if (!hasTouch) return false;
         return Math.min(screen.width, screen.height) < 550;
     }
 
-    // ---------- apply / remove mobile UI ----------
+    // ── apply / remove compact UI ─────────────────────────────
     function applyMobileUI() {
         document.body.classList.add('mobile-ui');
         MOB_HIDE_IDS.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.classList.add('mob-hide');
         });
-        updatePcToggleBtn();
+        _updateToggleBtn(true);
     }
 
     function removeMobileUI() {
@@ -9440,18 +9465,19 @@ window.addEventListener('keydown', function (e) {
             if (el) el.classList.remove('mob-hide');
         });
         hideMobOverflow();
-        updatePcToggleBtn();
+        _updateToggleBtn(false);
     }
 
-    function updatePcToggleBtn() {
+    function _updateToggleBtn(isMobile) {
         var btn = document.getElementById('mob-pc-toggle-btn');
         if (!btn) return;
-        var isMob = document.body.classList.contains('mobile-ui');
-        btn.textContent = isMob ? '💻 Desktop mode' : '📱 Mobile mode';
-        btn.setAttribute('data-tooltip', isMob ? 'Switch to desktop interface' : 'Switch to mobile interface');
+        btn.textContent = isMobile ? '💻 Desktop mode' : '📱 Mobile mode';
     }
 
-    // ---------- public: PC/mobile toggle (in-page, no reload) ----------
+    // ── public: in-page PC ↔ Mobile toggle ───────────────────
+    // KEY FIX: we do NOT touch data-is-phone here.
+    // data-is-phone controls ••• button visibility (always on for phones).
+    // mobile-ui class controls compact layout (toggleable by user).
     window.togglePcMode = function () {
         var isMob = document.body.classList.contains('mobile-ui');
         if (isMob) {
@@ -9464,7 +9490,7 @@ window.addEventListener('keydown', function (e) {
         }
     };
 
-    // ---------- overflow panel ----------
+    // ── overflow panel ────────────────────────────────────────
     window.toggleMobOverflow = function () {
         var panel    = document.getElementById('mob-overflow-panel');
         var backdrop = document.getElementById('mob-backdrop');
@@ -9473,7 +9499,6 @@ window.addEventListener('keydown', function (e) {
             panel.classList.remove('show');
             backdrop.classList.remove('show');
         } else {
-            // Close shapes sub-panel when re-opening
             document.getElementById('mob-shapes-panel').classList.remove('show');
             panel.classList.add('show');
             backdrop.classList.add('show');
@@ -9483,38 +9508,41 @@ window.addEventListener('keydown', function (e) {
     window.hideMobOverflow = function () {
         var panel    = document.getElementById('mob-overflow-panel');
         var backdrop = document.getElementById('mob-backdrop');
-        if (panel)    { panel.classList.remove('show'); }
-        if (backdrop) { backdrop.classList.remove('show'); }
+        if (panel)    panel.classList.remove('show');
+        if (backdrop) backdrop.classList.remove('show');
         var sp = document.getElementById('mob-shapes-panel');
         if (sp) sp.classList.remove('show');
     };
 
-    // ---------- shapes sub-panel toggle ----------
+    // ── shapes sub-panel ──────────────────────────────────────
     window.toggleMobShapes = function () {
-        var sp = document.getElementById('mob-shapes-panel');
-        sp.classList.toggle('show');
+        document.getElementById('mob-shapes-panel').classList.toggle('show');
     };
 
-    // ---------- toolbar hide/show tab ----------
+    // ── toolbar hide/show tab ─────────────────────────────────
     window.toggleMobToolbar = function () {
         var hidden = document.body.classList.toggle('toolbar-hidden');
         var tab = document.getElementById('mob-toolbar-toggle');
         if (tab) tab.textContent = hidden ? '▼' : '▲';
-        // Trigger fabric canvas resize after CSS transition (200ms)
         setTimeout(function () { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 220);
     };
 
-    // ---------- init ----------
+    // ── init ──────────────────────────────────────────────────
     function init() {
+        if (!isPhone()) return;
+
+        // Mark body as "phone" permanently — keeps ••• always visible
+        document.body.setAttribute('data-is-phone', '1');
+
+        // Apply compact UI unless user previously chose desktop mode
         var forcePC = localStorage.getItem('cheeseboard-force-pc') === '1';
-        if (!forcePC && isPhone()) {
-            applyMobileUI();
+        if (forcePC) {
+            _updateToggleBtn(false);  // show "📱 Mobile mode" button in overflow
         } else {
-            updatePcToggleBtn();
+            applyMobileUI();
         }
     }
 
-    // Run after DOM is ready (scripts are at end of body)
     init();
 })();
 </script>
