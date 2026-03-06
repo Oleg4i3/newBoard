@@ -380,48 +380,67 @@
         }
         .fp-item:hover  { background: rgba(255,255,255,0.12); }
         .fp-item.fp-sel { background: rgba(37,99,235,0.35); }
-        /* ── MOBILE PHONE UI ─────────────────────────── */
+        /* ---- PIN PROMPT MODAL ---- */
+        #pin-prompt {
+            display: none; position: fixed; inset: 0; z-index: 9998;
+            background: rgba(0,0,0,0.35); align-items: center; justify-content: center;
+        }
+        #pin-prompt.show { display: flex; }
+        #pin-prompt-inner {
+            background: white; border-radius: 14px; padding: 22px 26px 18px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.22); text-align: center;
+            min-width: 240px; max-width: 320px; animation: ppFadeIn .18s ease;
+        }
+        @keyframes ppFadeIn { from { opacity:0; transform:scale(.93) } to { opacity:1; transform:scale(1) } }
+        #pin-prompt-inner .pp-icon { font-size: 28px; margin-bottom: 6px; }
+        #pin-prompt-inner h4 { margin: 0 0 5px; font-size: 15px; color: #1e293b; }
+        #pin-prompt-inner p  { margin: 0 0 16px; font-size: 11px; color: #64748b; line-height: 1.4; }
+        .pp-btns { display: flex; gap: 10px; justify-content: center; }
+        .pp-btns button { padding: 7px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; transition: .15s; }
+        #pp-yes  { background: #2563eb; color: #fff; }  #pp-yes:hover  { background: #1d4ed8; }
+        #pp-no   { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; } #pp-no:hover { background: #e2e8f0; }
+
+        /* ── MOBILE PHONE UI ────────────────────────────────────── */
+        /* ••• button and toolbar tab hidden by default; shown via data-is-phone */
         #mob-overflow-wrap  { display: none; }
         #mob-toolbar-toggle { display: none; }
-
         body[data-is-phone] #mob-overflow-wrap  { display: flex !important; align-items: center; }
         body[data-is-phone] #mob-toolbar-toggle { display: block; }
 
-        .mobile-ui .mob-hide  { display: none !important; }
-        .mobile-ui .divider   { display: none !important; }
+        /* Compact layout: hide secondary buttons */
+        .mobile-ui .mob-hide { display: none !important; }
+        .mobile-ui .divider  { display: none !important; }
 
-        /* Toolbar hide/show tab */
+        /* Slide-up toolbar toggle tab */
         #mob-toolbar-toggle {
             position: absolute; left: 50%; transform: translateX(-50%);
             top: 35px; width: 44px; height: 16px;
             background: #fff; border: 1px solid #ddd; border-top: none;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-            z-index: 103; cursor: pointer;
+            border-radius: 0 0 8px 8px; box-shadow: 0 3px 6px rgba(0,0,0,.1);
+            z-index: 103; cursor: pointer; user-select: none;
             font-size: 9px; color: #aaa; line-height: 16px; text-align: center;
-            transition: top 0.2s ease; user-select: none;
+            transition: top .2s ease;
         }
+        .top-bar        { transition: transform .2s ease; }
+        #canvas-wrapper { transition: top .2s ease; }
         body.toolbar-hidden .top-bar            { transform: translateY(-35px); }
         body.toolbar-hidden #canvas-wrapper     { top: 0 !important; }
         body.toolbar-hidden #mob-toolbar-toggle { top: 0; }
         body.toolbar-hidden #mob-overflow-panel { top: 0; }
-        .top-bar        { transition: transform 0.2s ease; }
-        #canvas-wrapper { transition: top 0.2s ease; }
 
         /* Overflow panel */
         #mob-overflow-panel {
             display: none; position: absolute; top: 35px; left: 0; right: 0;
             background: #fff; border-bottom: 1px solid #ddd;
-            box-shadow: 0 5px 18px rgba(0,0,0,0.13);
+            box-shadow: 0 5px 18px rgba(0,0,0,.13);
             padding: 10px 12px; z-index: 99;
-            flex-direction: column; gap: 8px;
-            transition: top 0.2s ease;
+            flex-direction: column; gap: 8px; transition: top .2s ease;
         }
         #mob-overflow-panel.show { display: flex; }
         #mob-backdrop { display: none; position: fixed; inset: 0; z-index: 98; }
         #mob-backdrop.show { display: block; }
 
-        /* Shapes sub-panel */
+        /* Shapes sub-panel inside overflow */
         #mob-shapes-panel {
             display: none; flex-direction: column; gap: 6px;
             border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px;
@@ -429,7 +448,8 @@
         #mob-shapes-panel.show { display: flex; }
 
         .mob-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-        .mob-row-label { font-size: 9px; color: #aaa; text-transform: uppercase; min-width: 34px; letter-spacing: .04em; }
+        .mob-row-label { font-size: 9px; color: #aaa; text-transform: uppercase;
+                         min-width: 34px; letter-spacing: .04em; }
         #mob-overflow-btn { font-size: 16px; letter-spacing: 1px; }
     </style>
 <script>
@@ -728,7 +748,7 @@ document.addEventListener('mousedown', function(e) {
                         </button>
                     </div>
 
-                    <!-- Mobile / Desktop mode toggle (visible on phones that switched to desktop) -->
+                    <!-- Mobile/Desktop toggle — JS shows this only on phones -->
                     <div id="desktop-mob-toggle-row" style="display:none;">
                         <button id="desktop-mob-toggle-btn" onclick="togglePcMode()"
                             style="font-size:11px;background:#f0fff4;border:1px solid #6ee7b7;border-radius:5px;padding:3px 10px;cursor:pointer;color:#065f46;">
@@ -743,12 +763,12 @@ document.addEventListener('mousedown', function(e) {
 
         <div class="bar-section">
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↶</button>
-			<button class="tool-btn" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
+			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
-            <button class="tool-btn" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
-            <button class="tool-btn" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
-            <button class="tool-btn" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
-		    <button class="tool-btn" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
+            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
+            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
+            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
+		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
@@ -779,7 +799,7 @@ document.addEventListener('mousedown', function(e) {
             </div>
 
             <div id="highlighter-wrap" style="position: relative;">
-                <button class="tool-btn" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" data-tooltip="Highlighter (H)">🖍️</button>
+                <button class="tool-btn mob-hide" id="btn-highlighter" onclick="toggleSubmenu('highlighter-menu'); activateTool('highlighter', true)" data-tooltip="Highlighter (H)">🖍️</button>
                 <div class="submenu" id="highlighter-menu">
                     <h4>Highlight Color</h4>
                     <div class="color-row" id="highlighter-colors"></div>
@@ -789,11 +809,11 @@ document.addEventListener('mousedown', function(e) {
             </div>
             
             <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" data-tooltip="Eraser (E)">🧼</button>
-            <button class="tool-btn" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
+            <button class="tool-btn mob-hide" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
           
 
             <div id="shape-wrap" style="position: relative;">
-                <button class="tool-btn" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
+                <button class="tool-btn mob-hide" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
                     <h4>Shape Type</h4>
                     <div class="shape-grid">
@@ -847,25 +867,27 @@ document.addEventListener('mousedown', function(e) {
             </div>
         </div>
         <div class="bar-section">
-            <button class="tool-btn" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
-            <button class="tool-btn" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
+            <button class="tool-btn mob-hide" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
+            <button class="tool-btn mob-hide" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
 
-        <!-- Mobile-only ••• button — always visible on phones regardless of mode -->
+        <!-- Mobile-only ••• button: always visible on phones in both modes -->
         <div id="mob-overflow-wrap" class="bar-section">
             <button class="tool-btn" id="mob-overflow-btn" onclick="toggleMobOverflow()" data-tooltip="More tools">•••</button>
         </div>
 
     </div><!-- /.top-bar -->
 
+<!-- Mobile: toolbar slide tab -->
 <div id="mob-toolbar-toggle" onclick="toggleMobToolbar()">▲</div>
+<!-- Mobile: outside-tap backdrop -->
 <div id="mob-backdrop" onclick="hideMobOverflow()"></div>
-
+<!-- Mobile: overflow panel -->
 <div id="mob-overflow-panel">
-    <div class="mob-row" id="mob-share-row">
+    <div class="mob-row">
         <span class="mob-row-label">Share</span>
         <button class="tool-btn" onclick="startHost();hideMobOverflow()" data-tooltip="Share / Host">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -885,7 +907,7 @@ document.addEventListener('mousedown', function(e) {
         <button class="tool-btn" onclick="activateTool('highlighter');hideMobOverflow()" data-tooltip="Highlighter">🖍️</button>
         <button class="tool-btn" onclick="activateTool('text');hideMobOverflow()" data-tooltip="Text">T</button>
         <button class="tool-btn" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
-        <button class="tool-btn" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap to grid">🧲</button>
+        <button class="tool-btn" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap">🧲</button>
     </div>
     <div id="mob-shapes-panel">
         <div class="mob-row">
@@ -909,8 +931,8 @@ document.addEventListener('mousedown', function(e) {
     </div>
     <div class="mob-row">
         <span class="mob-row-label">Board</span>
-        <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save Board">💾</button>
-        <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open Board">📁</button>
+        <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save">💾</button>
+        <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open">📁</button>
     </div>
     <div class="mob-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:2px;">
         <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()"
@@ -1063,6 +1085,19 @@ document.addEventListener('mousedown', function(e) {
             <span class="ctx-slider-label" style="min-width:68px;">Denoise</span>
             <input type="range" id="ctx-blur" min="0" max="10" value="0" step="1" oninput="ctxApplyImgFilter()">
             <span id="ctx-blur-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">0</span>
+        </div>
+    </div>
+</div>
+
+<!-- Pin-prompt Modal -->
+<div id="pin-prompt">
+    <div id="pin-prompt-inner">
+        <div class="pp-icon">📌</div>
+        <h4>Pin all pages?</h4>
+       
+        <div class="pp-btns">
+            <button id="pp-yes"  onclick="pinPromptResolve(true)">Pin</button>
+            <button id="pp-no"   onclick="pinPromptResolve(false)">Skip</button>
         </div>
     </div>
 </div>
@@ -1864,6 +1899,8 @@ async function handleImport(input) {
                     const _cursorSuspendedByPdf = true;
                     cursorAsleep = true;
 
+                    const pdfPageIds = [];
+
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
                         // scale 1.5 gives good quality for PDF
@@ -1884,11 +1921,13 @@ async function handleImport(input) {
 
                         await new Promise(resolve => {
                             fabric.Image.fromURL(imgData, (img) => {
+                                const pageId = 'pdf-' + Math.random().toString(36).substr(2, 9);
                                 img.set({
                                     top:  currentTop,
                                     left: pdfLeft > 0 ? pdfLeft : 100,
-                                    id:   'pdf-' + Math.random().toString(36).substr(2, 9)
+                                    id:   pageId
                                 });
+                                pdfPageIds.push(pageId);
                                 if (img.width > 900) img.scaleToWidth(900);
                                 setupImportedImage(img, `PDF Page ${i}`);
                                 currentTop += (img.height * img.scaleY) + 50;
@@ -1901,6 +1940,11 @@ async function handleImport(input) {
                     // Resume cursor after queue drains
                     setTimeout(() => { cursorAsleep = false; }, 500);
                     setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
+
+                    if (pdf.numPages > 1) {
+                        const shouldPin = await showPinPrompt();
+                        if (shouldPin) pinObjectsById(pdfPageIds);
+                    }
                     
                 } catch (err) {
                     console.error('PDF processing error:', err);
@@ -3114,7 +3158,7 @@ function cleanupCrop() {
 }
 
 
-const palette = ['#000000', '#ff0000', '#0000ff', '#008000', '#ffa500', '#ffffff','#800080'];
+const palette = ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'];
 const hlPalette = ['#ffeb3b', '#00ff00', '#00ffff', '#ff00ff', '#ff0011', '#0000ff', '#116600', '#555555'];
 
 function renderPalette(id, colors, type) {
@@ -3445,6 +3489,46 @@ function insertPngShape(filename) {
 // ==========================================
 // ЛОГИКА PIN / UNPIN
 // ==========================================
+// ==========================================
+// PIN PROMPT (after PDF load)
+// ==========================================
+let _pinPromptResolve = null;
+
+function showPinPrompt() {
+    return new Promise(resolve => {
+        _pinPromptResolve = resolve;
+        document.getElementById('pin-prompt').classList.add('show');
+    });
+}
+
+function pinPromptResolve(answer) {
+    document.getElementById('pin-prompt').classList.remove('show');
+    if (_pinPromptResolve) { _pinPromptResolve(answer); _pinPromptResolve = null; }
+}
+window.pinPromptResolve = pinPromptResolve;
+
+function pinObjectsById(ids) {
+    const syncProps = [
+        'id', 'isPinned',
+        'lockMovementX', 'lockMovementY', 'lockRotation',
+        'lockScalingX', 'lockScalingY', 'hasControls', 'borderColor', 'hoverCursor'
+    ];
+    ids.forEach(id => {
+        const obj = canvas.getObjects().find(o => o.id === id);
+        if (!obj) return;
+        obj.set({
+            lockMovementX: true, lockMovementY: true, lockRotation: true,
+            lockScalingX: true,  lockScalingY: true,
+            lockSkewingX: true,  lockSkewingY: true,
+            hasControls: false, hoverCursor: 'not-allowed',
+            isPinned: true, borderColor: '#ef4444'
+        });
+        broadcast('modified', { data: obj.toObject(syncProps) });
+    });
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+}
+
 function togglePin() {
 	// 🔥 НОВОЕ: Проверка режима MQTT
     if (connectionMode === 'mqtt') return;
@@ -6164,7 +6248,7 @@ function showCtxMenu(x, y) {
         // Build text color swatches
         const row = document.getElementById('ctx-text-color-row');
         row.innerHTML = '';
-        ['#000000','#ffffff','#ff0000','#0000ff','#008000','#ffa500','#800080','#888888'].forEach(c => {
+        ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'].forEach(c => {
             const sw = document.createElement('div');
             sw.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
             sw.style.background = c;
@@ -9085,39 +9169,64 @@ function handlePivotMessage(type, data) {
         const dropX = (e.clientX - rect.left  - canvas.viewportTransform[4]) / canvas.getZoom();
         const dropY = (e.clientY - rect.top    - canvas.viewportTransform[5]) / canvas.getZoom();
 
-        Array.from(files).forEach(file => _importDroppedFile(file, dropX, dropY));
+        // Process sequentially so multiple images stack vertically
+        (async () => {
+            let curY = dropY;
+            const multi = files.length > 1;
+            for (const file of Array.from(files)) {
+                curY = await _importDroppedFile(file, dropX, curY, multi);
+            }
+        })();
     });
 
-    async function _importDroppedFile(file, dropX, dropY) {
+    // Returns the next Y coordinate.
+    // multi=true  → top-edge placement, Y advances by scaled height + gap.
+    // multi=false → original: image centred on drop point.
+    async function _importDroppedFile(file, dropX, currentY, multi) {
+        const GAP = 40;
+
         if (file.type.includes('image')) {
             setStatus('Processing image\u2026', 'ok');
-            const doLoad = (dataUrl) => {
+
+            const loadImg = (dataUrl) => new Promise(resolve => {
                 fabric.Image.fromURL(dataUrl, (img) => {
                     const sc = img.width > 900 ? 900 / img.width : 1;
                     img.scale(sc);
+                    const sh = img.height * sc;
+                    const sw = img.width  * sc;
                     img.set({
-                        left: dropX - (img.width  * sc) / 2,
-                        top:  dropY - (img.height * sc) / 2
+                        left: dropX - sw / 2,
+                        top:  multi ? currentY : currentY - sh / 2
                     });
                     setupImportedImage(img, file.name);
                     setStatus('Image imported', 'ok');
+                    resolve(multi ? currentY + sh + GAP : currentY);
                 });
-            };
+            });
+
             try {
                 const optimized = await optimizeImageBeforeImport(file);
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+                });
+                return await loadImg(dataUrl);
             } catch (_) {
                 const reader = new FileReader();
-                reader.onload = (ev) => doLoad(ev.target.result);
-                reader.readAsDataURL(file);
+                const dataUrl = await new Promise(res => {
+                    reader.onload = ev => res(ev.target.result);
+                    reader.readAsDataURL(file);
+                });
+                return await loadImg(dataUrl);
             }
+
         } else if (file.type === 'application/pdf') {
-            // Re-use the existing PDF pipeline by faking a file-input object
             handleImport({ files: [file], value: '' });
+            return currentY;
         } else {
             setStatus('Unsupported file type: ' + file.type, 'err');
+            return currentY;
         }
     }
 })();
@@ -9312,13 +9421,13 @@ window.addEventListener('keydown', function (e) {
                 const visible = (tick % 2 === 0); // even = show, odd = hide
                 path.set('opacity', visible ? 1 : 0);
                 canvas.requestRenderAll();
-                if (tick >= 5) {
+                if (tick >= 9) {//was 5
                     clearInterval(iv);
                     canvas.remove(path);
                     canvas.requestRenderAll();
                 }
             }, 160);
-        }, 2000);
+        }, 1500);
     };
 
     /* ── Activate laser drawing mode ── */
@@ -9387,58 +9496,53 @@ window.addEventListener('keydown', function (e) {
 // MOBILE PHONE UI
 // ==========================================
 (function () {
-
-    var MOB_HIDE_IDS = [
+    // IDs hidden in mobile compact mode
+    var MOB_HIDE = [
         'host-controls', 'join-controls', 'session-info',
-        'btn-duplicate', 'btn-pin', 'btn-group', 'btn-ungroup',
-        'btn-crop', 'btn-delete',
-        'highlighter-wrap', 'btn-text', 'shape-wrap',
+        'btn-duplicate', 'btn-group', 'btn-ungroup', 'btn-crop', 'btn-delete',
         'btn-save', 'btn-open'
     ];
+    // Note: btn-highlighter, btn-text, btn-shape already carry class mob-hide in HTML;
+    // they are toggled via the class directly without JS re-listing.
 
     function isPhone() {
-        var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-        if (!hasTouch) return false;
-        return Math.min(screen.width, screen.height) < 550;
+        var t = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        return t && Math.min(screen.width, screen.height) < 550;
     }
 
     function applyMobileUI() {
         document.body.classList.add('mobile-ui');
-        MOB_HIDE_IDS.forEach(function (id) {
+        MOB_HIDE.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.classList.add('mob-hide');
         });
-        _updateToggleBtns(true);
+        _syncToggleBtns(true);
     }
 
     function removeMobileUI() {
         document.body.classList.remove('mobile-ui');
-        MOB_HIDE_IDS.forEach(function (id) {
+        MOB_HIDE.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.classList.remove('mob-hide');
         });
         hideMobOverflow();
-        _updateToggleBtns(false);
+        _syncToggleBtns(false);
     }
 
-    // Update ALL toggle buttons (overflow panel + desktop spoiler)
-    function _updateToggleBtns(isMobile) {
-        // Button inside ••• overflow panel
+    function _syncToggleBtns(isMob) {
+        // ••• panel button
         var b1 = document.getElementById('mob-pc-toggle-btn');
-        if (b1) b1.textContent = isMobile ? '💻 Desktop mode' : '📱 Mobile mode';
-
-        // Button inside desktop share spoiler — only show on phones
+        if (b1) b1.textContent = isMob ? '💻 Desktop mode' : '📱 Mobile mode';
+        // Desktop share-spoiler button (only visible on phones)
         var row = document.getElementById('desktop-mob-toggle-row');
         var b2  = document.getElementById('desktop-mob-toggle-btn');
-        if (row && b2) {
-            row.style.display = 'block';   // always show row on phones
-            b2.textContent = isMobile ? '💻 Switch to Desktop mode' : '📱 Switch to Mobile mode';
-        }
+        if (row) row.style.display = 'block';   // always show row on phones
+        if (b2)  b2.textContent = isMob ? '💻 Switch to Desktop mode' : '📱 Switch to Mobile mode';
     }
 
+    // Public: toggles between compact and full UI without page reload
     window.togglePcMode = function () {
-        var isMob = document.body.classList.contains('mobile-ui');
-        if (isMob) {
+        if (document.body.classList.contains('mobile-ui')) {
             localStorage.setItem('cheeseboard-force-pc', '1');
             removeMobileUI();
         } else {
@@ -9448,28 +9552,27 @@ window.addEventListener('keydown', function (e) {
         }
     };
 
+    // ── overflow panel ──────────────────────────────────────────
     window.toggleMobOverflow = function () {
-        var panel    = document.getElementById('mob-overflow-panel');
-        var backdrop = document.getElementById('mob-backdrop');
-        if (!panel) return;
-        var open = panel.classList.contains('show');
+        var p = document.getElementById('mob-overflow-panel');
+        var b = document.getElementById('mob-backdrop');
+        if (!p) return;
+        var open = p.classList.contains('show');
         if (open) {
-            panel.classList.remove('show');
-            backdrop.classList.remove('show');
+            p.classList.remove('show'); b.classList.remove('show');
         } else {
             var sp = document.getElementById('mob-shapes-panel');
             if (sp) sp.classList.remove('show');
-            panel.classList.add('show');
-            backdrop.classList.add('show');
+            p.classList.add('show'); b.classList.add('show');
         }
     };
 
     window.hideMobOverflow = function () {
-        var panel    = document.getElementById('mob-overflow-panel');
-        var backdrop = document.getElementById('mob-backdrop');
-        if (panel)    panel.classList.remove('show');
-        if (backdrop) backdrop.classList.remove('show');
+        var p = document.getElementById('mob-overflow-panel');
+        var b = document.getElementById('mob-backdrop');
         var sp = document.getElementById('mob-shapes-panel');
+        if (p)  p.classList.remove('show');
+        if (b)  b.classList.remove('show');
         if (sp) sp.classList.remove('show');
     };
 
@@ -9478,6 +9581,7 @@ window.addEventListener('keydown', function (e) {
         if (sp) sp.classList.toggle('show');
     };
 
+    // ── toolbar slide tab ────────────────────────────────────────
     window.toggleMobToolbar = function () {
         var hidden = document.body.classList.toggle('toolbar-hidden');
         var tab = document.getElementById('mob-toolbar-toggle');
@@ -9485,21 +9589,17 @@ window.addEventListener('keydown', function (e) {
         setTimeout(function () { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 220);
     };
 
-    function init() {
+    // ── init ─────────────────────────────────────────────────────
+    (function init() {
         if (!isPhone()) return;
-
-        // Permanent phone marker — keeps ••• and toolbar-tab visible in any mode
+        // data-is-phone is permanent: keeps ••• and slide-tab visible in any mode
         document.body.setAttribute('data-is-phone', '1');
-
-        var forcePC = localStorage.getItem('cheeseboard-force-pc') === '1';
-        if (forcePC) {
-            _updateToggleBtns(false);   // show "📱 Mobile mode" everywhere
+        if (localStorage.getItem('cheeseboard-force-pc') === '1') {
+            _syncToggleBtns(false);   // show "📱 Mobile mode" in both buttons
         } else {
             applyMobileUI();
         }
-    }
-
-    init();
+    })();
 })();
 </script>
 </body>
