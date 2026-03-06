@@ -2200,7 +2200,7 @@ function activateTool(tool, keepMenu = false) {
     if (connectionMode === 'mqtt' && (tool === 'select' || tool === 'eraser')) {
         return; // Запрещаем активацию этих инструментов
     }
-
+    
     currentTool = tool;
     if (!keepMenu) closeAllMenus();
 
@@ -2229,9 +2229,9 @@ function activateTool(tool, keepMenu = false) {
         });
     } else {
         canvas.forEachObject(o => {
-            // Foreign textboxes (__isLocal === true means "received from partner")
-            // must NEVER become selectable. Making them selectable lets Fabric start
-            // a drag before selection:created even fires → textbox follows the cursor.
+            // Foreign textboxes (__isLocal===true = received from partner) must never
+            // become selectable. If they do, Fabric starts a drag on mousedown before
+            // selection:created can fire, causing the block to follow the cursor.
             if (o.type === 'textbox' && o.__isLocal === true) {
                 o.selectable = false;
                 o.evented    = false;
@@ -2243,12 +2243,10 @@ function activateTool(tool, keepMenu = false) {
     }
 
     if (tool === 'pen') {
-        // Switching to a drawing tool: force-exit any open text editing first.
-        // Otherwise canvas.isEditing stays true and Fabric ignores all pointer events
-        // on the drawing layer.
+        // Switching to a drawing tool: exit any open text editing first so
+        // canvas.isEditing doesn't block pointer events on the drawing layer.
         const _ed = canvas.getActiveObject();
-        if (_ed && _ed.isEditing && _ed.exitEditing) _ed.exitEditing();
-        canvas.discardActiveObject();
+        if (_ed && _ed.isEditing && _ed.exitEditing) { _ed.exitEditing(); canvas.discardActiveObject(); }
         canvas.isDrawingMode = true;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
         canvas.freeDrawingBrush.color = settings.pen.color;
@@ -2256,8 +2254,7 @@ function activateTool(tool, keepMenu = false) {
         canvas.defaultCursor = 'default';
     } else if (tool === 'highlighter') {
         const _ed = canvas.getActiveObject();
-        if (_ed && _ed.isEditing && _ed.exitEditing) _ed.exitEditing();
-        canvas.discardActiveObject();
+        if (_ed && _ed.isEditing && _ed.exitEditing) { _ed.exitEditing(); canvas.discardActiveObject(); }
         canvas.isDrawingMode = true;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
         const col = new fabric.Color(settings.highlighter.color);
@@ -2266,13 +2263,8 @@ function activateTool(tool, keepMenu = false) {
         canvas.freeDrawingBrush.width = parseInt(settings.highlighter.width);
         canvas.defaultCursor = 'default';
     } else if (tool === 'shape') {
-        const _ed = canvas.getActiveObject();
-        if (_ed && _ed.isEditing && _ed.exitEditing) _ed.exitEditing();
-        canvas.discardActiveObject();
         canvas.defaultCursor = 'crosshair';
     } else if (tool === 'eraser') {
-        const _ed = canvas.getActiveObject();
-        if (_ed && _ed.isEditing && _ed.exitEditing) _ed.exitEditing();
         canvas.defaultCursor = 'not-allowed';
         canvas.discardActiveObject();
         canvas.requestRenderAll();
@@ -3708,9 +3700,17 @@ let isDrawingShape = false;
 let shapeOrigX, shapeOrigY;
 let activeShape = null;
 let isMultitouch = false;
+// Tracks whether Apple Pencil (pointerType:'pen') is actively drawing.
+// Prevents ghost-touch palm contact from aborting an in-progress Pencil stroke.
+let _isPenDrawing = false;
 
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length > 1) {
+        // If Apple Pencil is currently drawing, ignore phantom palm touches.
+        // The Pencil generates pointerType:'pen' events separately from touch events,
+        // so a second touch is almost certainly an accidental palm contact.
+        if (_isPenDrawing) return;
+
         isMultitouch = true;
         canvas.isDrawingMode = false;
 
@@ -3730,6 +3730,11 @@ canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
         }
     } else {
         isMultitouch = false;
+        // Re-enable drawing mode immediately (may have been disabled by a prior gesture).
+        // Without this, the user has a 120 ms dead zone after every pinch/pan.
+        if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'laser') {
+            canvas.isDrawingMode = true;
+        }
     }
 }, { passive: false });
 
@@ -3872,14 +3877,10 @@ canvas.on('mouse:down', (o) => {
     // ── Text tool: click to place a new Textbox ──────────────────────────────
     if (currentTool === 'text') {
         const pointer = canvas.getPointer(o.e);
-        // If we clicked on an existing textbox, let Fabric handle editing
+        // If we clicked on an existing local textbox, enter editing
         const hit = canvas.findTarget(o.e);
         if (hit && hit.type === 'textbox') {
-            if (hit.__isLocal === true) {
-                // Foreign textbox — show warning, do not enter editing
-                setStatus('⚠️ Нельзя редактировать чужой текстовый блок', 'warn');
-                return;
-            }
+            if (hit.__isLocal === true) return; // partner's block — don't edit
             canvas.setActiveObject(hit);
             hit.enterEditing();
             canvas.requestRenderAll();
@@ -4318,10 +4319,7 @@ function getAbsoluteObjectData(obj, syncProps) {
 function handleLiveSync(e) {
     const target = e.target;
     if (!target) return;
-
-    // Never broadcast movement of objects that belong to the partner.
-    // __isLocal === true means the object was received from the partner.
-    if (target.__isLocal === true) return;
+    if (target.__isLocal === true) return; // partner's object — don't re-broadcast its position
 
     if (target.type === 'image') return;
     if (target.type === 'activeSelection' &&
@@ -4364,19 +4362,13 @@ canvas.on('object:moving', handleLiveSync);
 canvas.on('object:scaling', handleLiveSync);
 canvas.on('object:rotating', handleLiveSync);
 
-// Double-click a local textbox to enter editing.
-// Foreign textboxes (__isLocal === true = received from partner) cannot be edited.
+// Double-click a LOCAL textbox to enter editing.
+// Foreign textboxes (__isLocal===true) are already selectable:false so they
+// normally can't be hit, but guard in depth just in case.
 canvas.on('mouse:dblclick', (o) => {
     const hit = canvas.findTarget(o.e);
     if (!hit || hit.type !== 'textbox' || hit.isEditing) return;
-    if (hit.__isLocal === true) {
-        // Foreign block — should never get here since selectable:false,
-        // but guard in depth just in case.
-        setStatus('⚠️ Нельзя редактировать чужой текстовый блок', 'warn');
-        canvas.discardActiveObject();
-        canvas.requestRenderAll();
-        return;
-    }
+    if (hit.__isLocal === true) return; // partner's block — ignore
     canvas.setActiveObject(hit);
     hit.enterEditing();
     canvas.requestRenderAll();
@@ -4443,6 +4435,11 @@ function _abortFreeDrawing() {
 
 canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length >= 2) {
+        // Apple Pencil guard: a second touch while the Pencil is drawing is almost
+        // always an accidental palm contact — don't abort the stroke or switch to
+        // gesture mode. Two-finger gestures are intentional only when no pen is active.
+        if (_isPenDrawing) return;
+
         isGesturing = true;
         isMultitouch = true;
 
@@ -4505,17 +4502,32 @@ canvas.upperCanvasEl.addEventListener('touchmove', (e) => {
 
 canvas.upperCanvasEl.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) {
+        const wasGesturing = isGesturing;
         isGesturing = false;
-        // Bug 1: delay re-enabling drawing so Fabric fully processes the touchend
-        // and does NOT resume from any lingering internal state.
-        setTimeout(() => {
-            // Abort once more — some Fabric versions reset _isCurrentlyDrawing late
-            _abortFreeDrawing();
+
+        if (wasGesturing) {
+            // After a real two-finger gesture: deferred cleanup to let Fabric fully
+            // settle before we re-enable drawing mode.
+            // Bug 1: delay re-enabling drawing so Fabric fully processes the touchend
+            setTimeout(() => {
+                // Only abort if the user has NOT already started a new stroke.
+                // canvas._isCurrentlyDrawing is true as soon as Fabric's mouse:down
+                // fires in drawing mode — so this guard prevents the deferred abort
+                // from wiping out a fast stroke that began within the cooldown window.
+                if (!canvas._isCurrentlyDrawing) {
+                    _abortFreeDrawing();
+                }
+                isMultitouch = false;
+                if (currentTool === 'pen' || currentTool === 'highlighter') {
+                    canvas.isDrawingMode = true;
+                }
+            }, 80);
+        } else {
+            // Normal single-finger stroke end: no deferred abort needed.
+            // Resetting isMultitouch immediately prevents the 120 ms window
+            // where fast consecutive strokes were being silently dropped.
             isMultitouch = false;
-            if (currentTool === 'pen' || currentTool === 'highlighter') {
-                canvas.isDrawingMode = true;
-            }
-        }, 120);
+        }
     }
 });
 
@@ -5524,26 +5536,14 @@ function applyRemoteDrawObject(d, onDone) {
     }
 
     function addToCanvas(obj) {
-        obj.__isLocal = true;  // mark as "received from partner" to suppress re-broadcast
-        // Foreign textboxes must never be selectable — they belong to the partner.
-        // Setting selectable:true here would let Fabric start a drag on mouse:down
-        // before any selection:created guard can fire.
-        const isForeignTextbox = obj.type === 'textbox';
-        obj.set({
-            selectable: isForeignTextbox ? false : true,
-            evented:    isForeignTextbox ? false : true,
-        });
+        obj.__isLocal = true;
+        // Foreign textboxes must never be selectable — see activateTool comment.
+        const isForeignTb = (obj.type === 'textbox');
+        obj.set({ selectable: !isForeignTb, evented: !isForeignTb });
         const existing = findObjectById(d.id);
         if (existing && !existing.group) {
-            // FIX: используем исходный plain-объект d, а не Fabric-объект obj.
-            // existing.set(obj) копировал внутренние свойства Fabric (в т.ч. canvas:null),
-            // что разрывало связь объекта с холстом и делало его неинтерактивным.
             existing.set(d);
-            existing.set({
-                selectable: isForeignTextbox ? false : true,
-                evented:    isForeignTextbox ? false : true,
-                __isLocal: true
-            });
+            existing.set({ selectable: !isForeignTb, evented: !isForeignTb, __isLocal: true });
             if (existing.type === 'textbox') {
                 existing.initDimensions();
             }
@@ -5984,6 +5984,18 @@ function applySelectionLocks(e) {
     const target = e.target;
     if (!target) return;
 
+    // Last-resort guard: if a foreign textbox somehow got selected (race condition),
+    // immediately deselect it. selectable:false should prevent this, but just in case.
+    function _isForeignTb(o) { return o.type === 'textbox' && o.__isLocal === true; }
+    const hasForeignTb = (target.type === 'activeSelection' || target.type === 'group')
+        ? target.getObjects().some(_isForeignTb)
+        : _isForeignTb(target);
+    if (hasForeignTb) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        return;
+    }
+
     const isLocked = hasPinnedObjects(target);
 
     target.set({
@@ -6347,9 +6359,14 @@ function showCtxMenu(x, y) {
 function hideCtxMenu() { ctxMenu.classList.remove('show'); }
 
 document.addEventListener('pointerdown', (e) => {
+    // Track Apple Pencil activity so touch handlers can ignore accidental palm contacts.
+    if (e.pointerType === 'pen') _isPenDrawing = true;
     if (e.pointerType === 'touch') return; // тач обрабатывается отдельно
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 });
+// Clear the pen flag on lift or cancel so future palm contacts are handled normally.
+document.addEventListener('pointerup',     (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
+document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
 document.addEventListener('touchstart', (e) => {
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 }, { passive: true });
