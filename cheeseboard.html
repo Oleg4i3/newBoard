@@ -4175,8 +4175,8 @@ canvas.on('path:created', (e) => {
     if (isMultitouch) { canvas.remove(e.path); return; }
     // Laser pointer: ephemeral — no history, but DO broadcast so partner sees it too
     if (window._laserMode) {
-        e.path.set({ isLaser: true });
-        _laserAnimatePath(e.path);
+        e.path.set({ isLaser: true, selectable: false, evented: false, opacity: 1 });
+        window._laserPendingPaths.push(e.path);   // animate only when Ctrl is released
         broadcast('draw', { data: Object.assign(e.path.toObject(['id']), { isLaser: true, fill: '' }) });
         return;
     }
@@ -5290,12 +5290,12 @@ function setupConn() {
 
         } else if (msg.type === 'draw') {
             if (msg.data.isLaser) {
-                // Remote laser pointer: add to canvas first, then animate (blink + remove)
+                // Remote laser pointer: queue until laser_release
                 fabric.util.enlivenObjects([msg.data], (objs) => {
                     objs.forEach(o => {
                         o.set({ selectable: false, evented: false, opacity: 1, fill: '' });
                         canvas.add(o);
-                        _laserAnimatePath(o);
+                        window._remoteLaserPendingPaths.push(o);
                     });
                     canvas.requestRenderAll();
                 });
@@ -5350,6 +5350,9 @@ function setupConn() {
 
         } else if (msg.type === 'rotation_viz' || msg.type === 'pivot_set' || msg.type === 'pivot_clear') {
             if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data || msg);
+
+        } else if (msg.type === 'laser_release') {
+            window._triggerRemoteLaserRelease();
         }
     }
 }
@@ -5527,7 +5530,7 @@ function applyRemoteDrawObject(d, onDone) {
             objs.forEach(function(o) {
                 o.set({ selectable: false, evented: false, opacity: 1, fill: '' });
                 canvas.add(o);
-                _laserAnimatePath(o);
+                window._remoteLaserPendingPaths.push(o);  // wait for laser_release
             });
             canvas.requestRenderAll();
             if (onDone) onDone();
@@ -8112,6 +8115,10 @@ function handleFirebaseMessage(msg) {
                 if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data);
                 break;
                 
+            case 'laser_release':
+                window._triggerRemoteLaserRelease();
+                break;
+                
             case 'request_state':
                 // Отправляем текущее состояние канвы
                 if (canvas.getObjects().length > 0) {
@@ -8660,6 +8667,10 @@ function handleWsMessage(msg) {
             case 'pivot_set':
             case 'pivot_clear':
                 if (typeof handlePivotMessage !== 'undefined') handlePivotMessage(msg.type, msg.data);
+                break;
+
+            case 'laser_release':
+                window._triggerRemoteLaserRelease();
                 break;
 
             case 'request_state':
@@ -9471,9 +9482,18 @@ window.addEventListener('keydown', function (e) {
 // ==========================================
 (function () {
     window._laserMode = false;
+    window._remoteLaserPendingPaths = [];  // remote paths queued until laser_release
     let _laserPrevTool   = null;
     let _laserActivated  = false;
     let _laserCancelledThisCycle = false;
+    window._laserPendingPaths = [];   // paths drawn while Ctrl is held
+
+    /* ── Release all queued remote laser paths (called on laser_release msg) ── */
+    window._triggerRemoteLaserRelease = function () {
+        const pending = window._remoteLaserPendingPaths.slice();
+        window._remoteLaserPendingPaths = [];
+        pending.forEach(function (o) { _laserAnimatePath(o); });
+    };
 
     /* ── Animate a laser path: show 2 s, blink ×2, remove ── */
     window._laserAnimatePath = function (path) {
@@ -9489,7 +9509,7 @@ window.addEventListener('keydown', function (e) {
                 const visible = (tick % 2 === 0); // even = show, odd = hide
                 path.set('opacity', visible ? 1 : 0);
                 canvas.requestRenderAll();
-                if (tick >= 9) {//was 5
+                if (tick >= 7) {//was 5
                     clearInterval(iv);
                     canvas.remove(path);
                     canvas.requestRenderAll();
@@ -9525,6 +9545,15 @@ window.addEventListener('keydown', function (e) {
         window._laserMode = false;
         const prev = _laserPrevTool || 'select';
         _laserPrevTool = null;
+
+        /* Start the 1.5 s -> blink -> remove timer for every path drawn this session */
+        const pending = window._laserPendingPaths.slice();
+        window._laserPendingPaths = [];
+        pending.forEach(function (p) { _laserAnimatePath(p); });
+
+        /* Tell partner: Ctrl released → start their timer too */
+        broadcast('laser_release', {});
+
         activateTool(prev, true);
     }
 
