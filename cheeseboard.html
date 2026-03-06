@@ -380,6 +380,25 @@
         }
         .fp-item:hover  { background: rgba(255,255,255,0.12); }
         .fp-item.fp-sel { background: rgba(37,99,235,0.35); }
+        /* ---- PIN PROMPT MODAL ---- */
+        #pin-prompt {
+            display: none; position: fixed; inset: 0; z-index: 9998;
+            background: rgba(0,0,0,0.35); align-items: center; justify-content: center;
+        }
+        #pin-prompt.show { display: flex; }
+        #pin-prompt-inner {
+            background: white; border-radius: 14px; padding: 22px 26px 18px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.22); text-align: center;
+            min-width: 240px; max-width: 320px; animation: ppFadeIn .18s ease;
+        }
+        @keyframes ppFadeIn { from { opacity:0; transform:scale(.93) } to { opacity:1; transform:scale(1) } }
+        #pin-prompt-inner .pp-icon { font-size: 28px; margin-bottom: 6px; }
+        #pin-prompt-inner h4 { margin: 0 0 5px; font-size: 15px; color: #1e293b; }
+        #pin-prompt-inner p  { margin: 0 0 16px; font-size: 11px; color: #64748b; line-height: 1.4; }
+        .pp-btns { display: flex; gap: 10px; justify-content: center; }
+        .pp-btns button { padding: 7px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; transition: .15s; }
+        #pp-yes  { background: #2563eb; color: #fff; }  #pp-yes:hover  { background: #1d4ed8; }
+        #pp-no   { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; } #pp-no:hover { background: #e2e8f0; }
     </style>
 <script>
 // ══════════════════════════════════════════════════════════════
@@ -945,6 +964,19 @@ document.addEventListener('mousedown', function(e) {
             <span class="ctx-slider-label" style="min-width:68px;">Denoise</span>
             <input type="range" id="ctx-blur" min="0" max="10" value="0" step="1" oninput="ctxApplyImgFilter()">
             <span id="ctx-blur-val" style="min-width:28px;font-size:10px;color:rgba(255,255,255,0.8);">0</span>
+        </div>
+    </div>
+</div>
+
+<!-- Pin-prompt Modal -->
+<div id="pin-prompt">
+    <div id="pin-prompt-inner">
+        <div class="pp-icon">📌</div>
+        <h4>Pin all pages?</h4>
+       
+        <div class="pp-btns">
+            <button id="pp-yes"  onclick="pinPromptResolve(true)">Pin</button>
+            <button id="pp-no"   onclick="pinPromptResolve(false)">Skip</button>
         </div>
     </div>
 </div>
@@ -1746,6 +1778,8 @@ async function handleImport(input) {
                     const _cursorSuspendedByPdf = true;
                     cursorAsleep = true;
 
+                    const pdfPageIds = [];
+
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
                         // scale 1.5 gives good quality for PDF
@@ -1766,11 +1800,13 @@ async function handleImport(input) {
 
                         await new Promise(resolve => {
                             fabric.Image.fromURL(imgData, (img) => {
+                                const pageId = 'pdf-' + Math.random().toString(36).substr(2, 9);
                                 img.set({
                                     top:  currentTop,
                                     left: pdfLeft > 0 ? pdfLeft : 100,
-                                    id:   'pdf-' + Math.random().toString(36).substr(2, 9)
+                                    id:   pageId
                                 });
+                                pdfPageIds.push(pageId);
                                 if (img.width > 900) img.scaleToWidth(900);
                                 setupImportedImage(img, `PDF Page ${i}`);
                                 currentTop += (img.height * img.scaleY) + 50;
@@ -1783,6 +1819,11 @@ async function handleImport(input) {
                     // Resume cursor after queue drains
                     setTimeout(() => { cursorAsleep = false; }, 500);
                     setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
+
+                    if (pdf.numPages > 1) {
+                        const shouldPin = await showPinPrompt();
+                        if (shouldPin) pinObjectsById(pdfPageIds);
+                    }
                     
                 } catch (err) {
                     console.error('PDF processing error:', err);
@@ -3327,6 +3368,46 @@ function insertPngShape(filename) {
 // ==========================================
 // ЛОГИКА PIN / UNPIN
 // ==========================================
+// ==========================================
+// PIN PROMPT (after PDF load)
+// ==========================================
+let _pinPromptResolve = null;
+
+function showPinPrompt() {
+    return new Promise(resolve => {
+        _pinPromptResolve = resolve;
+        document.getElementById('pin-prompt').classList.add('show');
+    });
+}
+
+function pinPromptResolve(answer) {
+    document.getElementById('pin-prompt').classList.remove('show');
+    if (_pinPromptResolve) { _pinPromptResolve(answer); _pinPromptResolve = null; }
+}
+window.pinPromptResolve = pinPromptResolve;
+
+function pinObjectsById(ids) {
+    const syncProps = [
+        'id', 'isPinned',
+        'lockMovementX', 'lockMovementY', 'lockRotation',
+        'lockScalingX', 'lockScalingY', 'hasControls', 'borderColor', 'hoverCursor'
+    ];
+    ids.forEach(id => {
+        const obj = canvas.getObjects().find(o => o.id === id);
+        if (!obj) return;
+        obj.set({
+            lockMovementX: true, lockMovementY: true, lockRotation: true,
+            lockScalingX: true,  lockScalingY: true,
+            lockSkewingX: true,  lockSkewingY: true,
+            hasControls: false, hoverCursor: 'not-allowed',
+            isPinned: true, borderColor: '#ef4444'
+        });
+        broadcast('modified', { data: obj.toObject(syncProps) });
+    });
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+}
+
 function togglePin() {
 	// 🔥 НОВОЕ: Проверка режима MQTT
     if (connectionMode === 'mqtt') return;
@@ -9194,13 +9275,13 @@ window.addEventListener('keydown', function (e) {
                 const visible = (tick % 2 === 0); // even = show, odd = hide
                 path.set('opacity', visible ? 1 : 0);
                 canvas.requestRenderAll();
-                if (tick >= 5) {
+                if (tick >= 9) {//was 5
                     clearInterval(iv);
                     canvas.remove(path);
                     canvas.requestRenderAll();
                 }
             }, 160);
-        }, 2000);
+        }, 1500);
     };
 
     /* ── Activate laser drawing mode ── */
