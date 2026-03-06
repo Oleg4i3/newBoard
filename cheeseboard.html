@@ -3037,7 +3037,7 @@ function cleanupCrop() {
 }
 
 
-const palette = ['#000000', '#ff0000', '#0000ff', '#008000', '#ffa500', '#ffffff','#800080'];
+const palette = ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'];
 const hlPalette = ['#ffeb3b', '#00ff00', '#00ffff', '#ff00ff', '#ff0011', '#0000ff', '#116600', '#555555'];
 
 function renderPalette(id, colors, type) {
@@ -6127,7 +6127,7 @@ function showCtxMenu(x, y) {
         // Build text color swatches
         const row = document.getElementById('ctx-text-color-row');
         row.innerHTML = '';
-        ['#000000','#ffffff','#ff0000','#0000ff','#008000','#ffa500','#800080','#888888'].forEach(c => {
+        ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'].forEach(c => {
             const sw = document.createElement('div');
             sw.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
             sw.style.background = c;
