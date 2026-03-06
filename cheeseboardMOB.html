@@ -381,28 +381,61 @@
         .fp-item:hover  { background: rgba(255,255,255,0.12); }
         .fp-item.fp-sel { background: rgba(37,99,235,0.35); }
         /* ── MOBILE PHONE UI ─────────────────────────── */
-        /* Hidden by default; JS adds .mobile-ui to <body> on phones */
-        #mob-overflow-wrap { display: none; }
-        .mobile-ui #mob-overflow-wrap { display: flex !important; align-items: center; }
-        .mobile-ui .mob-hide { display: none !important; }
-        .mobile-ui .divider  { display: none !important; }
+        #mob-overflow-wrap    { display: none; }
+        #mob-toolbar-toggle   { display: none; }
 
-        /* Overflow panel: slides in below top-bar */
+        /* JS sets .mobile-ui on <body> for phones */
+        .mobile-ui #mob-overflow-wrap  { display: flex !important; align-items: center; }
+        .mobile-ui .mob-hide           { display: none !important; }
+        .mobile-ui .divider            { display: none !important; }
+
+        /* Floating tab to show/hide top-bar (always visible on mobile) */
+        #mob-toolbar-toggle {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            top: 35px; /* moves with toolbar */
+            width: 44px; height: 16px;
+            background: #fff; border: 1px solid #ddd; border-top: none;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            z-index: 103; cursor: pointer;
+            font-size: 9px; color: #aaa; line-height: 16px; text-align: center;
+            transition: top 0.2s ease;
+            user-select: none;
+        }
+        .mobile-ui #mob-toolbar-toggle { display: block; }
+
+        /* When toolbar is hidden */
+        body.toolbar-hidden .top-bar            { transform: translateY(-35px); }
+        body.toolbar-hidden #canvas-wrapper     { top: 0 !important; }
+        body.toolbar-hidden #mob-toolbar-toggle { top: 0; }
+        body.toolbar-hidden #mob-overflow-panel { top: 0; }
+        .top-bar { transition: transform 0.2s ease; }
+        #canvas-wrapper { transition: top 0.2s ease; }
+
+        /* Overflow panel */
         #mob-overflow-panel {
-            display: none;
-            position: absolute; top: 35px; left: 0; right: 0;
+            display: none; position: absolute;
+            top: 35px; left: 0; right: 0;
             background: #fff; border-bottom: 1px solid #ddd;
             box-shadow: 0 5px 18px rgba(0,0,0,0.13);
             padding: 10px 12px; z-index: 99;
             flex-direction: column; gap: 8px;
+            transition: top 0.2s ease;
         }
         #mob-overflow-panel.show { display: flex; }
 
-        /* Transparent backdrop to close panel on outside-tap */
+        /* Backdrop to close panel on outside-tap */
         #mob-backdrop {
             display: none; position: fixed; inset: 0; z-index: 98;
         }
         #mob-backdrop.show { display: block; }
+
+        /* Shapes sub-panel inside overflow (mobile only) */
+        #mob-shapes-panel {
+            display: none; flex-direction: column; gap: 6px;
+            border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px;
+        }
+        #mob-shapes-panel.show { display: flex; }
 
         .mob-row {
             display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
@@ -411,7 +444,6 @@
             font-size: 9px; color: #aaa; text-transform: uppercase;
             min-width: 34px; letter-spacing: .04em;
         }
-        /* "•••" button styling */
         #mob-overflow-btn { font-size: 16px; letter-spacing: 1px; }
     </style>
 <script>
@@ -828,38 +860,80 @@ document.addEventListener('mousedown', function(e) {
             <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
         </div>
 
-        <!-- Mobile: overflow trigger button (hidden on desktop) -->
+        <!-- Mobile-only: ••• overflow trigger -->
         <div id="mob-overflow-wrap" class="bar-section">
             <button class="tool-btn" id="mob-overflow-btn" onclick="toggleMobOverflow()" data-tooltip="More tools">•••</button>
         </div>
 
-    </div><!-- end .top-bar -->
+    </div><!-- /.top-bar -->
 
-<!-- Mobile: backdrop to close overflow panel on outside tap -->
+<!-- Mobile toolbar hide/show tab -->
+<div id="mob-toolbar-toggle" onclick="toggleMobToolbar()">▲</div>
+
+<!-- Mobile backdrop (closes overflow panel on outside tap) -->
 <div id="mob-backdrop" onclick="hideMobOverflow()"></div>
 
-<!-- Mobile: overflow panel with secondary tools -->
+<!-- Mobile overflow panel -->
 <div id="mob-overflow-panel">
+    <!-- Share row (mirrors host-controls/session-info) -->
+    <div class="mob-row" id="mob-share-row">
+        <span class="mob-row-label">Share</span>
+        <button class="tool-btn" onclick="startHost();hideMobOverflow()" data-tooltip="Share / Host">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+        </button>
+    </div>
+    <!-- Edit row -->
     <div class="mob-row">
         <span class="mob-row-label">Edit</span>
         <button class="tool-btn" onclick="duplicateSelected();hideMobOverflow()" data-tooltip="Duplicate">❐</button>
         <button class="tool-btn" onclick="togglePin();hideMobOverflow()" data-tooltip="Pin / Unpin">📌</button>
         <button class="tool-btn" onclick="groupSelected();hideMobOverflow()" data-tooltip="Group">🪢</button>
         <button class="tool-btn" onclick="ungroupSelected();hideMobOverflow()" data-tooltip="Ungroup">⛓️</button>
-        <button class="tool-btn" onclick="startCropMode();hideMobOverflow()" data-tooltip="Crop image">✂️</button>
+        <button class="tool-btn" onclick="startCropMode();hideMobOverflow()" data-tooltip="Crop">✂️</button>
         <button class="tool-btn" onclick="deleteSelected();hideMobOverflow()" data-tooltip="Delete">❌</button>
     </div>
+    <!-- Draw row -->
     <div class="mob-row">
         <span class="mob-row-label">Draw</span>
         <button class="tool-btn" id="mob-btn-highlighter" onclick="activateTool('highlighter');hideMobOverflow()" data-tooltip="Highlighter">🖍️</button>
         <button class="tool-btn" id="mob-btn-text" onclick="activateTool('text');hideMobOverflow()" data-tooltip="Text">T</button>
-        <button class="tool-btn" id="mob-btn-shape" onclick="toggleSubmenu('shapes-menu');activateTool('shape',true);hideMobOverflow()" data-tooltip="Shapes">📐</button>
+        <button class="tool-btn" id="mob-btn-shape" onclick="toggleMobShapes()" data-tooltip="Shapes">📐</button>
         <button class="tool-btn" id="mob-btn-magnet" onclick="toggleSnap();hideMobOverflow()" data-tooltip="Snap to grid">🧲</button>
     </div>
+    <!-- Shapes sub-panel (expands inline) -->
+    <div id="mob-shapes-panel">
+        <div class="mob-row">
+            <span class="mob-row-label">2D</span>
+            <div class="shape-item" onclick="setShapeType('rect');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">▭</span>Rect</div>
+            <div class="shape-item" onclick="setShapeType('circle');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">○</span>Elips</div>
+            <div class="shape-item" onclick="setShapeType('triangle');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">△</span>Tri</div>
+            <div class="shape-item" onclick="setShapeType('line');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">╱</span>Line</div>
+            <div class="shape-item" onclick="setShapeType('arrow');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">↗</span>Arrow</div>
+            <div class="shape-item" onclick="setShapeType('rhombus');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">◇</span>Rhom</div>
+            <div class="shape-item" onclick="setShapeType('hexagon');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">⬡</span>Hex</div>
+            <div class="shape-item" onclick="setShapeType('dashed');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">--</span>Dash</div>
+        </div>
+        <div class="mob-row">
+            <span class="mob-row-label">3D</span>
+            <div class="shape-item" onclick="insert3DShape('cube');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="13" viewBox="0 0 180 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><rect x="2" y="30" width="110" height="110"/><rect x="68" y="2" width="110" height="110"/><line x1="2" y1="30" x2="68" y2="2"/><line x1="112" y1="30" x2="178" y2="2"/><line x1="2" y1="140" x2="68" y2="112"/><line x1="112" y1="140" x2="178" y2="112"/></svg></span>Cube</div>
+            <div class="shape-item" onclick="insert3DShape('cylinder');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
+            <div class="shape-item" onclick="insert3DShape('cone');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
+            <div class="shape-item" onclick="insert3DShape('pyramid');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="14" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
+        </div>
+    </div>
+    <!-- Board row -->
     <div class="mob-row">
         <span class="mob-row-label">Board</span>
         <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save Board">💾</button>
-        <button class="tool-btn" onclick="hideMobOverflow();setTimeout(()=>document.getElementById('file-input').click(),80)" data-tooltip="Open Board">📁</button>
+        <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open Board">📁</button>
+    </div>
+    <!-- PC / Mobile toggle -->
+    <div class="mob-row" style="border-top:1px solid #eee; padding-top:8px; margin-top:2px;">
+        <button class="tool-btn" id="mob-pc-toggle-btn" onclick="togglePcMode()" style="font-size:11px; width:auto; padding:0 10px;"
+                data-tooltip="Switch to desktop interface">💻 Desktop mode</button>
     </div>
 </div>
 
@@ -9332,59 +9406,116 @@ window.addEventListener('keydown', function (e) {
 // MOBILE PHONE UI
 // ==========================================
 (function () {
-    /**
-     * Returns true if the current client is a phone (small screen, touch).
-     * iPad / PC / forced-PC mode all return false.
-     * Add ?pc=1 to the URL to force desktop mode on any device.
-     */
-    function isMobilePhone() {
-        if (new URLSearchParams(location.search).get('pc') === '1') return false;
+
+    // IDs of elements to hide in mobile mode
+    var MOB_HIDE_IDS = [
+        'host-controls', 'join-controls', 'session-info',
+        'btn-duplicate', 'btn-pin', 'btn-group', 'btn-ungroup',
+        'btn-crop', 'btn-delete',
+        'highlighter-wrap', 'btn-text', 'shape-wrap',
+        'btn-save', 'btn-open'
+    ];
+
+    // ---------- device detection ----------
+    function isPhone() {
         var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         if (!hasTouch) return false;
-        // screen.width/height are CSS pixels in modern mobile browsers.
-        // Phones: max portrait dimension < 550 px. iPad mini: 768 px.
-        var minDim = Math.min(screen.width, screen.height);
-        return minDim < 550;
+        return Math.min(screen.width, screen.height) < 550;
     }
 
-    function initMobileUI() {
-        if (!isMobilePhone()) return;
+    // ---------- apply / remove mobile UI ----------
+    function applyMobileUI() {
         document.body.classList.add('mobile-ui');
-
-        // Elements to hide in mobile mode (secondary toolbar buttons)
-        var toHide = [
-            'btn-duplicate', 'btn-pin', 'btn-group', 'btn-ungroup',
-            'btn-crop', 'btn-delete',
-            'highlighter-wrap', 'btn-text', 'shape-wrap',
-            'btn-save', 'btn-open'
-        ];
-        toHide.forEach(function (id) {
+        MOB_HIDE_IDS.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.classList.add('mob-hide');
         });
+        updatePcToggleBtn();
     }
 
-    function toggleMobOverflow() {
+    function removeMobileUI() {
+        document.body.classList.remove('mobile-ui');
+        MOB_HIDE_IDS.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('mob-hide');
+        });
+        hideMobOverflow();
+        updatePcToggleBtn();
+    }
+
+    function updatePcToggleBtn() {
+        var btn = document.getElementById('mob-pc-toggle-btn');
+        if (!btn) return;
+        var isMob = document.body.classList.contains('mobile-ui');
+        btn.textContent = isMob ? '💻 Desktop mode' : '📱 Mobile mode';
+        btn.setAttribute('data-tooltip', isMob ? 'Switch to desktop interface' : 'Switch to mobile interface');
+    }
+
+    // ---------- public: PC/mobile toggle (in-page, no reload) ----------
+    window.togglePcMode = function () {
+        var isMob = document.body.classList.contains('mobile-ui');
+        if (isMob) {
+            localStorage.setItem('cheeseboard-force-pc', '1');
+            removeMobileUI();
+        } else {
+            localStorage.removeItem('cheeseboard-force-pc');
+            applyMobileUI();
+            hideMobOverflow();
+        }
+    };
+
+    // ---------- overflow panel ----------
+    window.toggleMobOverflow = function () {
         var panel    = document.getElementById('mob-overflow-panel');
         var backdrop = document.getElementById('mob-backdrop');
         var open = panel.classList.contains('show');
-        panel.classList.toggle('show', !open);
-        backdrop.classList.toggle('show', !open);
-    }
+        if (open) {
+            panel.classList.remove('show');
+            backdrop.classList.remove('show');
+        } else {
+            // Close shapes sub-panel when re-opening
+            document.getElementById('mob-shapes-panel').classList.remove('show');
+            panel.classList.add('show');
+            backdrop.classList.add('show');
+        }
+    };
 
-    function hideMobOverflow() {
+    window.hideMobOverflow = function () {
         var panel    = document.getElementById('mob-overflow-panel');
         var backdrop = document.getElementById('mob-backdrop');
-        if (panel)    panel.classList.remove('show');
-        if (backdrop) backdrop.classList.remove('show');
+        if (panel)    { panel.classList.remove('show'); }
+        if (backdrop) { backdrop.classList.remove('show'); }
+        var sp = document.getElementById('mob-shapes-panel');
+        if (sp) sp.classList.remove('show');
+    };
+
+    // ---------- shapes sub-panel toggle ----------
+    window.toggleMobShapes = function () {
+        var sp = document.getElementById('mob-shapes-panel');
+        sp.classList.toggle('show');
+    };
+
+    // ---------- toolbar hide/show tab ----------
+    window.toggleMobToolbar = function () {
+        var hidden = document.body.classList.toggle('toolbar-hidden');
+        var tab = document.getElementById('mob-toolbar-toggle');
+        if (tab) tab.textContent = hidden ? '▼' : '▲';
+        // Trigger fabric canvas resize after CSS transition (200ms)
+        setTimeout(function () { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 220);
+    };
+
+    // ---------- init ----------
+    function init() {
+        var forcePC = localStorage.getItem('cheeseboard-force-pc') === '1';
+        if (!forcePC && isPhone()) {
+            applyMobileUI();
+        } else {
+            updatePcToggleBtn();
+        }
     }
 
-    // Expose to global scope (used by inline onclick handlers)
-    window.toggleMobOverflow = toggleMobOverflow;
-    window.hideMobOverflow   = hideMobOverflow;
-
-    // Run at DOM-ready (scripts are at end of body, so DOM is ready here)
-    initMobileUI();
+    // Run after DOM is ready (scripts are at end of body)
+    init();
 })();
 </script>
 </body>
