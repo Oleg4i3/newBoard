@@ -406,6 +406,8 @@
         #mob-toolbar-toggle { display: none; }
         body[data-is-phone] #mob-overflow-wrap  { display: flex !important; align-items: center; }
         body[data-is-phone] #mob-toolbar-toggle { display: block; }
+        body.mobile-ui #mob-overflow-wrap        { display: flex !important; align-items: center; }
+        body.mobile-ui #mob-toolbar-toggle       { display: block; }
 
         /* Compact layout: hide secondary buttons */
         .mobile-ui .mob-hide { display: none !important; }
@@ -748,8 +750,8 @@ document.addEventListener('mousedown', function(e) {
                         </button>
                     </div>
 
-                    <!-- Mobile/Desktop toggle — JS shows this only on phones -->
-                    <div id="desktop-mob-toggle-row" style="display:none;">
+                    <!-- Mobile/Desktop toggle — always visible for testing -->
+                    <div id="desktop-mob-toggle-row" style="display:block;">
                         <button id="desktop-mob-toggle-btn" onclick="togglePcMode()"
                             style="font-size:11px;background:#f0fff4;border:1px solid #6ee7b7;border-radius:5px;padding:3px 10px;cursor:pointer;color:#065f46;">
                             📱 Switch to Mobile mode
@@ -1391,7 +1393,6 @@ function checkMqttAutoConnect() {
     const roomId = urlParams.get('room');
     
     if (roomId && connectionMode === 'mqtt') {
-        console.log('Auto-connecting to MQTT room:', roomId);
         document.getElementById('mqtt-room-id').value = roomId;
         document.getElementById('manual-connect-spoiler').classList.add('expanded');
         
@@ -1427,7 +1428,6 @@ function connectToMqttRoom(roomId) {
         const broker = MQTT_BROKERS[brokerIndex];
         setStatus(`Connecting to ${broker.name}...`, 'ok');
         
-        console.log(`Trying to connect to MQTT broker: ${broker.name} (${broker.url})`);
         
         mqttClient = mqtt.connect(broker.url, {
             clientId: 'cheeseboard_' + Math.random().toString(16).substr(2, 8),
@@ -1440,14 +1440,12 @@ function connectToMqttRoom(roomId) {
         });
         
         mqttClient.on('connect', () => {
-            console.log(`✅ Connected to MQTT broker: ${broker.name}`);
             setStatus(`In cloud room: ${roomId} (${broker.name})`, 'ok');
             
             // Подписываемся на топики комнаты
             const baseTopic = `cheeseboard/${roomId}`;
             mqttClient.subscribe(`${baseTopic}/#`, (err) => {
                 if (!err) {
-                    console.log(`Subscribed to topic: ${baseTopic}/#`);
                     
                     // Запрашиваем текущее состояние канвы у других участников
                     publishMqttMessage('request_state', { from: myMqttId });
@@ -1468,12 +1466,10 @@ function connectToMqttRoom(roomId) {
                 
                 handleMqttMessage(msg.type, msg.payload);
             } catch(e) {
-                console.error('Error parsing MQTT message:', e);
             }
         });
         
         mqttClient.on('error', (err) => {
-            console.error(`MQTT error from ${broker.name}:`, err);
             // Пробуем следующий брокер
             setTimeout(() => {
                 tryConnect(brokerIndex + 1);
@@ -1481,14 +1477,12 @@ function connectToMqttRoom(roomId) {
         });
         
         mqttClient.on('close', () => {
-            console.log(`MQTT connection to ${broker.name} closed`);
             if (mqttRoomId === roomId) {
                 setStatus('Disconnected from cloud', 'err');
             }
         });
         
         mqttClient.on('reconnect', () => {
-            console.log(`Reconnecting to ${broker.name}...`);
             setStatus('Reconnecting to cloud...', 'ok');
         });
     }
@@ -1504,7 +1498,6 @@ function setupCanvasMqttEvents() {
     canvas.off('object:removed');
     canvas.off('path:created');
     
-    console.log('🔧 Setting up MQTT canvas events...');
     
     // ========================================
     // ИСПРАВЛЕНИЕ 2A: path:created обрабатывается ПЕРВЫМ
@@ -1512,7 +1505,6 @@ function setupCanvasMqttEvents() {
     canvas.on('path:created', (e) => {
         if (!e.path || isSendingToMqtt) return;
         
-        console.log('✏️ Path created (pen/highlighter stroke)');
         
         // 🔥 КРИТИЧЕСКИ ВАЖНО: устанавливаем флаг ПЕРЕД отправкой
         isSendingToMqtt = true;
@@ -1534,7 +1526,6 @@ function setupCanvasMqttEvents() {
         // Отправляем через MQTT
         publishMqttMessage('object_added', pathData);
         
-        console.log('📤 Sent path via MQTT:', e.path.id);
         
         // Сбрасываем флаг через небольшую задержку
         setTimeout(() => {
@@ -1557,7 +1548,6 @@ function setupCanvasMqttEvents() {
             return;
         }
         
-        console.log('➕ Object added:', e.target.type, e.target.id);
         
         isSendingToMqtt = true;
         
@@ -1585,7 +1575,6 @@ function setupCanvasMqttEvents() {
     canvas.on('object:modified', (e) => {
         if (!e.target || e.target.__isLocal || isSendingToMqtt) return;
         
-        console.log('✏️ Object modified:', e.target.type, e.target.id);
         
         isSendingToMqtt = true;
         
@@ -1607,7 +1596,6 @@ function setupCanvasMqttEvents() {
     canvas.on('object:removed', (e) => {
         if (!e.target || e.target.__isLocal || isSendingToMqtt) return;
         
-        console.log('➖ Object removed:', e.target.id);
         
         publishMqttMessage('object_removed', { id: e.target.id });
     });
@@ -1617,7 +1605,6 @@ function setupCanvasMqttEvents() {
 
 function publishMqttMessage(type, payload) {
     if (!mqttClient || !mqttClient.connected || !mqttRoomId) {
-        console.warn('⚠️ Cannot publish: MQTT not connected');
         return;
     }
     
@@ -1632,16 +1619,13 @@ function publishMqttMessage(type, payload) {
     
     try {
         mqttClient.publish(topic, JSON.stringify(message), { qos: 1 }); //at least 1
-        console.log(`📡 Published ${type} to MQTT`);
     } catch (error) {
-        console.error('❌ MQTT publish error:', error);
     }
 }
 
 
 
 function handleMqttMessage(type, data) {
-    console.log('📥 Received MQTT message:', type, data.id || data);
     
     switch(type) {
 		  case 'viewport':  // Добавьте этот case
@@ -1656,7 +1640,6 @@ function handleMqttMessage(type, data) {
                 const existing = canvas.getObjects().find(o => o.id === data.id);
                 
                 if (existing) {
-                    console.log('⚠️ Object already exists, updating:', data.id);
                     // FIX: используем plain data, а не Fabric-объект obj
                     existing.set(data);
                     existing.set({ selectable: true, evented: true, __isLocal: true });
@@ -1676,7 +1659,6 @@ function handleMqttMessage(type, data) {
                         isSendingToMqtt = false;
                     }, 100);  // Увеличенный таймаут для стабильности
                     
-                    console.log('✅ Added object from MQTT:', data.id);
                 }
                 canvas.requestRenderAll();
             });
@@ -1725,7 +1707,6 @@ function handleMqttMessage(type, data) {
                 ];
                 const state = canvas.toJSON(syncProps);
                 publishMqttMessage('state_dump', state);
-                console.log('📤 Sent full canvas state');
             }
             break;
             
@@ -1740,7 +1721,6 @@ function handleMqttMessage(type, data) {
                 canvas.loadFromJSON(data, () => {
                     canvas.requestRenderAll();
                     resizeCanvas();
-                    console.log('✅ Canvas state loaded from cloud');
                     setTimeout(() => {
                         isSendingToMqtt = false;
                     }, 500);  // Более длительная блокировка для массовой загрузки
@@ -1947,7 +1927,6 @@ async function handleImport(input) {
                     }
                     
                 } catch (err) {
-                    console.error('PDF processing error:', err);
                     setStatus('PDF processing failed', 'err');
                     alert("Ошибка при обработке PDF файла.");
                 }
@@ -1955,7 +1934,6 @@ async function handleImport(input) {
             reader.readAsArrayBuffer(file);
         }
     } catch (error) {
-        console.error('Import error:', error);
         setStatus('Import failed', 'err');
     }
 }
@@ -3229,7 +3207,6 @@ window.setShapeType = (t) => {
     settings.shape.type = t; 
       
     if (!canvas) {
-        console.warn('Canvas is not initialized yet');
         return;
     }
     document.querySelectorAll('.shape-item').forEach(i => i.classList.remove('active'));
@@ -4595,7 +4572,6 @@ function checkAutoConnect() {
     const connectId = urlParams.get('connect');
     
     if (connectId && connectId.trim() !== '') {
-        console.log('Auto-connect (P2P) parameter found:', connectId);
         document.getElementById('remote-id-input').value = connectId;
         document.getElementById('manual-remote-id').value = connectId;
         
@@ -4632,7 +4608,6 @@ function copyShareLink() {
             btn.style.color = '';
         }, 2000);
     }).catch(err => {
-        console.error('Failed to copy link:', err);
     });
 }
 
@@ -4651,13 +4626,11 @@ function joinPeerManual() {
 }
 
 function initPeer() {
-    console.log("Initializing peer connection...");
     
     if (peer) {
         try {
             peer.destroy();
         } catch (e) {
-            console.warn("Error destroying old peer:", e);
         }
         peer = null;
     }
@@ -4677,14 +4650,12 @@ function initPeer() {
 
 function setupPeerEvents() {
     peer.on('open', (id) => {
-        console.log(`✅ Peer ID: ${id}`);
         myId = id;
         actualConnectionType = "stun";
         
         // Don't override if already in a server-based mode (WS/Firebase/MQTT)
         const serverModes = ['ws', 'firebase', 'mqtt'];
         if (serverModes.includes(connectionMode)) {
-            console.log('PeerJS ready but staying in mode:', connectionMode);
             return;
         }
         
@@ -4712,10 +4683,8 @@ function setupPeerEvents() {
     });
     
     peer.on('error', (err) => {
-        console.error('Peer error:', err.type, err.message);
         
         if (err.type === 'unavailable-id' || err.type === 'server-error') {
-            console.log('Server error, retrying in 3 seconds...');
             setStatus('Server error, retrying...', 'err');
             setTimeout(initPeer, 3000);
         } else if (err.type === 'peer-unavailable') {
@@ -4726,10 +4695,8 @@ function setupPeerEvents() {
     });
     
     peer.on('connection', (c) => {
-        console.log(`📞 Incoming connection from: ${c.peer}`);
         
         if (conn && conn.open) {
-            console.log('Closing old connection...');
             conn.close();
             conn = null;
         }
@@ -4738,7 +4705,6 @@ function setupPeerEvents() {
         setupConn();
         
         c.on('open', () => {
-            console.log('✅ Incoming connection established');
             connectionMode = "connected";
             actualConnectionType = "turn";
             setStatus("Connected (Partner joined)", 'ok');
@@ -4749,12 +4715,10 @@ function setupPeerEvents() {
         });
         
         c.on('error', (err) => {
-            console.error('Incoming connection error:', err);
         });
     });
     
     peer.on('disconnected', () => {
-        console.log('Peer disconnected from signaling server');
         setStatus('Disconnected from server, reconnecting...', 'err');
         
         setTimeout(() => {
@@ -4807,11 +4771,9 @@ function sendCanvasDataChunked() {
                 type: 'sync', 
                 data: jsonStr
             });
-            console.log('Sent canvas data (single chunk)');
             return;
         }
         
-        console.log(`Canvas data large (${jsonStr.length} bytes), chunking...`);
         setStatus('Sending canvas data (large file)...', 'ok');
         
         const chunks = [];
@@ -4832,27 +4794,23 @@ function sendCanvasDataChunked() {
         sendChunksWithDelay(chunks, 0);
         
     } catch (error) {
-        console.error('Error preparing canvas data:', error);
     }
 }
 
 function sendChunksWithDelay(chunks, index) {
     if (index >= chunks.length || !conn || !conn.open) {
-        console.log('Finished sending chunks');
         setStatus('Connected', 'ok');
         return;
     }
     
     try {
         conn.send(chunks[index]);
-        console.log(`Sent chunk ${index + 1}/${chunks.length}`);
         
         setTimeout(() => {
             sendChunksWithDelay(chunks, index + 1);
         }, 50);
         
     } catch (error) {
-        console.error('Error sending chunk:', error);
         setTimeout(() => {
             sendChunksWithDelay(chunks, index);
         }, 500);
@@ -4916,7 +4874,6 @@ function processSendQueue() {
     try {
         const messageSize = JSON.stringify(message).length;
         if (messageSize > MAX_BUFFER_SIZE * 0.9) {
-            console.warn('Message too large, dropping:', message.type);
             setTimeout(processSendQueue, 100);
             return;
         }
@@ -4926,7 +4883,6 @@ function processSendQueue() {
         setTimeout(processSendQueue, 10);
         
     } catch (error) {
-        console.error('Error in send queue:', error);
         sendQueue.unshift(message);
         setTimeout(() => processSendQueue(), 500);
     }
@@ -4935,7 +4891,6 @@ function processSendQueue() {
 function broadcast(type, payload) {
 	   // 🔥 Игнорируем если идет отправка в Firebase
     if (isSendingToFirebase) {
-        console.log('Skip broadcast (sending to Firebase):', type);
         return;
     }
     
@@ -4946,13 +4901,12 @@ function broadcast(type, payload) {
     
 	// 🔥 ДОБАВИТЬ ПРОВЕРКУ НА ЛОКАЛЬНЫЕ ОБЪЕКТЫ:
 	  if (payload.data && payload.data.__isLocal) {
-        console.log('Ignoring local object in broadcast');
         return;
     }
 
     // ── WS Relay (Deno or Ably) ──
     if (connectionMode === 'ws') {
-        if (isSendingToWs) { console.log('⛔ broadcast blocked by isSendingToWs:', type); return; }
+        if (isSendingToWs) { return; }
         if (!payload || !payload.data || !payload.data.__isLocal) {
             sendToWs(type, payload && payload.data ? payload.data : payload);
         }
@@ -5136,7 +5090,6 @@ window.joinPeer = () => {
         return;
     }
     
-    console.log(`Connecting to peer: ${id}`);
     
     if (connectionTimeout) {
         clearTimeout(connectionTimeout);
@@ -5175,7 +5128,6 @@ window.joinPeer = () => {
         });
         
         connectionTimeout = setTimeout(() => {
-            console.log(`Connection timeout (attempt ${retryCount + 1})`);
             if (newConn && !newConn.open) {
                 newConn.close();
                 setTimeout(() => attemptConnect(retryCount + 1), 1000);
@@ -5184,7 +5136,6 @@ window.joinPeer = () => {
         
         newConn.on('open', () => {
             clearTimeout(connectionTimeout);
-            console.log('✅ Connection opened successfully');
             conn = newConn;
             setupConn();
             
@@ -5198,13 +5149,11 @@ window.joinPeer = () => {
         
         newConn.on('error', (err) => {
             clearTimeout(connectionTimeout);
-            console.error('Connection error:', err);
             setTimeout(() => attemptConnect(retryCount + 1), 800);
         });
         
         newConn.on('close', () => {
             clearTimeout(connectionTimeout);
-            console.log('Connection attempt closed');
         });
     }
     
@@ -5215,12 +5164,10 @@ function setupConn() {
     if (!conn) return;
     
     conn.on('open', () => {
-        console.log('Connection fully established');
         broadcast('request_sync', {});
     });
     
     conn.on('error', (err) => {
-        console.error('Connection error:', err);
         
         if (connectionMode === "connected") {
             setStatus('Connection lost', 'err');
@@ -5237,7 +5184,6 @@ function setupConn() {
     });
     
     conn.on('close', () => {
-        console.log('Connection closed');
         if (connectionMode === "connected") {
             setStatus('Disconnected', 'err');
             connectionMode = "offline";
@@ -5261,17 +5207,14 @@ function setupConn() {
                         const canvasData = JSON.parse(fullData);
                         canvas.loadFromJSON(canvasData, () => {
                             canvas.requestRenderAll();
-                            console.log('Canvas synchronized via chunks');
                         });
                     } catch (e) {
-                        console.error('Error parsing chunked sync data:', e);
                     }
                 } else if (msg.type === 'chunked_message') {
                     try {
                         const originalMessage = JSON.parse(fullData);
                         processMessage(originalMessage);
                     } catch (e) {
-                        console.error('Error parsing chunked message:', e);
                     }
                 }
             }
@@ -7260,7 +7203,6 @@ function openBoard(input) {
             });
             
         } catch (err) {
-            console.error("Error loading board:", err);
             setStatus('Error loading board', 'err');
             alert("Failed to load board file. The file might be corrupted.");
         }
@@ -7389,8 +7331,6 @@ function _broadcastImageWithJpegSrc(img, filename) {
         cropY:  img.cropY  || 0,
     };
 
-    console.log('📸 sending', hasAlpha ? 'PNG(alpha)' : 'JPEG',
-                Math.round(outSrc.length/1024) + 'KB', sw+'x'+sh);
     broadcast('draw', { data, isImage: true, fileName: filename });
 }
 // ==========================================
@@ -7498,7 +7438,6 @@ window.addEventListener('keydown', (e) => {
                 const jsonStr = JSON.stringify(cloned.toObject(['type', 'stroke', 'strokeWidth', 'fill', 'isPinned']));
                 
                 navigator.clipboard.writeText(jsonStr).then(() => {
-                    console.log('Object copied to clipboard');
                     const prevBorder = active.borderColor;
                     active.set('borderColor', '#00ff00');
                     canvas.requestRenderAll();
@@ -7507,7 +7446,6 @@ window.addEventListener('keydown', (e) => {
                         canvas.requestRenderAll(); 
                     }, 300);
                 }).catch(err => {
-                    console.error('Copy failed:', err);
                 });
             });
         }
@@ -7709,7 +7647,6 @@ setInterval(cleanupUnusedResources, 60000);
 // ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ
 // ==========================================
 window.addEventListener('load', () => {
-    console.log('Cheeseboard initialized with MQTT support');
     initPartnerCursor();
     
     // Проверяем параметр room в URL для автоматического подключения к MQTT
@@ -7924,7 +7861,6 @@ function getFirebase() {
         // Загружаем Firebase только когда нужно
         firebaseApp = firebase.initializeApp(firebaseConfig);
         firebaseDatabase = firebase.database();
-        console.log("✅ Firebase загружен");
     }
     return firebaseDatabase;
 }
@@ -7972,7 +7908,6 @@ function connectToFirebaseRoom(roomId) {
     // Это регистрировало два child_added listener, и каждое сообщение обрабатывалось
     // дважды — отсюда клоны объектов при группировке.
     if (firebaseRoomId === roomId && firebaseRef) {
-        console.log('Firebase: already connected to room', roomId, '— skipping duplicate connect');
         return;
     }
     if (firebaseRef) {
@@ -8008,7 +7943,6 @@ function connectToFirebaseRoom(roomId) {
                     });
                     
                     firebaseRef.update(updates).then(() => {
-                        console.log(`Deleted ${messagesToDelete.length} old messages`);
                     });
                 }
             }
@@ -8039,7 +7973,6 @@ function connectToFirebaseRoom(roomId) {
         });
         
         setStatus(`Connected to Firebase room: ${roomId}`, 'ok');
-        console.log("✅ Подключились к Firebase комнате");
         
         // 🔥 ВАЖНО: Отправляем запрос состояния через 2 секунды
         setTimeout(() => {
@@ -8047,7 +7980,6 @@ function connectToFirebaseRoom(roomId) {
         }, 2000);
         
     } catch (error) {
-        console.error("Ошибка Firebase:", error);
         setStatus("Firebase error: " + error.message, 'err');
     }
 }
@@ -8055,7 +7987,6 @@ function connectToFirebaseRoom(roomId) {
 function handleFirebaseMessage(msg) {
     if (msg.sender === myFirebaseId) return;
     
-    console.log('📥 Received from Firebase:', msg.type);
     
     isSendingToFirebase = true;
     
@@ -8133,7 +8064,6 @@ function handleFirebaseMessage(msg) {
                     const state = canvas.toJSON(syncProps);
                     isSendingToFirebase = false; // сбрасываем флаг иначе sendToFirebase заблокирует
                     sendToFirebase('state_dump', state);
-                    console.log('📤 Sent full canvas state to Firebase');
                 }
                 break;
                 
@@ -8150,7 +8080,6 @@ function handleFirebaseMessage(msg) {
                 break;
                 
             default:
-                console.log('Unknown Firebase message type:', msg.type);
         }
     } finally {
         // Reset immediately — we don't have canvas-event broadcasting for Firebase
@@ -8164,11 +8093,9 @@ function handleFirebaseMessage(msg) {
 // 6. Отправка сообщений в Firebase
 function sendToFirebase(type, data) {
     if (!firebaseRef || isSendingToFirebase) {
-        console.log('Skip sending to Firebase:', type);
         return;
     }
     
-    console.log("📤 Отправляем в Firebase:", type);
     
     // state_dump храним в отдельном узле — переподключившийся партнёр
     // всегда получит борд (не зависит от limitToLast(50))
@@ -8179,9 +8106,7 @@ function sendToFirebase(type, data) {
             data: data,
             timestamp: Date.now()
         }).then(() => {
-            console.log('✅ state_dump written to Firebase snapshot');
         }).catch(error => {
-            console.error('❌ Error writing state_dump to Firebase:', error);
         });
         return;
     }
@@ -8196,9 +8121,7 @@ function sendToFirebase(type, data) {
     // Используем push для генерации уникального ID сообщения
     const newMessageRef = firebaseRef.child('messages').push();
     newMessageRef.set(message).then(() => {
-        console.log('✅ Message sent to Firebase');
     }).catch(error => {
-        console.error('❌ Error sending to Firebase:', error);
     });
 }
 // 7. Обновляем функцию broadcast для Firebase (WS handled inside original broadcast)
@@ -8322,13 +8245,11 @@ function connectViaDeno(roomId) {
     wsRoomId = roomId;
     const url = getWsServerUrl();
     setStatus('Connecting to Deno relay...', 'ok');
-    console.log('WS connecting to', url, 'room', roomId);
 
     try { wsSocket = new WebSocket(url); }
     catch(e) { setStatus('WS: invalid server URL', 'err'); return; }
 
     wsSocket.onopen = () => {
-        console.log('✅ WS open, joining room:', roomId);
         wsSocket.send(JSON.stringify({ type: 'join', room: roomId, sender: myWsId }));
     };
     wsSocket.onmessage = (e) => {
@@ -8349,9 +8270,8 @@ function connectViaDeno(roomId) {
                 delete _denoChunkBufs[msgId];
                 try {
                     const full = JSON.parse(fullStr);
-                    console.log('📥 Deno (chunked):', full.type, Math.round(fullStr.length/1024)+'KB');
                     handleWsMessage(full);
-                } catch(err) { console.error('Deno chunk reassemble error:', err); }
+                } catch(err) { }
             }
             return;
         }
@@ -8384,7 +8304,6 @@ function sendViaDeno(type, data) {
 
     const msgId       = myWsId + '_d' + (++_denoSeq);
     const totalChunks = Math.ceil(payloadStr.length / DENO_CHUNK_LIMIT);
-    console.log('📤 Deno chunking:', type, Math.round(payloadStr.length/1024)+'KB →', totalChunks, 'chunks');
     for (let i = 0; i < totalChunks; i++) {
         const chunk = payloadStr.slice(i * DENO_CHUNK_LIMIT, (i+1) * DENO_CHUNK_LIMIT);
         wsSocket.send(JSON.stringify({
@@ -8426,7 +8345,6 @@ function connectViaAbly(roomId) {
     ablyChannel.subscribe('msg', (ablyMsg) => {
         if (ablyMsg.clientId === myWsId) return;
         const msg = ablyMsg.data;
-        console.log('📥 Ably:', msg.type);
         handleWsMessage(msg);
     });
 
@@ -8444,16 +8362,14 @@ function connectViaAbly(roomId) {
             delete _ablyChunkBufs[msgId];
             try {
                 const msg = JSON.parse(fullStr);
-                console.log('📥 Ably (chunked):', msg.type, Math.round(fullStr.length/1024) + 'KB');
                 handleWsMessage(msg);
-            } catch(e) { console.error('Ably chunk reassemble error:', e); }
+            } catch(e) { }
         }
     });
 
     // Presence: partner joined/left
     ablyChannel.presence.subscribe('enter', (member) => {
         if (member.clientId === myWsId) return;
-        console.log('👤 Partner entered:', member.clientId);
         setStatus('Partner joined — sending board...', 'ok');
         const syncProps = ['id','isPinned','left','top','scaleX','scaleY','angle',
             'fill','stroke','strokeWidth','type','width','height',
@@ -8477,7 +8393,6 @@ function connectViaAbly(roomId) {
             ablyChannel.presence.get((err, members) => {
                 const stillPresent = !err && members.some(m => m.clientId === member.clientId);
                 if (!stillPresent) {
-                    console.log('👤 Partner left (confirmed):', member.clientId);
                     setStatus('Partner left', 'err');
                 }
             });
@@ -8485,7 +8400,6 @@ function connectViaAbly(roomId) {
     });
 
     ablyClient.connection.on('connected', () => {
-        console.log('✅ Ably connected, presenceEntered:', _ablyPresenceEntered);
         if (_ablyPresenceEntered) {
             // Reconnect — just update status, don't re-enter presence (SDK handles it)
             setStatus('Ably room: ' + roomId, 'ok');
@@ -8497,7 +8411,6 @@ function connectViaAbly(roomId) {
             ablyChannel.presence.enter({}, () => {
                 _ablyPresenceEntered = true;
                 if (othersPresent) {
-                    console.log('Partner already in room, requesting state');
                     setStatus('Ably room: ' + roomId + ' — requesting board...', 'ok');
                     sendViaAbly('request_state', { from: myWsId });
                 } else {
@@ -8532,7 +8445,6 @@ function _ablyFlushQueue() {
     if (!ablyChannel || _ablyQueue.length === 0) return;
     const item = _ablyQueue.shift();
     ablyChannel.publish(item.eventName, item.payload, (err) => {
-        if (err) console.error('Ably publish error:', item.payload.type || 'chunk', err.message);
     });
     if (_ablyQueue.length > 0) {
         _ablyQueueTimer = setTimeout(_ablyFlushQueue, ABLY_SEND_INTERVAL);
@@ -8547,13 +8459,12 @@ function _ablyEnqueue(eventName, payload) {
 }
 
 function sendViaAbly(type, data) {
-    if (!ablyChannel) { console.warn('Ably: no channel, skip', type); return; }
+    if (!ablyChannel) { return; }
 
     const payload    = { sender: myWsId, type, data, timestamp: Date.now() };
     const payloadStr = JSON.stringify(payload);
 
     if (payloadStr.length <= ABLY_CHUNK_LIMIT) {
-        console.log('📤 Ably queue:', type, Math.round(payloadStr.length / 1024) + 'KB');
         _ablyEnqueue('msg', payload);
         return;
     }
@@ -8561,7 +8472,6 @@ function sendViaAbly(type, data) {
     // Large — chunk with unique sequential msgId (NOT Date.now — collides for rapid sends)
     const msgId = myWsId + '_' + (++_ablySeq);
     const totalChunks = Math.ceil(payloadStr.length / ABLY_CHUNK_LIMIT);
-    console.log('📤 Ably chunking:', type, Math.round(payloadStr.length / 1024) + 'KB →', totalChunks, 'chunks, msgId:', msgId);
 
     for (let i = 0; i < totalChunks; i++) {
         const chunk = payloadStr.slice(i * ABLY_CHUNK_LIMIT, (i + 1) * ABLY_CHUNK_LIMIT);
@@ -8693,7 +8603,6 @@ function handleWsMessage(msg) {
                 break;
 
             default:
-                console.log('Unknown WS type:', msg.type);
         }
     } finally {
         isSendingToWs = false;
