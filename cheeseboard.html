@@ -714,17 +714,52 @@ document.addEventListener('mousedown', function(e) {
                 
 				<!-- Firebase секция -->
 <div id="firebase-section" class="mode-section">
-    <h5>Room name</h5>
-    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
-        <input type="text" id="firebase-room-id" class="id-box" placeholder="Room ID" style="width: 120px;">
-        <button class="btn btn-join" onclick="generateFirebaseLink()">Generate Link</button>
+
+    <!-- DB selector -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:10px;color:#666;white-space:nowrap;">🔥 Database:</span>
+        <select id="firebase-db-select" onchange="switchFirebaseDb(this.value)"
+            style="font-size:11px;border:1px solid #ccc;border-radius:5px;padding:2px 6px;
+                   background:#fff;color:#333;cursor:pointer;flex:1;min-width:0;">
+            <option value="primary">Primary (test account)</option>
+            <option value="backup">Backup (my account)</option>
+        </select>
+        <span id="firebase-db-status" style="font-size:9px;color:#aaa;white-space:nowrap;">●</span>
     </div>
-    <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Share this link for collaboration.</div>
-    <div style="display: flex; gap: 5px; align-items: center;">
-        <input type="text" id="firebase-link-display" class="id-box" readonly style="width: 180px;" onclick="copyFirebaseLink()">
-        <button class="btn btn-copy" onclick="copyFirebaseLink()">Copy</button>
-        <button class="btn btn-qr" onclick="showQR('firebase-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
+
+    <!-- Room name + generate button -->
+    <h5 style="margin:0 0 4px;">Room name</h5>
+    <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+        <input type="text" id="firebase-room-id" class="id-box" placeholder="Room ID" style="width:120px;">
+        <button id="firebase-gen-btn" class="btn btn-join" onclick="generateFirebaseLink()" style="white-space:nowrap;">Generate Link</button>
     </div>
+    <div style="font-size:10px;color:#888;margin-bottom:8px;">Share this link for collaboration.</div>
+
+    <!-- Link display (small, read-only) -->
+    <input type="text" id="firebase-link-display" class="id-box" readonly
+        style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:10px;color:#666;"
+        onclick="copyFirebaseLink()">
+
+    <!-- Big Copy + QR buttons -->
+    <div style="display:flex;gap:8px;">
+        <button onclick="copyFirebaseLink()" style="
+            flex:1;padding:10px 0;font-size:13px;font-weight:700;
+            background:#2196f3;color:#fff;border:none;border-radius:8px;
+            cursor:pointer;letter-spacing:.3px;display:flex;align-items:center;
+            justify-content:center;gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Link
+        </button>
+        <button onclick="showQR('firebase-link-display')" style="
+            flex:1;padding:10px 0;font-size:13px;font-weight:700;
+            background:#4caf50;color:#fff;border:none;border-radius:8px;
+            cursor:pointer;display:flex;align-items:center;
+            justify-content:center;gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="#4caf50"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="#4caf50"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="#4caf50"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg>
+            QR Code
+        </button>
+    </div>
+
 </div>
                 <!-- MQTT секция -->
                 <div id="mqtt-section" class="mode-section" style="display: none;">
@@ -8177,25 +8212,83 @@ async function _fbStripAndStoreImages(stateData) {
     return clone;
 }
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
-    authDomain: "cheeseboard-c7f66.firebaseapp.com",
-    databaseURL: "https://cheeseboard-c7f66-default-rtdb.firebaseio.com",
-    projectId: "cheeseboard-c7f66",
-    storageBucket: "cheeseboard-c7f66.firebasestorage.app",
-    messagingSenderId: "575291335461",
-    appId: "1:575291335461:web:a5e06825990b41e7d330cc"
+// ── Firebase database registry ──────────────────────────────────────────────
+// To activate the backup DB: fill in the values from your Firebase project
+// (see the step-by-step instructions in FIREBASE_SETUP.md / printed in console).
+const FIREBASE_CONFIGS = {
+    primary: {
+        label:   "Primary (test account)",
+        apiKey:            "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
+        authDomain:        "cheeseboard-c7f66.firebaseapp.com",
+        databaseURL:       "https://cheeseboard-c7f66-default-rtdb.firebaseio.com",
+        projectId:         "cheeseboard-c7f66",
+        storageBucket:     "cheeseboard-c7f66.firebasestorage.app",
+        messagingSenderId: "575291335461",
+        appId:             "1:575291335461:web:a5e06825990b41e7d330cc"
+    },
+    backup: {
+        label:   "Backup (my account)",
+        apiKey:            "AIzaSyAnc8GOrjSl3kkOHBuCTRt3SF31DnypzBo",
+        authDomain:        "cheeseboard-7b01d.firebaseapp.com",
+        databaseURL:       "https://cheeseboard-7b01d-default-rtdb.firebaseio.com",
+        projectId:         "cheeseboard-7b01d",
+        storageBucket:     "cheeseboard-7b01d.firebasestorage.app",
+        messagingSenderId: "650005551830",
+        appId:             "1:650005551830:web:70e7c9a5d6a11bbc004777"
+    }
 };
+
+// Active config key — changed by the dropdown
+let _activeFirebaseDbKey = 'primary';
+
+function switchFirebaseDb(key) {
+    const cfg = FIREBASE_CONFIGS[key];
+    if (!cfg) return;
+    // Validate backup isn't still placeholder
+    if (cfg.apiKey.startsWith('PASTE_')) {
+                alert('⚠️ Backup Firebase config is not filled in yet.\n\nOpen the HTML file in a text editor and replace the PASTE_YOUR_* placeholders in FIREBASE_CONFIGS.backup with your real values.\n\nSee the step-by-step setup instructions (FIREBASE_SETUP.md).');
+        document.getElementById('firebase-db-select').value = _activeFirebaseDbKey;
+        return;
+    }
+    if (_activeFirebaseDbKey === key) return;
+    _activeFirebaseDbKey = key;
+    // Force re-init on next connect
+    firebaseApp      = null;
+    firebaseDatabase = null;
+    // Disconnect active room so user reconnects with new DB
+    if (firebaseRef) {
+        disconnectFirebase();
+        setStatus('Switched to ' + cfg.label + ' — reconnect to a room', 'ok');
+    }
+    const statusEl = document.getElementById('firebase-db-status');
+    if (statusEl) statusEl.textContent = key === 'backup' ? '★' : '●';
+    // Visually prompt user to re-generate the link for the new DB
+    const genBtn = document.getElementById('firebase-gen-btn');
+    if (genBtn) {
+        genBtn.textContent = '↺ Re-Generate';
+        genBtn.style.background = '#ff9800';
+        genBtn.style.color = '#fff';
+    }
+    // Clear stale link so user doesn't accidentally share wrong DB link
+    const linkInput = document.getElementById('firebase-link-display');
+    if (linkInput) linkInput.value = '';
+}
 
 // 2. Простая функция для работы с Firebase
 let firebaseApp = null;
 let firebaseDatabase = null;
 
 function getFirebase() {
+    const cfg = FIREBASE_CONFIGS[_activeFirebaseDbKey];
     if (!firebaseApp) {
-        // Загружаем Firebase только когда нужно
-        firebaseApp = firebase.initializeApp(firebaseConfig);
-        firebaseDatabase = firebase.database();
+        // Name each app instance uniquely so Firebase SDK doesn't complain
+        // about duplicate initializeApp calls when switching DBs.
+        try {
+            firebaseApp = firebase.app('cheeseboard-' + _activeFirebaseDbKey);
+        } catch(e) {
+            firebaseApp = firebase.initializeApp(cfg, 'cheeseboard-' + _activeFirebaseDbKey);
+        }
+        firebaseDatabase = firebaseApp.database();
     }
     return firebaseDatabase;
 }
@@ -8205,12 +8298,24 @@ function generateFirebaseLink() {
     let roomId = document.getElementById('firebase-room-id').value.trim();
     
     if (!roomId) {
-        roomId = Math.random().toString(36).substr(2, 6);
+        // Use date-time as default room name: MMDD-HHmm
+        const _n = new Date();
+        const _pad = v => String(v).padStart(2,'0');
+        roomId = _pad(_n.getMonth()+1) + _pad(_n.getDate()) + '-' + _pad(_n.getHours()) + _pad(_n.getMinutes());
         document.getElementById('firebase-room-id').value = roomId;
+    }
+    // Reset generate button style
+    const genBtn = document.getElementById('firebase-gen-btn');
+    if (genBtn) {
+        genBtn.textContent = 'Generate Link';
+        genBtn.style.background = '';
+        genBtn.style.color = '';
     }
     
     const currentUrl = window.location.href.split('?')[0];
-    const firebaseLink = `${currentUrl}?firebase=${roomId}`;
+    const fdbParam = (_activeFirebaseDbKey && _activeFirebaseDbKey !== 'primary')
+        ? '&fdb=' + encodeURIComponent(_activeFirebaseDbKey) : '';
+    const firebaseLink = `${currentUrl}?firebase=${roomId}${fdbParam}`;
     
     document.getElementById('firebase-link-display').value = firebaseLink;
     
@@ -8228,8 +8333,20 @@ function copyFirebaseLink() {
 function checkFirebaseAutoConnect() {
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('firebase');
-    
+    const fdbKey = urlParams.get('fdb');
+
     if (roomId && connectionMode === 'firebase') {
+        // Switch to the DB that the host used (encoded in the link)
+        if (fdbKey && FIREBASE_CONFIGS[fdbKey] && fdbKey !== _activeFirebaseDbKey) {
+            _activeFirebaseDbKey = fdbKey;
+            const sel = document.getElementById('firebase-db-select');
+            if (sel) sel.value = fdbKey;
+            const statusEl = document.getElementById('firebase-db-status');
+            if (statusEl) statusEl.textContent = fdbKey === 'backup' ? '★' : '●';
+            // Force re-init so getFirebase() picks the right config
+            firebaseApp      = null;
+            firebaseDatabase = null;
+        }
         document.getElementById('firebase-room-id').value = roomId;
         setTimeout(() => connectToFirebaseRoom(roomId), 1000);
     }
