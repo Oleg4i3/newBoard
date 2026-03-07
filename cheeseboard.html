@@ -652,7 +652,7 @@ document.addEventListener('mousedown', function(e) {
 					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
 					Firebase (iOS compatible)
-					<a href="FIREBASE_CLEANER.html" target="_blank" data-tooltip="Open Firebase Cleaner — clears stale room data" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#fff3e0;border:1px solid #ffb74d;color:#e65100;font-size:11px;text-decoration:none;flex-shrink:0;margin-left:2px;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">🧹</a>
+					<a href="FIREBASE_CLEANER.html" target="_blank" data-tooltip="Open Firebase Cleaner — clears stale room data" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#fff3e0;border:1px solid #ffb74d;color:#e65100;font-size:11px;text-decoration:none;flex-shrink:0;margin-left:2px;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">🧹</a><span id="fb-traffic-badge" title="Firebase session traffic — ↑ Sent (writes) | ↓ Received (reads). Free tier: 10 GB/mo download, 1 GB storage" style="display:none;align-items:center;gap:3px;margin-left:5px;padding:1px 6px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;font-size:9px;font-family:monospace;cursor:default;white-space:nowrap;line-height:1.8;"><span id="fb-traffic-up" style="color:#16a34a;">↑0B</span><span style="opacity:0.35;margin:0 1px;">|</span><span id="fb-traffic-down" style="color:#2563eb;">↓0B</span></span>
 					</label>
                 </div>
                 
@@ -5927,10 +5927,22 @@ function broadcastCursor(e) {
 function _sendCursorPos(x, y, hidden) {
     const now = Date.now();
     const d = hidden ? { x, y, hidden: true } : { x, y };
-    if      (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) publishMqttMessage('cursor', d);
-    else if (connectionMode === 'firebase' && firebaseRef)                    sendToFirebase('cursor', d);
-    else if (connectionMode === 'ws')                                         sendToWs('cursor', d);
-    else if (conn && conn.open)                                               conn.send({ type: 'cursor', ...d, timestamp: now });
+    if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
+        publishMqttMessage('cursor', d);
+    } else if (connectionMode === 'firebase' && firebaseRef) {
+        // ── Cursor bypass: write directly to cursor/{userId}, NOT messages.push()
+        // Payload: {x:int, y:int} = ~14 chars vs ~100 chars + push key overhead.
+        // .set() overwrites the same node — no accumulation, no child_added storm.
+        const payload = hidden
+            ? { x: Math.round(x), y: Math.round(y), h: 1 }
+            : { x: Math.round(x), y: Math.round(y) };
+        _fbTraffic.addSent(payload);
+        firebaseRef.child('cursor').child(myFirebaseId).set(payload);
+    } else if (connectionMode === 'ws') {
+        sendToWs('cursor', d);
+    } else if (conn && conn.open) {
+        conn.send({ type: 'cursor', ...d, timestamp: now });
+    }
 }
 setTimeout(initPartnerCursor, 1000);
 
@@ -8083,6 +8095,7 @@ async function _fbResolveImgRef(imgRef) {
     if (!firebaseRef) return null;
     return new Promise(resolve => {
         firebaseRef.child('images').child(imgRef).once('value', snap => {
+            if (snap.val()) _fbTraffic.addRecv(snap.val());
             const src = snap.val();
             if (src) ImgCache.set(imgRef, src);
             resolve(src || null);
@@ -8112,6 +8125,7 @@ function _fbBroadcastImageWithRef(img, compressedSrc, filename) {
     ImgCache.set(imgId, compressedSrc);
 
     if (connectionMode === 'firebase' && firebaseRef) {
+        _fbTraffic.addSent(compressedSrc);
         firebaseRef.child('images').child(imgId).set(compressedSrc)
             .then(() => {
                 const imgData       = img.toObject(syncProps);
@@ -8149,6 +8163,7 @@ async function _fbStripAndStoreImages(stateData) {
         if (!cached) {
             // Upload to Firebase images/ node
             try {
+                _fbTraffic.addSent(obj.src);
                 await firebaseRef.child('images').child(imgId).set(obj.src);
                 ImgCache.set(imgId, obj.src);
             } catch(e) {
@@ -8243,6 +8258,7 @@ function connectToFirebaseRoom(roomId) {
         
         // Создаем ссылку на комнату
         firebaseRoomId = roomId;
+        _fbTraffic.reset(); // reset counter for fresh room session
         firebaseRef = db.ref(`cheeseboard/${roomId}`);
         
         // Удаляем старые сообщения (оставляем только последние 100)
@@ -8282,13 +8298,34 @@ function connectToFirebaseRoom(roomId) {
         firebaseRef.child('messages').limitToLast(50).on('child_added', (snapshot) => {
             const msg = snapshot.val();
             if (!msg) return;
+            if (msg.sender !== myFirebaseId) _fbTraffic.addRecv(msg);
             handleFirebaseMessage(msg);
         });
+
+        // ── Cursor-specific listener on dedicated cursor/{userId} node.
+        //    Uses child_changed (update) + child_added (first appearance).
+        //    Each event is just {x,y} or {x,y,h:1} — tiny, never accumulates.
+        function _onPartnerCursor(snapshot) {
+            if (snapshot.key === myFirebaseId) return; // ignore own writes
+            const d = snapshot.val();
+            if (!d) return;
+            _fbTraffic.addRecv(d);
+            if (d.h) {
+                if (partnerCursorDiv) partnerCursorDiv.style.display = 'none';
+                if (_partnerArrowDiv) _partnerArrowDiv.style.display = 'none';
+                partnerCursorVisible = false;
+            } else {
+                updatePartnerCursor(d.x, d.y);
+            }
+        }
+        firebaseRef.child('cursor').on('child_added',   _onPartnerCursor);
+        firebaseRef.child('cursor').on('child_changed', _onPartnerCursor);
 
         // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
         firebaseRef.child('state_snapshot').on('value', (snapshot) => {
             const msg = snapshot.val();
             if (!msg || msg.sender === myFirebaseId) return;
+            _fbTraffic.addRecv(msg);
             handleFirebaseMessage(msg);
         });
         
@@ -8417,22 +8454,71 @@ function handleFirebaseMessage(msg) {
 }
 
 
+
+// ==========================================
+// FIREBASE TRAFFIC TRACKER
+// ==========================================
+const _fbTraffic = (function () {
+    let sent = 0, recv = 0;
+
+    function _fmt(bytes) {
+        if (bytes < 1024)       return bytes + 'B';
+        if (bytes < 1048576)    return (bytes / 1024).toFixed(1) + 'KB';
+        return (bytes / 1048576).toFixed(2) + 'MB';
+    }
+
+    // Color thresholds vs 10 GB/month download limit
+    function _color(bytes) {
+        const MB = bytes / 1048576;
+        if (MB < 50)   return null;           // default blue
+        if (MB < 500)  return '#d97706';      // amber — 50-500 MB
+        return '#dc2626';                      // red — 500 MB+
+    }
+
+    function _render() {
+        const badge = document.getElementById('fb-traffic-badge');
+        const up    = document.getElementById('fb-traffic-up');
+        const down  = document.getElementById('fb-traffic-down');
+        if (!badge || !up || !down) return;
+        badge.style.display = 'inline-flex';
+        up.textContent   = '↑' + _fmt(sent);
+        down.textContent = '↓' + _fmt(recv);
+        const c = _color(recv);
+        badge.style.borderColor    = c ? c : '#bae6fd';
+        badge.style.background     = c ? (c === '#dc2626' ? '#fff1f2' : '#fffbeb') : '#f0f9ff';
+        down.style.color           = c ? c : '#2563eb';
+    }
+
+    return {
+        /** Call with the raw value being written/read (object, string, or byte count) */
+        addSent: function (payload) {
+            try { sent += (typeof payload === 'string' ? payload : JSON.stringify(payload)).length; }
+            catch(e) { sent += 256; /* fallback estimate */ }
+            _render();
+        },
+        addRecv: function (payload) {
+            try { recv += (typeof payload === 'string' ? payload : JSON.stringify(payload)).length; }
+            catch(e) { recv += 256; }
+            _render();
+        },
+        reset: function () { sent = 0; recv = 0; _render(); }
+    };
+})();
+
 // 6. Отправка сообщений в Firebase
 function sendToFirebase(type, data) {
     if (!firebaseRef || isSendingToFirebase) {
         return;
     }
-    
+    // Cursor has its own dedicated node — must never enter messages.push() queue
+    if (type === 'cursor') return;
     
     // state_dump храним в отдельном узле — переподключившийся партнёр
     // всегда получит борд (не зависит от limitToLast(50))
     if (type === 'state_dump') {
-        firebaseRef.child('state_snapshot').set({
-            sender: myFirebaseId,
-            type: 'state_dump',
-            data: data,
-            timestamp: Date.now()
-        }).then(() => {
+        const _sdPayload = { sender: myFirebaseId, type: 'state_dump', data: data, timestamp: Date.now() };
+        _fbTraffic.addSent(_sdPayload);
+        firebaseRef.child('state_snapshot').set(_sdPayload).then(() => {
         }).catch(error => {
         });
         return;
@@ -8446,6 +8532,7 @@ function sendToFirebase(type, data) {
     };
     
     // Используем push для генерации уникального ID сообщения
+    _fbTraffic.addSent(message);
     const newMessageRef = firebaseRef.child('messages').push();
     newMessageRef.set(message).then(() => {
     }).catch(error => {
@@ -8473,9 +8560,11 @@ function disconnectFirebase() {
     if (firebaseRef) {
         firebaseRef.child('messages').off();
         firebaseRef.child('state_snapshot').off();
+        firebaseRef.child('cursor').off(); // remove cursor listeners
         
         if (myFirebaseId) {
             firebaseRef.child('users').child(myFirebaseId).remove();
+            firebaseRef.child('cursor').child(myFirebaseId).remove(); // clean up own cursor node
         }
         
         firebaseRef = null;
@@ -8487,6 +8576,7 @@ function disconnectFirebase() {
 window.addEventListener('beforeunload', function() {
     if (firebaseRef && myFirebaseId) {
         firebaseRef.child('users').child(myFirebaseId).remove();
+        firebaseRef.child('cursor').child(myFirebaseId).remove();
     }
 });
 
