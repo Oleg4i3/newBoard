@@ -413,12 +413,6 @@
         .mobile-ui .mob-hide { display: none !important; }
         .mobile-ui .divider  { display: none !important; }
 
-        /* Pack all toolbar sections flush — no space-between gaps when dividers are hidden */
-        .mobile-ui .top-bar  { justify-content: flex-start; gap: 0; padding: 0 4px; }
-        .mobile-ui .bar-section { gap: 4px; }
-        /* Keep ••• pinned to the right edge */
-        .mobile-ui #mob-overflow-wrap { margin-left: auto; }
-
         /* Slide-up toolbar toggle tab   width: 44px; height: 16px;*/
         #mob-toolbar-toggle {
             position: absolute; left: 50%; transform: translateX(-50%);
@@ -748,16 +742,6 @@ document.addEventListener('mousedown', function(e) {
                         Show partner viewport frame
                     </label>
 
-                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;user-select:none;">
-                        🖼 Image compression:
-                        <select id="img-compress-select" onchange="setImgCompressLevel(this.value)"
-                            style="font-size:11px;border:1px solid #ccc;border-radius:4px;padding:2px 4px;background:#fff;color:#333;cursor:pointer;">
-                            <option value="low">Low — max quality</option>
-                            <option value="medium" selected>Medium — balanced ❖</option>
-                            <option value="high">High — smallest size</option>
-                        </select>
-                    </label>
-
                     <!-- Help → opens floating modal -->
                     <div>
                         <button onclick="toggleHelpModal()"
@@ -780,7 +764,7 @@ document.addEventListener('mousedown', function(e) {
 		 <div class="divider"></div>
 
         <div class="bar-section">
-          <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
+          <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↶</button>
 			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
             <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
@@ -945,13 +929,6 @@ document.addEventListener('mousedown', function(e) {
             <div class="shape-item" onclick="insert3DShape('cylinder');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
             <div class="shape-item" onclick="insert3DShape('cone');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
             <div class="shape-item" onclick="insert3DShape('pyramid');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="14" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
-        </div>
-        <div class="mob-row">
-            <span class="mob-row-label">PNG</span>
-            <div class="shape-item" onclick="insertPngShape('sphere.png');hideMobOverflow()"><span class="shape-icon">🌐</span>Globe</div>
-            <div class="shape-item" onclick="insertPngShape('ball.png');hideMobOverflow()"><span class="shape-icon">🪩</span>Ball</div>
-            <div class="shape-item" onclick="insertPngShape('ruler.png');hideMobOverflow()"><span class="shape-icon">📏</span>Ruler</div>
-            <div class="shape-item" onclick="insertPngShape('protractor.png');hideMobOverflow()"><span class="shape-icon">⊾</span>Prot</div>
         </div>
     </div>
     <div class="mob-row">
@@ -1214,24 +1191,6 @@ document.getElementById('qr-modal').addEventListener('click', function(e) {
 let lastViewportSend = 0;
 const VIEWPORT_THROTTLE = 200; // ms
 let connectionMode = 'firebase'; // 'p2p', 'mqtt', 'firebase', 'ws'
-
-// ── Image compression settings ──────────────────────────────────────────────
-// Levels control maxSize (px) and JPEG quality for imported raster images.
-// SVG and PNG-with-alpha are never re-encoded — these settings only affect
-// opaque images (JPEG, opaque PNG) and PDF page rasterisation.
-const IMG_COMPRESS = {
-    low:    { maxSizeSmall: 2400, maxSizeMed: 2000, maxSizeLarge: 1600, qSmall: 0.95, qMed: 0.92, qLarge: 0.88, qPdf: 0.90, pdfScale: 2.0 },
-    medium: { maxSizeSmall: 2000, maxSizeMed: 1600, maxSizeLarge: 1200, qSmall: 0.95, qMed: 0.88, qLarge: 0.78, qPdf: 0.75, pdfScale: 2.0 },
-    high:   { maxSizeSmall: 1400, maxSizeMed: 1100, maxSizeLarge:  900, qSmall: 0.88, qMed: 0.75, qLarge: 0.65, qPdf: 0.60, pdfScale: 1.8 },
-};
-let _imgCompressLevel = 'medium'; // default
-function getImgCompress() { return IMG_COMPRESS[_imgCompressLevel] || IMG_COMPRESS.medium; }
-function setImgCompressLevel(level) {
-    if (!IMG_COMPRESS[level]) return;
-    _imgCompressLevel = level;
-    const sel = document.getElementById('img-compress-select');
-    if (sel && sel.value !== level) sel.value = level;
-}
 let mqttClient = null;
 let mqttRoomId = null;
 let myMqttId = Math.random().toString(36).substr(2, 9);
@@ -1799,9 +1758,6 @@ async function optimizeImageBeforeImport(file) {
     return new Promise((resolve, reject) => {
         if (file.type === 'application/pdf') { resolve(file); return; }
 
-        // SVG: pass through untouched — rasterising would destroy transparency and vector quality
-        if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) { resolve(file); return; }
-
         const size = file.size;
 
         // Tiny images (< 50 KB) — pass through untouched
@@ -1815,23 +1771,22 @@ async function optimizeImageBeforeImport(file) {
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                const _c = getImgCompress();
                 let maxSize, quality, mimeType;
 
                 if (size < 200 * 1024) {
                     // Small: preserve quality, just cap resolution
-                    maxSize  = _c.maxSizeSmall;
-                    quality  = _c.qSmall;
+                    maxSize  = 2000;
+                    quality  = 0.95;
                     mimeType = file.type.includes('png') ? 'image/png' : 'image/jpeg';
                 } else if (size < 1024 * 1024) {
                     // Medium: moderate compression
-                    maxSize  = _c.maxSizeMed;
-                    quality  = _c.qMed;
+                    maxSize  = 1600;
+                    quality  = 0.88;
                     mimeType = 'image/jpeg';
                 } else {
                     // Large: aggressive
-                    maxSize  = _c.maxSizeLarge;
-                    quality  = _c.qLarge;
+                    maxSize  = 1200;
+                    quality  = 0.78;
                     mimeType = 'image/jpeg';
                 }
 
@@ -1928,8 +1883,8 @@ async function handleImport(input) {
 
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
-                        const _pc = getImgCompress();
-                        const viewport = page.getViewport({ scale: _pc.pdfScale });
+                        // scale 1.5 gives good quality for PDF
+                        const viewport = page.getViewport({ scale: 1.5 });
 
                         const canvasTmp = document.createElement('canvas');
                         canvasTmp.width  = viewport.width;
@@ -1940,7 +1895,9 @@ async function handleImport(input) {
                         context.fillRect(0, 0, canvasTmp.width, canvasTmp.height);
                         await page.render({ canvasContext: context, viewport: viewport }).promise;
 
-                        const imgData = canvasTmp.toDataURL('image/jpeg', _pc.qPdf);
+                        // Keep full PDF resolution — chunking handles large messages
+                        // quality 0.92 = near-lossless for text/diagrams
+                        const imgData = canvasTmp.toDataURL('image/jpeg', 0.92);
 
                         await new Promise(resolve => {
                             fabric.Image.fromURL(imgData, (img) => {
@@ -4290,27 +4247,7 @@ canvas.on('object:modified', (e) => {
             _imgDebounce[id] = setTimeout(() => {
                 delete _imgDebounce[id];
                 const current = findObjectById(id);
-                if (!current) return;
-                // Send full geometry + lock state so partner sees the final position
-                broadcast('modified', { data: {
-                    id:     current.id,
-                    type:   current.type,
-                    left:   current.left,
-                    top:    current.top,
-                    scaleX: current.scaleX,
-                    scaleY: current.scaleY,
-                    angle:  current.angle,
-                    width:  current.width,
-                    height: current.height,
-                    cropX:  current.cropX  || 0,
-                    cropY:  current.cropY  || 0,
-                    isPinned:       current.isPinned,
-                    lockMovementX:  current.lockMovementX,
-                    lockMovementY:  current.lockMovementY,
-                    lockRotation:   current.lockRotation,
-                    lockScalingX:   current.lockScalingX,
-                    lockScalingY:   current.lockScalingY,
-                }});
+                if (current) broadcast('modified', { data: current.toObject(syncProps) });
             }, 500);
         });
 
@@ -4359,31 +4296,15 @@ function getAbsoluteObjectData(obj, syncProps) {
 function handleLiveSync(e) {
     const target = e.target;
     if (!target) return;
-    // NOTE: do NOT guard on target.__isLocal here.
-    // __isLocal marks objects that arrived from a remote draw message, but the
-    // LOCAL user must still be able to move/rotate them and have those changes
-    // broadcast to the partner.  Echo prevention is handled by isSendingToFirebase /
-    // isSendingToWs / isSendingToMqtt flags inside broadcast() itself.
+    if (target.__isLocal === true) return; // partner's object — don't re-broadcast its position
 
-    if (target.type === 'activeSelection') return; // handled in object:modified
+    if (target.type === 'image') return;
+    if (target.type === 'activeSelection' &&
+        target.getObjects().some(o => o.type === 'image')) return;
+    if (target.type === 'activeSelection') return;
 
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
-
-    // Images: send a lightweight position-only packet (no src — keeps messages small)
-    if (target.type === 'image') {
-        broadcast('modified', { data: {
-            id:     target.id,
-            type:   target.type,
-            left:   target.left,
-            top:    target.top,
-            scaleX: target.scaleX,
-            scaleY: target.scaleY,
-            angle:  target.angle
-        }});
-        lastMoveSend = now;
-        return;
-    }
 
     // TEXTBOX CRITICAL FIX: Fabric's toObject() always includes the full text/style
     // props regardless of what additionalProps you pass — it's an ADDITIVE parameter.
@@ -5580,19 +5501,6 @@ function applyRemoteDrawObject(d, onDone) {
         if (onDone) onDone();
     }
 
-    // Resolve __imgRef → src before loading image (Firebase image dedup)
-    if (d.type === 'image' && d.__imgRef && !d.src) {
-        _fbResolveImgRef(d.__imgRef).then(src => {
-            if (src) {
-                ImgCache.set(d.__imgRef, src);
-                applyRemoteDrawObject(Object.assign({}, d, { src, __imgRef: undefined }), onDone);
-            } else {
-                if (onDone) onDone();
-            }
-        });
-        return;
-    }
-
     if (d.type === 'image' && d.src) {
         fabric.Image.fromURL(d.src, (img) => {
             if (!img) { if (onDone) onDone(); return; }
@@ -5620,26 +5528,8 @@ function applyRemoteDrawObject(d, onDone) {
             }
             const prev = isSendingToWs; isSendingToWs = true;
             const existing = findObjectById(d.id);
-            if (existing) {
-                // If the local user is currently transforming this object, replacing it
-                // would orphan the drag and cause the "sticks to cursor" bug.
-                // Skip the update — the in-flight drag will commit its own final position.
-                const active = canvas.getActiveObject();
-                const isDragging = (active === existing) ||
-                    (active && active.type === 'activeSelection' &&
-                     active.getObjects().includes(existing));
-                if (isDragging) {
-                    isSendingToWs = prev;
-                    if (onDone) onDone();
-                    return;
-                }
-                canvas.remove(existing);
-            }
+            if (existing) canvas.remove(existing);
             canvas.add(img);
-            // Clear __isLocal so the local user can modify and re-broadcast this image.
-            // Echo prevention during remote-message processing is handled by
-            // isSendingToFirebase / isSendingToWs flags, not by __isLocal.
-            img.__isLocal = false;
             isSendingToWs = prev;
             canvas.requestRenderAll();
             if (onDone) onDone();
@@ -5746,7 +5636,7 @@ function applyRemoteStateDump(stateData, onDone) {
                     cropX: d.cropX || 0, cropY: d.cropY || 0,
                     width:  d.width  || img.width,
                     height: d.height || img.height,
-                    __isLocal: false, selectable: true, evented: true
+                    __isLocal: true, selectable: true, evented: true
                 });
                 // Restore image filter params from state dump
                 if (d._filterContrast !== undefined || d._filterSharpen !== undefined || d._filterBlur !== undefined) {
@@ -5781,12 +5671,11 @@ async function _sendStateDumpCompressed(syncProps) {
     // Ably: only recompress opaque PNG → JPEG (to reduce size for chunking).
     // JPEG images (incl. PDF pages) sent as-is — already compressed at source.
     // Transparent PNG kept as PNG — must not add white background.
-    const _sc = getImgCompress();
-    const MAX = _sc.maxSizeMed;
+    const MAX = 1400;
     const promises = (state.objects || []).map(async (obj) => {
         if (obj.type !== 'image' || !obj.src) return;
-        // Skip JPEG, SVG and http URLs — already good / must not rasterise SVG
-        if (obj.src.startsWith('data:image/jpeg') || obj.src.startsWith('data:image/svg') || obj.src.startsWith('http')) return;
+        // Skip JPEG and http URLs — already good
+        if (obj.src.startsWith('data:image/jpeg') || obj.src.startsWith('http')) return;
         // It's PNG — check for real transparency
         await new Promise(resolve => {
             const el = new Image();
@@ -5824,7 +5713,7 @@ async function _sendStateDumpCompressed(syncProps) {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sw, sh);
                     ctx.drawImage(el, 0, 0, sw, sh);
-                    obj.src = tmp.toDataURL('image/jpeg', _sc.qMed);
+                    obj.src = tmp.toDataURL('image/jpeg', 0.92);
                 }
                 obj.scaleX = (obj.scaleX || 1) * (origW / sw);
                 obj.scaleY = (obj.scaleY || 1) * (origH / sh);
@@ -7364,35 +7253,26 @@ function setupImportedImage(img, filename) {
 function _broadcastImageWithJpegSrc(img, filename) {
     const syncProps = ['id','left','top','scaleX','scaleY','angle','width','height','type','src','cropX','cropY'];
 
-    // All modes now compress images before sending to reduce Firebase bandwidth.
-    // PNG with alpha → keep as PNG (preserve transparency)
-    // Everything else → JPEG
+    // Firebase: send as-is — no size limit, no quality loss
+    if (connectionMode !== 'ws') {
+        broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
+        return;
+    }
+
+    // Ably (WS): must fit in chunks of 46KB each.
+    // Strategy: re-render via offscreen canvas.
+    //   - PNG with alpha → keep as PNG (preserve transparency)
+    //   - everything else → JPEG q=0.92
     const el = img.getElement();
     if (!el) {
-        // No element yet — send as-is (fallback)
-        if (connectionMode === 'firebase' && firebaseRef) {
-            _fbBroadcastImageWithRef(img, img.getSrc ? img.getSrc() : '', filename);
-        } else {
-            broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
-        }
+        broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
         return;
     }
 
     const origW = el.naturalWidth  || img.width;
     const origH = el.naturalHeight || img.height;
     const origSrc = img.getSrc ? img.getSrc() : '';
-    const isSvg = origSrc.startsWith('data:image/svg') || (filename && filename.toLowerCase().endsWith('.svg'));
     const isPng = origSrc.startsWith('data:image/png') || (filename && filename.toLowerCase().endsWith('.png'));
-
-    // SVG: send the original data URL as-is — already vector, preserves transparency, no rasterisation
-    if (isSvg) {
-        if (connectionMode === 'firebase' && firebaseRef) {
-            _fbBroadcastImageWithRef(img, origSrc, filename);
-        } else {
-            broadcast('draw', { data: img.toObject(syncProps), isImage: true, fileName: filename });
-        }
-        return;
-    }
 
     // Detect real transparency in PNG
     let hasAlpha = false;
@@ -7409,9 +7289,8 @@ function _broadcastImageWithJpegSrc(img, filename) {
         } catch(e) {}
     }
 
-    // Scale to max based on compression level
-    const _bc = getImgCompress();
-    const MAX = _bc.maxSizeMed; // use medium-size threshold as cap for broadcast
+    // Scale to max 1400px (chunking handles big messages)
+    const MAX = 1400;
     let sw = origW, sh = origH;
     if (sw > MAX || sh > MAX) {
         const scale = MAX / Math.max(sw, sh);
@@ -7434,7 +7313,7 @@ function _broadcastImageWithJpegSrc(img, filename) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, sw, sh);
         ctx.drawImage(el, 0, 0, sw, sh);
-        outSrc = tmp.toDataURL('image/jpeg', _bc.qMed);
+        outSrc = tmp.toDataURL('image/jpeg', 0.92);
     }
 
     const data = {
@@ -7452,19 +7331,7 @@ function _broadcastImageWithJpegSrc(img, filename) {
         cropY:  img.cropY  || 0,
     };
 
-    // Firebase: store image once in images/ node, broadcast lightweight ref
-    if (connectionMode === 'firebase' && firebaseRef) {
-        const fakeImg = {
-            id: data.id, left: data.left, top: data.top,
-            scaleX: data.scaleX, scaleY: data.scaleY, angle: data.angle,
-            width: data.width, height: data.height, cropX: data.cropX, cropY: data.cropY,
-            getSrc: () => outSrc,
-            toObject: (props) => { const o = {}; props.forEach(p => { if (data[p] !== undefined) o[p] = data[p]; }); return o; }
-        };
-        _fbBroadcastImageWithRef(fakeImg, outSrc, filename);
-    } else {
-        broadcast('draw', { data, isImage: true, fileName: filename });
-    }
+    broadcast('draw', { data, isImage: true, fileName: filename });
 }
 // ==========================================
 // ПАНОРАМИРОВАНИЕ СТРЕЛКАМИ (ARROWS)
@@ -7975,139 +7842,6 @@ setTimeout(() => {
 // ==========================================
 
 // 1. Конфигурация Firebase (просто скопируйте отсюда)
-// ==========================================
-// IMAGE CACHE (IndexedDB) + FIREBASE IMAGE DEDUP
-// Stores image src once per id in Firebase images/ node.
-// Re-uses from IndexedDB cache on reconnect — no re-download.
-// ==========================================
-
-const ImgCache = (() => {
-    const DB_NAME = 'cheeseboard-imgcache';
-    const STORE   = 'imgs';
-    let _db = null;
-
-    function open() {
-        if (_db) return Promise.resolve(_db);
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, 1);
-            req.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
-            req.onsuccess = e => { _db = e.target.result; resolve(_db); };
-            req.onerror   = () => reject(req.error);
-        });
-    }
-
-    return {
-        async get(id) {
-            try {
-                const db = await open();
-                return new Promise(resolve => {
-                    const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
-                    req.onsuccess = () => resolve(req.result || null);
-                    req.onerror   = () => resolve(null);
-                });
-            } catch(e) { return null; }
-        },
-        async set(id, src) {
-            try {
-                const db = await open();
-                return new Promise(resolve => {
-                    const tx = db.transaction(STORE, 'readwrite');
-                    tx.objectStore(STORE).put(src, id);
-                    tx.oncomplete = resolve;
-                    tx.onerror    = resolve;
-                });
-            } catch(e) {}
-        }
-    };
-})();
-
-// Resolve __imgRef → src: IndexedDB first, then Firebase images/ node
-async function _fbResolveImgRef(imgRef) {
-    if (!imgRef) return null;
-    const cached = await ImgCache.get(imgRef);
-    if (cached) return cached;
-    if (!firebaseRef) return null;
-    return new Promise(resolve => {
-        firebaseRef.child('images').child(imgRef).once('value', snap => {
-            const src = snap.val();
-            if (src) ImgCache.set(imgRef, src);
-            resolve(src || null);
-        }, () => resolve(null));
-    });
-}
-
-// Resolve all __imgRef entries in a state dump (returns new object, doesn't mutate)
-async function _fbResolveStateDumpRefs(stateData) {
-    if (!stateData || !stateData.objects) return stateData;
-    const clone = JSON.parse(JSON.stringify(stateData));
-    const refs = clone.objects.filter(o => o.__imgRef && !o.src);
-    if (refs.length === 0) return clone;
-    await Promise.all(refs.map(async obj => {
-        const src = await _fbResolveImgRef(obj.__imgRef);
-        if (src) { obj.src = src; }
-    }));
-    return clone;
-}
-
-// Store image in Firebase images/ node + IndexedDB, then broadcast lightweight __imgRef
-function _fbBroadcastImageWithRef(img, compressedSrc, filename) {
-    const imgId    = img.id;
-    const syncProps = ['id','left','top','scaleX','scaleY','angle','width','height','type','cropX','cropY'];
-
-    // Always cache locally
-    ImgCache.set(imgId, compressedSrc);
-
-    if (connectionMode === 'firebase' && firebaseRef) {
-        firebaseRef.child('images').child(imgId).set(compressedSrc)
-            .then(() => {
-                const imgData       = img.toObject(syncProps);
-                imgData.__imgRef    = imgId;
-                // src intentionally omitted — receiver fetches from images/ node or IndexedDB
-                const originalBcast = window._originalBroadcast || window.broadcast;
-                // Use sendToFirebase directly to avoid double-Firebase routing
-                sendToFirebase('draw', Object.assign({ isImage: true, fileName: filename }, imgData));
-            })
-            .catch(() => {
-                // Fallback: inline src (original behaviour)
-                const imgData = img.toObject(syncProps);
-                imgData.src   = compressedSrc;
-                sendToFirebase('draw', Object.assign({ isImage: true, fileName: filename }, imgData));
-            });
-    } else {
-        // Non-Firebase: broadcast normally with inline src
-        const imgData = img.toObject(syncProps);
-        imgData.src   = compressedSrc;
-        broadcast('draw', { data: imgData, isImage: true, fileName: filename });
-    }
-}
-
-// Build a lightweight state dump: upload any new images to Firebase images/ node,
-// replace src with __imgRef in returned state object
-async function _fbStripAndStoreImages(stateData) {
-    if (!stateData || !stateData.objects || !firebaseRef) return stateData;
-    const clone = JSON.parse(JSON.stringify(stateData));
-    await Promise.all(clone.objects.map(async obj => {
-        if (obj.type !== 'image' || !obj.src) return;
-        const imgId = obj.id;
-        if (!imgId) return;
-        // Check if already in IndexedDB or Firebase
-        const cached = await ImgCache.get(imgId);
-        if (!cached) {
-            // Upload to Firebase images/ node
-            try {
-                await firebaseRef.child('images').child(imgId).set(obj.src);
-                ImgCache.set(imgId, obj.src);
-            } catch(e) {
-                return; // keep src inline on error
-            }
-        }
-        // Replace heavy src with lightweight ref
-        obj.__imgRef = imgId;
-        delete obj.src;
-    }));
-    return clone;
-}
-
 const firebaseConfig = {
     apiKey: "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
     authDomain: "cheeseboard-c7f66.firebaseapp.com",
@@ -8327,13 +8061,9 @@ function handleFirebaseMessage(msg) {
                     'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'textAlign', 'lineHeight', 'charSpacing',
                     '_filterContrast', '_filterSharpen', '_filterBlur'
                     ];
+                    const state = canvas.toJSON(syncProps);
                     isSendingToFirebase = false; // сбрасываем флаг иначе sendToFirebase заблокирует
-                    // Upload any images not yet in Firebase images/ node, then send lightweight refs
-                    (async () => {
-                        const state = canvas.toJSON(syncProps);
-                        const lightState = await _fbStripAndStoreImages(state);
-                        sendToFirebase('state_dump', lightState);
-                    })();
+                    sendToFirebase('state_dump', state);
                 }
                 break;
                 
@@ -8341,13 +8071,10 @@ function handleFirebaseMessage(msg) {
                 if (msg.data) {
                     setStatus('Syncing board...', 'ok');
                     isSendingToFirebase = true;
-                    // Resolve any __imgRef references before applying state dump
-                    _fbResolveStateDumpRefs(msg.data).then(resolvedData => {
-                        applyRemoteStateDump(resolvedData, () => {
-                            isSendingToFirebase = false;
-                            setStatus('✔ Board synced — ' + (resolvedData.objects ? resolvedData.objects.length : 0) + ' objects', 'ok');
-                            resizeCanvas();
-                        });
+                    applyRemoteStateDump(msg.data, () => {
+                        isSendingToFirebase = false;
+                        setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
+                        resizeCanvas();
                     });
                 }
                 break;
