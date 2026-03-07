@@ -413,6 +413,12 @@
         .mobile-ui .mob-hide { display: none !important; }
         .mobile-ui .divider  { display: none !important; }
 
+        /* Pack all toolbar sections flush — no space-between gaps when dividers are hidden */
+        .mobile-ui .top-bar  { justify-content: flex-start; gap: 0; padding: 0 4px; }
+        .mobile-ui .bar-section { gap: 4px; }
+        /* Keep ••• pinned to the right edge */
+        .mobile-ui #mob-overflow-wrap { margin-left: auto; }
+
         /* Slide-up toolbar toggle tab   width: 44px; height: 16px;*/
         #mob-toolbar-toggle {
             position: absolute; left: 50%; transform: translateX(-50%);
@@ -774,7 +780,7 @@ document.addEventListener('mousedown', function(e) {
 		 <div class="divider"></div>
 
         <div class="bar-section">
-          <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↶</button>
+          <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
 			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
             <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
@@ -939,6 +945,13 @@ document.addEventListener('mousedown', function(e) {
             <div class="shape-item" onclick="insert3DShape('cylinder');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="28" rx="52" ry="18"/><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="8" y1="28" x2="8" y2="142"/><line x1="112" y1="28" x2="112" y2="142"/></svg></span>Cyl</div>
             <div class="shape-item" onclick="insert3DShape('cone');hideMobOverflow()"><span class="shape-icon"><svg width="13" height="16" viewBox="0 0 120 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><ellipse cx="60" cy="142" rx="52" ry="18"/><line x1="60" y1="8" x2="8" y2="142"/><line x1="60" y1="8" x2="112" y2="142"/></svg></span>Cone</div>
             <div class="shape-item" onclick="insert3DShape('pyramid');hideMobOverflow()"><span class="shape-icon"><svg width="16" height="14" viewBox="0 0 155 150" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><polygon points="5,148 115,148 143,118 33,118"/><line x1="5" y1="148" x2="74" y2="5"/><line x1="115" y1="148" x2="74" y2="5"/><line x1="143" y1="118" x2="74" y2="5"/><line x1="33" y1="118" x2="74" y2="5"/></svg></span>Pyr</div>
+        </div>
+        <div class="mob-row">
+            <span class="mob-row-label">PNG</span>
+            <div class="shape-item" onclick="insertPngShape('sphere.png');hideMobOverflow()"><span class="shape-icon">🌐</span>Globe</div>
+            <div class="shape-item" onclick="insertPngShape('ball.png');hideMobOverflow()"><span class="shape-icon">🪩</span>Ball</div>
+            <div class="shape-item" onclick="insertPngShape('ruler.png');hideMobOverflow()"><span class="shape-icon">📏</span>Ruler</div>
+            <div class="shape-item" onclick="insertPngShape('protractor.png');hideMobOverflow()"><span class="shape-icon">⊾</span>Prot</div>
         </div>
     </div>
     <div class="mob-row">
