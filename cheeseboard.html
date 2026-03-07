@@ -4277,7 +4277,27 @@ canvas.on('object:modified', (e) => {
             _imgDebounce[id] = setTimeout(() => {
                 delete _imgDebounce[id];
                 const current = findObjectById(id);
-                if (current) broadcast('modified', { data: current.toObject(syncProps) });
+                if (!current) return;
+                // Send full geometry + lock state so partner sees the final position
+                broadcast('modified', { data: {
+                    id:     current.id,
+                    type:   current.type,
+                    left:   current.left,
+                    top:    current.top,
+                    scaleX: current.scaleX,
+                    scaleY: current.scaleY,
+                    angle:  current.angle,
+                    width:  current.width,
+                    height: current.height,
+                    cropX:  current.cropX  || 0,
+                    cropY:  current.cropY  || 0,
+                    isPinned:       current.isPinned,
+                    lockMovementX:  current.lockMovementX,
+                    lockMovementY:  current.lockMovementY,
+                    lockRotation:   current.lockRotation,
+                    lockScalingX:   current.lockScalingX,
+                    lockScalingY:   current.lockScalingY,
+                }});
             }, 500);
         });
 
@@ -4326,15 +4346,31 @@ function getAbsoluteObjectData(obj, syncProps) {
 function handleLiveSync(e) {
     const target = e.target;
     if (!target) return;
-    if (target.__isLocal === true) return; // partner's object — don't re-broadcast its position
+    // NOTE: do NOT guard on target.__isLocal here.
+    // __isLocal marks objects that arrived from a remote draw message, but the
+    // LOCAL user must still be able to move/rotate them and have those changes
+    // broadcast to the partner.  Echo prevention is handled by isSendingToFirebase /
+    // isSendingToWs / isSendingToMqtt flags inside broadcast() itself.
 
-    if (target.type === 'image') return;
-    if (target.type === 'activeSelection' &&
-        target.getObjects().some(o => o.type === 'image')) return;
-    if (target.type === 'activeSelection') return;
+    if (target.type === 'activeSelection') return; // handled in object:modified
 
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+
+    // Images: send a lightweight position-only packet (no src — keeps messages small)
+    if (target.type === 'image') {
+        broadcast('modified', { data: {
+            id:     target.id,
+            type:   target.type,
+            left:   target.left,
+            top:    target.top,
+            scaleX: target.scaleX,
+            scaleY: target.scaleY,
+            angle:  target.angle
+        }});
+        lastMoveSend = now;
+        return;
+    }
 
     // TEXTBOX CRITICAL FIX: Fabric's toObject() always includes the full text/style
     // props regardless of what additionalProps you pass — it's an ADDITIVE parameter.
@@ -5571,8 +5607,26 @@ function applyRemoteDrawObject(d, onDone) {
             }
             const prev = isSendingToWs; isSendingToWs = true;
             const existing = findObjectById(d.id);
-            if (existing) canvas.remove(existing);
+            if (existing) {
+                // If the local user is currently transforming this object, replacing it
+                // would orphan the drag and cause the "sticks to cursor" bug.
+                // Skip the update — the in-flight drag will commit its own final position.
+                const active = canvas.getActiveObject();
+                const isDragging = (active === existing) ||
+                    (active && active.type === 'activeSelection' &&
+                     active.getObjects().includes(existing));
+                if (isDragging) {
+                    isSendingToWs = prev;
+                    if (onDone) onDone();
+                    return;
+                }
+                canvas.remove(existing);
+            }
             canvas.add(img);
+            // Clear __isLocal so the local user can modify and re-broadcast this image.
+            // Echo prevention during remote-message processing is handled by
+            // isSendingToFirebase / isSendingToWs flags, not by __isLocal.
+            img.__isLocal = false;
             isSendingToWs = prev;
             canvas.requestRenderAll();
             if (onDone) onDone();
@@ -5679,7 +5733,7 @@ function applyRemoteStateDump(stateData, onDone) {
                     cropX: d.cropX || 0, cropY: d.cropY || 0,
                     width:  d.width  || img.width,
                     height: d.height || img.height,
-                    __isLocal: true, selectable: true, evented: true
+                    __isLocal: false, selectable: true, evented: true
                 });
                 // Restore image filter params from state dump
                 if (d._filterContrast !== undefined || d._filterSharpen !== undefined || d._filterBlur !== undefined) {
