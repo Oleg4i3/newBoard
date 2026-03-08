@@ -4593,6 +4593,18 @@ function handleLiveSync(e) {
 
     if (target.type === 'activeSelection') return; // handled in object:modified
 
+    // ── Rotation snap: if Shift or grid-snap is active, round angle to 15°
+    // BEFORE reading target.angle for broadcast — the dedicated snap handler
+    // fires AFTER this one (later registration), so we must snap here too.
+    if (e.action === 'rotate' || e.transform && e.transform.action === 'rotate') {
+        if ((snapEnabled || (e.e && e.e.shiftKey)) && !target._pivotLocal) {
+            const center = target.getCenterPoint();
+            target.angle = Math.round(target.angle / 15) * 15;
+            target.setPositionByOrigin(center, 'center', 'center');
+            target.setCoords();
+        }
+    }
+
     const now = Date.now();
     if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
 
@@ -4605,7 +4617,9 @@ function handleLiveSync(e) {
             top:    target.top,
             scaleX: target.scaleX,
             scaleY: target.scaleY,
-            angle:  target.angle
+            angle:  target.angle,
+            skewX:  target.skewX  || 0,
+            skewY:  target.skewY  || 0
         }});
         lastMoveSend = now;
         return;
@@ -4624,7 +4638,9 @@ function handleLiveSync(e) {
             scaleX: target.scaleX,
             scaleY: target.scaleY,
             angle:  target.angle,
-            width:  target.width   // keep width so text reflow stays in sync
+            width:  target.width,
+            skewX:  target.skewX  || 0,
+            skewY:  target.skewY  || 0
         }});
         lastMoveSend = now;
         return;
@@ -6102,10 +6118,10 @@ async function _sendStateDumpCompressed(syncProps) {
                 const ctx = tmp.getContext('2d');
                 const origW = obj.width || sw, origH = obj.height || sh;
 
-                if (hasAlpha) {
+                if (hasAlpha || _imgCompressLevel === 'lossless') {
                     ctx.clearRect(0, 0, sw, sh);
                     ctx.drawImage(el, 0, 0, sw, sh);
-                    obj.src = tmp.toDataURL('image/png'); // keep transparency
+                    obj.src = tmp.toDataURL('image/png'); // keep PNG — exact dimensions guaranteed
                 } else {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sw, sh);
@@ -7805,8 +7821,11 @@ function _broadcastImageWithJpegSrc(img, filename) {
     const ctx = tmp.getContext('2d');
 
     let outSrc;
-    if (hasAlpha) {
-        // Transparent PNG — no white fill, preserve alpha
+    if (hasAlpha || _imgCompressLevel === 'lossless') {
+        // Transparent PNG: preserve alpha channel.
+        // Lossless mode: keep PNG to guarantee pixel-exact dimensions on receiver
+        // (JPEG encoding of non-MCU-aligned widths can produce naturalWidth ± 1px,
+        //  causing cumulative coordinate drift on multi-page documents).
         ctx.clearRect(0, 0, sw, sh);
         ctx.drawImage(el, 0, 0, sw, sh);
         outSrc = tmp.toDataURL('image/png');
