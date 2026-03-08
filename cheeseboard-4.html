@@ -830,7 +830,7 @@ document.addEventListener('mousedown', function(e) {
 		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
-            <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" onchange="handleImport(this)">
+            <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" multiple onchange="handleImport(this)">
         </div>
 		     <div class="divider"></div>
 
@@ -2041,124 +2041,155 @@ async function optimizeImageBeforeImport(file) {
 
 
 
-async function handleImport(input) {
-    const file = input.files[0];
-    if (!file) return;
-    
-    input.value = '';
-    setStatus('Processing file...', 'ok');
-    
+// ── Import a single image File, place it at (cx, cy) centre.
+// Returns the bottom Y of the placed image (for vertical stacking).
+async function _importImageFile(file, cx, cy) {
+    const GAP = 40;
+    const loadImg = (dataUrl) => new Promise(resolve => {
+        fabric.Image.fromURL(dataUrl, (img) => {
+            const sc = img.width > 900 ? 900 / img.width : 1;
+            img.scale(sc);
+            img.set({ left: cx - (img.width * sc) / 2, top: cy });
+            setupImportedImage(img, file.name);
+            resolve(cy + img.height * sc + GAP);
+        });
+    });
     try {
-        if (file.type.includes('image')) {
-            const optimized = await optimizeImageBeforeImport(file);
-            const reader = new FileReader();
-            
-            reader.onload = async (f) => {
-                fabric.Image.fromURL(f.target.result, (img) => {
-                    setupImportedImage(img, file.name);
-                    setStatus('Image imported', 'ok');
-                });
-            };
-            
-            if (optimized instanceof Blob) {
-                reader.readAsDataURL(optimized);
-            } else {
-                reader.readAsDataURL(file);
-            }
-            
-        } else if (file.type === 'application/pdf') {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const typedarray = new Uint8Array(e.target.result);
-                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                    
-                    if (pdf.numPages > 10) {
-                        const loadAll = confirm(`PDF containes ${pdf.numPages} pages. Workspace may lag! Upload all?  (You can use screenshots instead)`);
-                        if (!loadAll) return;
-                    }
-                    
-                    setStatus(`Loading PDF (0/${pdf.numPages})...`, 'ok');
-                    
-                    // Start PDF pages at viewport center
-                    const _vpt = canvas.viewportTransform;
-                    const _zoom = canvas.getZoom();
-                    let currentTop = (canvas.height / 2 - _vpt[5]) / _zoom - 400;
-                    if (currentTop < 0) currentTop = 50;
-                    const pdfLeft = (canvas.width / 2 - _vpt[4]) / _zoom - 400;
-
-                    // Suspend cursor during PDF load to stay under Ably 50 msg/sec limit
-                    const _cursorSuspendedByPdf = true;
-                    cursorAsleep = true;
-
-                    const pdfPageIds = [];
-
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const _pc = getImgCompress();
-
-                        // Adaptive scale: larger formats (A3/A2/A1) get proportionally more pixels
-                        const naturalVp = page.getViewport({ scale: 1 });
-                        const longSide  = Math.max(naturalVp.width, naturalVp.height); // in pt (1pt = 1/72")
-                        // A4 long ≈ 842pt, A3 ≈ 1190pt, A2 ≈ 1684pt
-                        const scaleBoost = longSide > 1684 ? 1.75
-                                         : longSide > 1190 ? 1.5
-                                         : longSide > 842  ? 1.25
-                                         : 1.0;
-                        const adaptiveScale = _pc.pdfScale * scaleBoost;
-
-                        const viewport = page.getViewport({ scale: adaptiveScale });
-
-                        const canvasTmp = document.createElement('canvas');
-                        canvasTmp.width  = viewport.width;
-                        canvasTmp.height = viewport.height;
-                        const context = canvasTmp.getContext('2d');
-                        // White background so PDF text is readable
-                        context.fillStyle = '#ffffff';
-                        context.fillRect(0, 0, canvasTmp.width, canvasTmp.height);
-                        await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-                        const imgData = (_imgCompressLevel === 'lossless')
-                            ? canvasTmp.toDataURL('image/png')
-                            : canvasTmp.toDataURL('image/jpeg', _pc.qPdf);
-
-                        await new Promise(resolve => {
-                            fabric.Image.fromURL(imgData, (img) => {
-                                const pageId = 'pdf-' + Math.random().toString(36).substr(2, 9);
-                                img.set({
-                                    top:  currentTop,
-                                    left: pdfLeft > 0 ? pdfLeft : 100,
-                                    id:   pageId
-                                });
-                                pdfPageIds.push(pageId);
-                                if (img.width > 900) img.scaleToWidth(900);
-                                setupImportedImage(img, `PDF Page ${i}`);
-                                currentTop += (img.height * img.scaleY) + 50;
-                                setStatus(`Loading PDF (${i}/${pdf.numPages})...`, 'ok');
-                                resolve();
-                            });
-                        });
-                    }
-
-                    // Resume cursor after queue drains
-                    setTimeout(() => { cursorAsleep = false; }, 500);
-                    setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
-
-                    if (pdf.numPages > 1) {
-                        const shouldPin = await showPinPrompt();
-                        if (shouldPin) pinObjectsById(pdfPageIds);
-                    }
-                    
-                } catch (err) {
-                    setStatus('PDF processing failed', 'err');
-                    alert("Ошибка при обработке PDF файла.");
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-    } catch (error) {
-        setStatus('Import failed', 'err');
+        const optimized = await optimizeImageBeforeImport(file);
+        const reader = new FileReader();
+        const dataUrl = await new Promise(res => {
+            reader.onload = ev => res(ev.target.result);
+            reader.readAsDataURL(optimized instanceof Blob ? optimized : file);
+        });
+        return await loadImg(dataUrl);
+    } catch (_) {
+        const reader = new FileReader();
+        const dataUrl = await new Promise(res => {
+            reader.onload = ev => res(ev.target.result);
+            reader.readAsDataURL(file);
+        });
+        return await loadImg(dataUrl);
     }
+}
+
+// ── Import a single PDF File, pages stacked from startY.
+async function _importPdfFile(file, startY) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const typedarray = new Uint8Array(e.target.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+
+                if (pdf.numPages > 10) {
+                    const loadAll = confirm(`PDF contains ${pdf.numPages} pages. Workspace may lag! Upload all? (You can use screenshots instead)`);
+                    if (!loadAll) { resolve(startY); return; }
+                }
+
+                setStatus(`Loading PDF (0/${pdf.numPages})...`, 'ok');
+
+                const _vpt = canvas.viewportTransform;
+                const _zoom = canvas.getZoom();
+                let currentTop = startY;
+                const pdfLeft = (canvas.width / 2 - _vpt[4]) / _zoom - 400;
+
+                cursorAsleep = true;
+                const pdfPageIds = [];
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const _pc = getImgCompress();
+
+                    const naturalVp = page.getViewport({ scale: 1 });
+                    const longSide  = Math.max(naturalVp.width, naturalVp.height);
+                    const scaleBoost = longSide > 1684 ? 1.75
+                                     : longSide > 1190 ? 1.5
+                                     : longSide > 842  ? 1.25
+                                     : 1.0;
+                    const viewport = page.getViewport({ scale: _pc.pdfScale * scaleBoost });
+
+                    const canvasTmp = document.createElement('canvas');
+                    canvasTmp.width  = viewport.width;
+                    canvasTmp.height = viewport.height;
+                    const context = canvasTmp.getContext('2d');
+                    context.fillStyle = '#ffffff';
+                    context.fillRect(0, 0, canvasTmp.width, canvasTmp.height);
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    const imgData = (_imgCompressLevel === 'lossless')
+                        ? canvasTmp.toDataURL('image/png')
+                        : canvasTmp.toDataURL('image/jpeg', _pc.qPdf);
+
+                    await new Promise(res => {
+                        fabric.Image.fromURL(imgData, (img) => {
+                            const pageId = 'pdf-' + Math.random().toString(36).substr(2, 9);
+                            img.set({ top: currentTop, left: pdfLeft > 0 ? pdfLeft : 100, id: pageId });
+                            pdfPageIds.push(pageId);
+                            if (img.width > 900) img.scaleToWidth(900);
+                            setupImportedImage(img, `PDF Page ${i}`);
+                            currentTop += (img.height * img.scaleY) + 50;
+                            setStatus(`Loading PDF (${i}/${pdf.numPages})...`, 'ok');
+                            res();
+                        });
+                    });
+                }
+
+                setTimeout(() => { cursorAsleep = false; }, 500);
+                setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
+
+                if (pdf.numPages > 1) {
+                    const shouldPin = await showPinPrompt();
+                    if (shouldPin) pinObjectsById(pdfPageIds);
+                }
+                resolve(currentTop);
+            } catch (err) {
+                setStatus('PDF processing failed', 'err');
+                alert('Ошибка при обработке PDF файла.');
+                resolve(startY);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+async function handleImport(input) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    input.value = '';
+
+    const _vpt = canvas.viewportTransform;
+    const _zoom = canvas.getZoom();
+    // Start stacking from viewport centre
+    const cx =  (canvas.width  / 2 - _vpt[4]) / _zoom;
+    let   cy =  (canvas.height / 2 - _vpt[5]) / _zoom - 400;
+    if (cy < 50) cy = 50;
+
+    if (files.length === 1) {
+        // Single file: original centred behaviour
+        const file = files[0];
+        setStatus('Processing file...', 'ok');
+        if (file.type.includes('image')) {
+            await _importImageFile(file, cx, cy - 200); // keep original vertical centre feel
+            setStatus('Image imported', 'ok');
+        } else if (file.type === 'application/pdf') {
+            await _importPdfFile(file, cy);
+        }
+        return;
+    }
+
+    // Multiple files: stack vertically
+    setStatus(`Importing ${files.length} files…`, 'ok');
+    for (const file of files) {
+        if (file.type.includes('image')) {
+            cy = await _importImageFile(file, cx, cy);
+        } else if (file.type === 'application/pdf') {
+            cy = await _importPdfFile(file, cy);
+            cy += 60; // extra gap between documents
+        } else {
+            setStatus(`Skipped: ${file.name} (unsupported type)`, 'err');
+        }
+    }
+    setStatus(`${files.length} files imported`, 'ok');
 }
 
 // ==========================================
