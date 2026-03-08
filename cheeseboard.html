@@ -113,7 +113,31 @@
             top: 35px; bottom: 0; left: 0; right: 0;
             overflow: hidden; 
             z-index: 1;
+            transition: filter 0.25s;
         }
+        #canvas-wrapper.pdf-loading { filter: blur(6px) brightness(0.85); }
+
+        /* PDF progress modal */
+        #pdf-progress-modal {
+            display: none; position: fixed; inset: 0; z-index: 9998;
+            background: rgba(0,0,0,0.35); align-items: center; justify-content: center;
+        }
+        #pdf-progress-modal.show { display: flex; }
+        #pdf-progress-inner {
+            background: #fff; border-radius: 14px; padding: 22px 28px 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.28); text-align: center; min-width: 260px;
+        }
+        #pdf-progress-inner h4 { margin: 0 0 14px; font-size: 14px; color: #333; }
+        #pdf-progress-track {
+            width: 100%; height: 8px; background: #e5e7eb;
+            border-radius: 99px; overflow: hidden; margin-bottom: 8px;
+        }
+        #pdf-progress-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #f59e0b, #f97316);
+            border-radius: 99px; transition: width 0.2s ease;
+        }
+        #pdf-progress-label { font-size: 12px; color: #666; }
 
         .hidden { display: none !important; }
 
@@ -2087,6 +2111,10 @@ async function _importPdfFile(file, startY) {
                 }
 
                 setStatus(`Loading PDF (0/${pdf.numPages})...`, 'ok');
+                // Show progress modal on both sides
+                const _pdfTitle = file.name || 'PDF';
+                _pdfProgressShow('📄 ' + _pdfTitle, 0, pdf.numPages);
+                broadcast('pdf_progress', { title: _pdfTitle, current: 0, total: pdf.numPages });
 
                 const _vpt = canvas.viewportTransform;
                 const _zoom = canvas.getZoom();
@@ -2116,6 +2144,10 @@ async function _importPdfFile(file, startY) {
                     context.fillRect(0, 0, canvasTmp.width, canvasTmp.height);
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
 
+                    // ── Lossless fingerprint: keep exact data URL from the render canvas.
+                    // This is the ONE canonical source — Fabric element is loaded from it,
+                    // and we broadcast it as-is (no re-encode through tmp canvas).
+                    // Receiver decodes identical bytes → same naturalWidth → zero coordinate drift.
                     const imgData = (_imgCompressLevel === 'lossless')
                         ? canvasTmp.toDataURL('image/png')
                         : canvasTmp.toDataURL('image/jpeg', _pc.qPdf);
@@ -2126,9 +2158,15 @@ async function _importPdfFile(file, startY) {
                             img.set({ top: currentTop, left: pdfLeft > 0 ? pdfLeft : 100, id: pageId });
                             pdfPageIds.push(pageId);
                             if (img.width > 900) img.scaleToWidth(900);
+                            // Tag with the original imgData so _broadcastImageWithJpegSrc
+                            // can send it as-is for lossless without re-encoding
+                            if (_imgCompressLevel === 'lossless') img._losslessSrc = imgData;
                             setupImportedImage(img, `PDF Page ${i}`);
                             currentTop += (img.height * img.scaleY) + 50;
                             setStatus(`Loading PDF (${i}/${pdf.numPages})...`, 'ok');
+                            // Update progress bar on both sides
+                            _pdfProgressShow('📄 ' + _pdfTitle, i, pdf.numPages);
+                            broadcast('pdf_progress', { title: _pdfTitle, current: i, total: pdf.numPages });
                             res();
                         });
                     });
@@ -2136,6 +2174,8 @@ async function _importPdfFile(file, startY) {
 
                 setTimeout(() => { cursorAsleep = false; }, 500);
                 setStatus(`PDF loaded (${pdf.numPages} pages)`, 'ok');
+                _pdfProgressHide();
+                broadcast('pdf_progress', { title: _pdfTitle, current: pdf.numPages, total: pdf.numPages, done: true });
 
                 if (pdf.numPages > 1) {
                     const shouldPin = await showPinPrompt();
@@ -2144,6 +2184,8 @@ async function _importPdfFile(file, startY) {
                 resolve(currentTop);
             } catch (err) {
                 setStatus('PDF processing failed', 'err');
+                _pdfProgressHide();
+                broadcast('pdf_progress', { done: true });
                 alert('Ошибка при обработке PDF файла.');
                 resolve(startY);
             }
@@ -5210,8 +5252,11 @@ function processSendQueue() {
 }
 
 function broadcast(type, payload) {
-	   // 🔥 Игнорируем если идет отправка в Firebase
-    if (isSendingToFirebase) {
+    // UI-only signals (pdf_progress) must always reach the partner — bypass all send guards
+    const _isUiSignal = (type === 'pdf_progress');
+
+    // 🔥 Игнорируем если идет отправка в Firebase
+    if (!_isUiSignal && isSendingToFirebase) {
         return;
     }
     
@@ -5227,7 +5272,7 @@ function broadcast(type, payload) {
 
     // ── WS Relay (Deno or Ably) ──
     if (connectionMode === 'ws') {
-        if (isSendingToWs) { return; }
+        if (!_isUiSignal && isSendingToWs) { return; }
         if (!payload || !payload.data || !payload.data.__isLocal) {
             sendToWs(type, payload && payload.data ? payload.data : payload);
         }
@@ -5320,6 +5365,28 @@ function updateUIForConnectionMode() {
             sessionInfo.classList.add('hidden');
             break;
     }
+}
+
+// ── PDF progress modal ──────────────────────────────────────────────────────
+function _pdfProgressShow(title, current, total) {
+    const modal = document.getElementById('pdf-progress-modal');
+    const fill  = document.getElementById('pdf-progress-fill');
+    const label = document.getElementById('pdf-progress-label');
+    const ttl   = document.getElementById('pdf-progress-title');
+    if (!modal) return;
+    if (ttl)   ttl.textContent   = title;
+    if (label) label.textContent = 'Page ' + current + ' of ' + total;
+    if (fill)  fill.style.width  = (total > 0 ? Math.round(current / total * 100) : 0) + '%';
+    modal.classList.add('show');
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (wrapper) wrapper.classList.add('pdf-loading');
+}
+
+function _pdfProgressHide() {
+    const modal = document.getElementById('pdf-progress-modal');
+    if (modal) modal.classList.remove('show');
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (wrapper) wrapper.classList.remove('pdf-loading');
 }
 
 function setStatus(msg, type) {
@@ -5621,6 +5688,14 @@ function setupConn() {
 
         } else if (msg.type === 'laser_release') {
             window._triggerRemoteLaserRelease();
+
+        } else if (msg.type === 'pdf_progress') {
+            const _pd = msg.data || msg;
+            if (_pd.done) {
+                _pdfProgressHide();
+            } else {
+                _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1);
+            }
         }
     }
 }
@@ -5986,18 +6061,26 @@ function applyRemoteStateDump(stateData, onDone) {
             }
         });
 
-        if (imageObjects.length === 0) {
-            // Fix selectable/evented: sender may have serialised in pen mode (all false).
-            // Only touch selectable/evented — hasControls/lock* are correct in JSON.
+        const _finishStateDump = () => {
             canvas.getObjects().forEach(function(o) {
                 if (o.type === 'textbox' && o.__isLocal === true) { return; }
                 o.selectable = (currentTool === 'select');
                 o.evented    = (currentTool === 'select' || currentTool === 'eraser');
             });
             canvas.requestRenderAll();
+            _pdfProgressHide();
             if (onDone) onDone();
+        };
+
+        if (imageObjects.length === 0) {
+            _finishStateDump();
             return;
         }
+
+        // Show progress while re-loading images from state dump
+        const _total = imageObjects.length;
+        let _loaded = 0;
+        _pdfProgressShow('🔄 Loading board…', 0, _total);
 
         // Re-load each image via fromURL (loadFromJSON may have skipped them)
         let remaining = imageObjects.length;
@@ -6008,15 +6091,9 @@ function applyRemoteStateDump(stateData, onDone) {
             if (el && el.naturalWidth > 0) {
                 // Image loaded fine by loadFromJSON
                 remaining--;
-                if (remaining === 0) {
-                    canvas.getObjects().forEach(function(o) {
-                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
-                        o.selectable = (currentTool === 'select');
-                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
-                    });
-                    canvas.requestRenderAll();
-                    if (onDone) onDone();
-                }
+                _loaded++;
+                _pdfProgressShow('🔄 Loading board…', _loaded, _total);
+                if (remaining === 0) { _finishStateDump(); }
                 return;
             }
 
@@ -6051,15 +6128,9 @@ function applyRemoteStateDump(stateData, onDone) {
                 }
                 canvas.add(img);
                 remaining--;
-                if (remaining === 0) {
-                    canvas.getObjects().forEach(function(o) {
-                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
-                        o.selectable = (currentTool === 'select');
-                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
-                    });
-                    canvas.requestRenderAll();
-                    if (onDone) onDone();
-                }
+                _loaded++;
+                _pdfProgressShow('🔄 Loading board…', _loaded, _total);
+                if (remaining === 0) { _finishStateDump(); }
             });
         });
     });
@@ -6118,10 +6189,10 @@ async function _sendStateDumpCompressed(syncProps) {
                 const ctx = tmp.getContext('2d');
                 const origW = obj.width || sw, origH = obj.height || sh;
 
-                if (hasAlpha) {
+                if (hasAlpha || _imgCompressLevel === 'lossless') {
                     ctx.clearRect(0, 0, sw, sh);
                     ctx.drawImage(el, 0, 0, sw, sh);
-                    obj.src = tmp.toDataURL('image/png'); // keep transparency
+                    obj.src = tmp.toDataURL('image/png'); // keep PNG — exact dimensions guaranteed
                 } else {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sw, sh);
@@ -7791,6 +7862,27 @@ function _broadcastImageWithJpegSrc(img, filename) {
         return;
     }
 
+    // Lossless fingerprint: send the exact data URL the sender's element was decoded from.
+    // No re-encoding through tmp canvas — both sides decode identical bytes → same naturalWidth
+    // → zero coordinate drift on multi-page documents.
+    if (_imgCompressLevel === 'lossless' && !isSvg) {
+        const losslessSrc = img._losslessSrc || origSrc;
+        const losslessData = {
+            type: 'image', src: losslessSrc,
+            id: img.id, left: img.left, top: img.top,
+            scaleX: img.scaleX, scaleY: img.scaleY,
+            angle: img.angle || 0,
+            width: origW, height: origH,
+            cropX: img.cropX || 0, cropY: img.cropY || 0,
+        };
+        if (connectionMode === 'firebase' && firebaseRef) {
+            _fbBroadcastImageWithRef(img, losslessSrc, filename);
+        } else {
+            broadcast('draw', { data: losslessData, isImage: true, fileName: filename });
+        }
+        return;
+    }
+
     // Detect real transparency in PNG
     let hasAlpha = false;
     if (isPng) {
@@ -7821,8 +7913,11 @@ function _broadcastImageWithJpegSrc(img, filename) {
     const ctx = tmp.getContext('2d');
 
     let outSrc;
-    if (hasAlpha) {
-        // Transparent PNG — no white fill, preserve alpha
+    if (hasAlpha || _imgCompressLevel === 'lossless') {
+        // Transparent PNG: preserve alpha channel.
+        // Lossless mode: keep PNG to guarantee pixel-exact dimensions on receiver
+        // (JPEG encoding of non-MCU-aligned widths can produce naturalWidth ± 1px,
+        //  causing cumulative coordinate drift on multi-page documents).
         ctx.clearRect(0, 0, sw, sh);
         ctx.drawImage(el, 0, 0, sw, sh);
         outSrc = tmp.toDataURL('image/png');
@@ -8844,7 +8939,14 @@ function handleFirebaseMessage(msg) {
             case 'laser_release':
                 window._triggerRemoteLaserRelease();
                 break;
-                
+
+            case 'pdf_progress': {
+                const _pd = msg.data || msg;
+                if (_pd.done) { _pdfProgressHide(); }
+                else { _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
+                break;
+            }
+
             case 'request_state':
                 // Отправляем текущее состояние канвы
                 if (canvas.getObjects().length > 0) {
@@ -8945,7 +9047,8 @@ const _fbTraffic = (function () {
 
 // 6. Отправка сообщений в Firebase
 function sendToFirebase(type, data) {
-    if (!firebaseRef || isSendingToFirebase) {
+    const _isUiSignal = (type === 'pdf_progress');
+    if (!firebaseRef || (!_isUiSignal && isSendingToFirebase)) {
         return;
     }
     // Cursor has its own dedicated node — must never enter messages.push() queue
@@ -9437,6 +9540,13 @@ function handleWsMessage(msg) {
             case 'laser_release':
                 window._triggerRemoteLaserRelease();
                 break;
+
+            case 'pdf_progress': {
+                const _pd = msg.data || msg;
+                if (_pd.done) { _pdfProgressHide(); }
+                else { _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
+                break;
+            }
 
             case 'request_state':
                 if (canvas.getObjects().length > 0) {
@@ -10463,5 +10573,12 @@ window.addEventListener('keydown', function (e) {
     })();
 })();
 </script>
+<div id="pdf-progress-modal">
+    <div id="pdf-progress-inner">
+        <h4 id="pdf-progress-title">📄 Loading PDF…</h4>
+        <div id="pdf-progress-track"><div id="pdf-progress-fill"></div></div>
+        <div id="pdf-progress-label">Page 0 of 0</div>
+    </div>
+</div>
 </body>
 </html>
