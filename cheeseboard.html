@@ -647,7 +647,7 @@ document.addEventListener('mousedown', function(e) {
                     </label>
                     <label class="mode-option">
                         <input type="radio" name="connection-mode" value="mqtt" onchange="setConnectionMode('mqtt')">
-                        Cloud MQTT (Paper mode: No undo/erase/move)
+                        Cloud MQTT
                     </label>
 					<label class="mode-option" style="display:flex;align-items:center;gap:4px;">
 					<input type="radio" name="connection-mode" value="firebase" checked onchange="setConnectionMode('firebase')">
@@ -769,11 +769,15 @@ document.addEventListener('mousedown', function(e) {
                         <button class="btn btn-join" onclick="generateMqttLink()">Generate Link</button>
                     </div>
                     <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Share this link for cloud collaboration. (This connection method is not recommended: it may lag! Use it only in case p2p method fails)</div>
-                    <div style="display: flex; gap: 5px; align-items: center;">
+                    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">
                         <input type="text" id="mqtt-link-display" class="id-box" readonly style="width: 180px;" onclick="copyMqttLink()">
                         <button class="btn btn-copy" onclick="copyMqttLink()">Copy</button>
                         <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="mqtt-paper-mode" checked onchange="setMqttPaperMode(this.checked)">
+                        Paper mode (draw-only: no select/move/undo/erase)
+                    </label>
                 </div>
 
                 <!-- Опции и помощь (всегда видны внутри спойлера) -->
@@ -1269,6 +1273,24 @@ function setImgCompressLevel(level) {
 }
 let mqttClient = null;
 let mqttRoomId = null;
+let mqttPaperMode = true; // paper mode: restricts select/erase/undo/move in MQTT
+
+function setMqttPaperMode(enabled) {
+    mqttPaperMode = enabled;
+    if (connectionMode === 'mqtt') {
+        if (enabled) {
+            enablePaperMode();
+        } else {
+            disablePaperMode();
+            // Re-activate current tool to restore canvas state
+            activateTool(currentTool, true);
+        }
+        const statusEl = document.getElementById('status-indicator');
+        if (statusEl && mqttRoomId) {
+            statusEl.innerHTML = mqttPaperMode ? '☁️ PAPER MODE ' : '☁️ CLOUD (full mode) ';
+        }
+    }
+}
 let myMqttId = Math.random().toString(36).substr(2, 9);
 let firebaseRoomId = null;
 let firebaseRef = null;
@@ -1315,7 +1337,10 @@ function setConnectionMode(mode) {
       document.getElementById('ws-section').style.display = mode === 'ws' ? 'block' : 'none';
     // 🔥 НОВОЕ: Управляем режимом блокировки инструментов
        if (mode === 'mqtt') {
-        enablePaperMode();
+        // Read checkbox state (may have been changed before connecting)
+        const cb = document.getElementById('mqtt-paper-mode');
+        if (cb) mqttPaperMode = cb.checked;
+        if (mqttPaperMode) enablePaperMode(); else disablePaperMode();
         checkMqttAutoConnect();
         setStatus('Switched to Cloud mode', 'ok');
     } else if (mode === 'firebase') {
@@ -1489,8 +1514,8 @@ function connectToMqttRoom(roomId) {
     }
     
     mqttRoomId = roomId;
-      // 🔥 НОВОЕ: Включаем режим бумаги при подключении
-    enablePaperMode();
+    // Respect the paper-mode checkbox — don't unconditionally lock buttons
+    if (mqttPaperMode) enablePaperMode(); else disablePaperMode();
     // Прячем спойлер после подключения
   //  document.getElementById('manual-connect-spoiler').classList.remove('expanded');
     
@@ -1580,8 +1605,20 @@ function setupCanvasMqttEvents() {
     // ========================================
     canvas.on('path:created', (e) => {
         if (!e.path || isSendingToMqtt) return;
-        
-        
+
+        // ── Laser pointer: handled by the global laser IIFE ──────────────────
+        // The path is already in _laserPendingPaths; we only need to broadcast it
+        // so the partner sees it, then return — animation is handled by _laserOff().
+        if (window._laserMode) {
+            publishMqttMessage('object_added',
+                Object.assign(e.path.toObject(['id', 'path', 'left', 'top',
+                    'scaleX', 'scaleY', 'angle', 'stroke', 'strokeWidth',
+                    'strokeLineCap', 'strokeLineJoin', 'fill']),
+                    { isLaser: true }));
+            return;   // do NOT push to history, do NOT block future events
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // 🔥 КРИТИЧЕСКИ ВАЖНО: устанавливаем флаг ПЕРЕД отправкой
         isSendingToMqtt = true;
         
@@ -1589,6 +1626,9 @@ function setupCanvasMqttEvents() {
         if (!e.path.id) {
             e.path.id = 'path_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         }
+
+        // Add to undo history (same as the global path:created handler does)
+        addToHistory(e.path);
         
         const syncProps = [
             'id', 'path', 'left', 'top', 'scaleX', 'scaleY', 'angle',
@@ -1708,6 +1748,72 @@ function handleMqttMessage(type, data) {
             handlePartnerViewport(data);
             break;
         case 'object_added':
+            // ── Remote laser pointer ─────────────────────────────────────────
+            // Laser paths arrive with isLaser:true. Queue them exactly like the
+            // local path:created laser branch, then animate on laser_release.
+            if (data.isLaser) {
+                fabric.util.enlivenObjects([data], function(objs) {
+                    const lp = objs[0];
+                    if (!lp) return;
+                    lp.set({ isLaser: true, selectable: false, evented: false, opacity: 1 });
+                    isSendingToMqtt = true;
+                    canvas.add(lp);
+                    setTimeout(() => { isSendingToMqtt = false; }, 50);
+                    window._remoteLaserPendingPaths.push(lp);
+                    canvas.requestRenderAll();
+                });
+                break;
+            }
+            // ─────────────────────────────────────────────────────────────────
+
+            // Images: apply defensive dimension normalisation (same fix as Firebase/P2P)
+            // but using isSendingToMqtt + __isLocal=true so setupCanvasMqttEvents
+            // does NOT echo the image back to the partner (echo loop = flicker/disappear).
+            if (data.type === 'image' && data.src) {
+                fabric.Image.fromURL(data.src, (img) => {
+                    if (!img) return;
+                    // ── Defensive dimension normalizer (mirrors applyRemoteDrawObject) ──
+                    const actualW = (img.getElement && img.getElement() && img.getElement().naturalWidth)
+                                    || img.width;
+                    const actualH = (img.getElement && img.getElement() && img.getElement().naturalHeight)
+                                    || img.height;
+                    const declaredW = data.width  || actualW;
+                    const declaredH = data.height || actualH;
+                    const normScaleX = (data.scaleX || 1) * (declaredW / actualW);
+                    const normScaleY = (data.scaleY || 1) * (declaredH / actualH);
+                    // ─────────────────────────────────────────────────────────────────
+                    img.set({
+                        id:        data.id,
+                        left:      data.left   || 0,
+                        top:       data.top    || 0,
+                        scaleX:    normScaleX,
+                        scaleY:    normScaleY,
+                        angle:     data.angle  || 0,
+                        cropX:     data.cropX  || 0,
+                        cropY:     data.cropY  || 0,
+                        width:     actualW,
+                        height:    actualH,
+                        __isLocal: true,   // prevents object:added echo-back
+                        selectable: true,
+                        evented:    true,
+                    });
+                    if (data._filterContrast !== undefined || data._filterSharpen !== undefined || data._filterBlur !== undefined) {
+                        img._filterContrast = data._filterContrast || 0;
+                        img._filterSharpen  = data._filterSharpen  || 0;
+                        img._filterBlur     = data._filterBlur     || 0;
+                        if (typeof _applyImgFilters === 'function')
+                            _applyImgFilters(img, img._filterContrast, img._filterSharpen, img._filterBlur);
+                    }
+                    const existing = canvas.getObjects().find(o => o.id === data.id);
+                    isSendingToMqtt = true;          // belt-and-suspenders echo guard
+                    if (existing) canvas.remove(existing);
+                    canvas.add(img);
+                    setTimeout(() => { isSendingToMqtt = false; }, 100);
+                    canvas.requestRenderAll();
+                });
+                break;
+            }
+
             // 🔥 ИСПРАВЛЕНИЕ: Помечаем объект как удаленный
             data.__isLocal = true;
             
@@ -1807,6 +1913,13 @@ function handleMqttMessage(type, data) {
         case 'cursor':
             updatePartnerCursor(data.x, data.y);
             break;
+
+        case 'laser_release':
+            // Partner released Ctrl — animate all their queued laser paths
+            if (typeof window._triggerRemoteLaserRelease === 'function') {
+                window._triggerRemoteLaserRelease();
+            }
+            break;
     }
 }
 
@@ -1814,15 +1927,17 @@ function handleMqttMessage(type, data) {
 
 
 function updateUIForMqttMode() {
-    // Скрываем P2P элементы
-    document.getElementById('host-controls').classList.add('hidden');
+    // In MQTT mode keep host-controls visible — its button opens the settings spoiler.
+    // Only hide P2P-specific controls that don't apply.
     document.getElementById('join-controls').classList.add('hidden');
     document.getElementById('session-info').classList.add('hidden');
+    // Keep host-controls: it now serves as "open settings" button in MQTT mode
+    document.getElementById('host-controls').classList.remove('hidden');
     
     // Показываем MQTT информацию
     const statusEl = document.getElementById('status-indicator');
     if (mqttRoomId) {
-        statusEl.innerHTML = `☁️ PAPER MODE `;
+        statusEl.innerHTML = mqttPaperMode ? `☁️ PAPER MODE ` : `☁️ CLOUD (full mode) `;
     }
 }
 
@@ -2252,8 +2367,8 @@ const settings = {
 };
 
 function activateTool(tool, keepMenu = false) {
-    // 🔥 НОВОЕ: Проверка на режим MQTT
-    if (connectionMode === 'mqtt' && (tool === 'select' || tool === 'eraser')) {
+    // 🔥 НОВОЕ: Проверка на режим MQTT (только в paper mode)
+    if (connectionMode === 'mqtt' && mqttPaperMode && (tool === 'select' || tool === 'eraser')) {
         return; // Запрещаем активацию этих инструментов
     }
     
@@ -2276,8 +2391,8 @@ function activateTool(tool, keepMenu = false) {
     canvas.isDrawingMode = false;
     canvas.selection = (tool === 'select');
     
-    // 🔥 ИЗМЕНЕНО: В режиме MQTT объекты всегда невыделяемы
-    if (connectionMode === 'mqtt') {
+    // 🔥 ИЗМЕНЕНО: В режиме MQTT (paper mode) объекты всегда невыделяемы
+    if (connectionMode === 'mqtt' && mqttPaperMode) {
         canvas.selection = false;
         canvas.forEachObject(o => {
             o.selectable = false;
@@ -2291,6 +2406,14 @@ function activateTool(tool, keepMenu = false) {
             if (o.type === 'textbox' && o.__isLocal === true) {
                 o.selectable = false;
                 o.evented    = false;
+                return;
+            }
+            // Pinned objects: selectable=true so rubber-band includes them,
+            // but evented=false so they don't absorb mousedown and block rubber-band
+            // from starting when the user drags over the pinned background.
+            if (o.isPinned) {
+                o.selectable = (tool === 'select');
+                o.evented    = false;   // let rubber-band start on pinned background
                 return;
             }
             o.selectable = (tool === 'select');
@@ -2349,7 +2472,7 @@ function addToHistory(obj) {
 }
 
 function undo() {
-    if (connectionMode === 'mqtt') return;
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const action = _undoStack.pop();
     if (!action) return;
 
@@ -2393,8 +2516,8 @@ function undo() {
 }
 
 function deleteSelected() {
-	// 🔥 НОВОЕ: Проверка режима MQTT
-    if (connectionMode === 'mqtt') return;
+	// 🔥 НОВОЕ: Проверка режима MQTT (только paper mode)
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const active = canvas.getActiveObjects();
     if (active.length) {
         const toDelete = active.filter(o => !o.isPinned);
@@ -2421,8 +2544,8 @@ function deleteSelected() {
 }
 
 function duplicateSelected() {
-	// 🔥 НОВОЕ: Проверка режима MQTT
-    if (connectionMode === 'mqtt') return;
+	// 🔥 НОВОЕ: Проверка режима MQTT (только paper mode)
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const active = canvas.getActiveObject();
     if (!active) return;
 
@@ -2910,7 +3033,7 @@ function applyUngroupOp(payload) {
 }
 
 function groupSelected() {
-    if (connectionMode === 'mqtt') return;
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const active = canvas.getActiveObject();
     if (!active || active.type !== 'activeSelection') return;
 
@@ -2940,7 +3063,7 @@ function groupSelected() {
 }
 
 function ungroupSelected() {
-    if (connectionMode === 'mqtt') return;
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const active = canvas.getActiveObject();
     if (!active || active.type !== 'group') return;
 
@@ -3599,8 +3722,8 @@ function pinObjectsById(ids) {
 }
 
 function togglePin() {
-	// 🔥 НОВОЕ: Проверка режима MQTT
-    if (connectionMode === 'mqtt') return;
+	// 🔥 НОВОЕ: Проверка режима MQTT (только paper mode)
+    if (connectionMode === 'mqtt' && mqttPaperMode) return;
     const activeObjects = canvas.getActiveObjects();
     if (!activeObjects.length) return;
 
@@ -5035,6 +5158,8 @@ function broadcast(type, payload) {
             publishMqttMessage('object_modified', payload.data);
         } else if (type === 'delete') {
             publishMqttMessage('object_removed', payload);
+        } else if (type === 'laser_release') {
+            publishMqttMessage('laser_release', {});
         }
         return;
     }
@@ -5075,8 +5200,8 @@ function updateUIForConnectionMode() {
     const sessionInfo = document.getElementById('session-info');
     
     if (connectionMode === 'mqtt') {
-        // В режиме MQTT скрываем P2P элементы
-        hostControls.classList.add('hidden');
+        // Keep host-controls visible — it opens the settings spoiler in MQTT mode.
+        hostControls.classList.remove('hidden');
         joinControls.classList.add('hidden');
         sessionInfo.classList.add('hidden');
         return;
@@ -5129,7 +5254,7 @@ function setStatus(msg, type) {
     if (msg.includes("Ready")) icon = "🟢";
     if (msg.includes("Connected")) icon = "✅";
     if (msg.includes("Sending")) icon = "📤";
-    if (connectionMode === 'mqtt') icon = "☁️ PAPER MODE";
+    if (connectionMode === 'mqtt') icon = mqttPaperMode ? "☁️ PAPER MODE" : "☁️ CLOUD";
     
     el.innerHTML = `${icon} ${msg}`;
 }
@@ -5147,7 +5272,9 @@ window.startHost = () => {
         }
     }
     if (connectionMode === 'mqtt') {
-        alert('In Cloud mode, use "Generate Link" button instead');
+        // Re-open settings spoiler so user can access Generate Link, paper mode, etc.
+        const spoiler = document.getElementById('manual-connect-spoiler');
+        if (spoiler) spoiler.classList.add('expanded');
         return;
     }
     if (connectionMode === 'ws') {
@@ -6009,8 +6136,8 @@ window.addEventListener('keydown', (e) => {
         }
     }
 
-    // 🔥 НОВОЕ: Блокировка горячих клавиш в режиме MQTT
-    if (connectionMode === 'mqtt') {
+    // 🔥 НОВОЕ: Блокировка горячих клавиш в режиме MQTT (только paper mode)
+    if (connectionMode === 'mqtt' && mqttPaperMode) {
         // Разрешаем только инструменты рисования
         const allowedTools = ['KeyP', 'KeyH', 'KeyR', 'KeyC', 'KeyL', 'KeyA'];
         if (!allowedTools.includes(e.code) && e.code !== 'Space') {
@@ -7224,7 +7351,7 @@ function _autoGroupIfMultiSelection() {
     const active = canvas.getActiveObject();
     if (!active || active.type !== 'activeSelection') return active;
     if (active.getObjects().length < 2)               return active;
-    if (connectionMode === 'mqtt')                     return active;
+    if (connectionMode === 'mqtt' && mqttPaperMode)                     return active;
     // Belt-and-suspenders: if ungroupSelected() just ran (and somehow didn't
     // discard the selection), suppress auto-regroup for this one event so the
     // ungroup_objects message has a chance to reach the partner before any
@@ -7286,7 +7413,7 @@ canvas.on('before:transform', (e) => {
     // toGroup() converts the activeSelection in-place; the SAME object reference
     // (now a group) is still stored in transform.target, so Fabric continues the
     // drag/scale/rotate correctly on the new group without interruption.
-    if (target.type === 'activeSelection' && connectionMode !== 'mqtt') {
+    if (target.type === 'activeSelection' && (connectionMode !== 'mqtt' || !mqttPaperMode)) {
         const group = _autoGroupIfMultiSelection();
         // Redirect the live transform to the new group so this very drag/scale/rotate
         // already applies to it (no need for the user to restart the gesture).
@@ -9771,7 +9898,7 @@ function _snapV(v) { return Math.round(v / gridSize) * gridSize; }
 
 // ── Moving: snap top-left corner to grid ─────────────────────
 canvas.on('object:moving', function (e) {
-    if (!snapEnabled) return;
+    if (!snapEnabled && !e.e.shiftKey) return;
     const o = e.target; if (!o) return;
     o.left = _snapV(o.left);
     o.top  = _snapV(o.top);
@@ -9806,7 +9933,7 @@ canvas.on('object:scaling', function (e) {
 
 // ── Rotating: 15° steps (standard mtr only; pivot handled in _pivotRotateHandler) ─
 canvas.on('object:rotating', function (e) {
-    if (!snapEnabled) return;
+    if (!snapEnabled && !e.e.shiftKey) return;
     const o = e.target; if (!o) return;
     if (o._pivotLocal) return;          // pivot path already snaps via CHANGE 2
 
