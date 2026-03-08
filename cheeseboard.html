@@ -2176,6 +2176,11 @@ canvas._collectObjects = function(e) {
     for (let i = this._objects.length - 1; i >= 0; i--) {
         const obj = this._objects[i];
         if (!obj || !obj.selectable || !obj.visible) continue;
+        // Pinned objects are never included in rubber-band selection:
+        // they can't be moved anyway (all locks set) and including them
+        // would trigger object:modified broadcasts that corrupt their
+        // position on the partner's canvas.
+        if (obj.isPinned) continue;
         if (obj.isContainedWithinRect(e1, e2, true)) {
             result.push(obj);
         }
@@ -2371,6 +2376,17 @@ function activateTool(tool, keepMenu = false) {
     if (connectionMode === 'mqtt' && mqttPaperMode && (tool === 'select' || tool === 'eraser')) {
         return; // Запрещаем активацию этих инструментов
     }
+
+    // ── Apple Pencil perf: perPixelTargetFind is expensive at 120 Hz ──────────
+    // During drawing tools (pen/highlighter/laser/shape) Fabric never needs to
+    // hit-test objects — disable it to avoid scanning every pixel on every move.
+    // Re-enable for select and eraser where hit-testing is essential.
+    if (tool === 'select' || tool === 'eraser') {
+        canvas.perPixelTargetFind = true;
+    } else {
+        canvas.perPixelTargetFind = false;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
     
     currentTool = tool;
     if (!keepMenu) closeAllMenus();
@@ -2406,14 +2422,6 @@ function activateTool(tool, keepMenu = false) {
             if (o.type === 'textbox' && o.__isLocal === true) {
                 o.selectable = false;
                 o.evented    = false;
-                return;
-            }
-            // Pinned objects: selectable=true so rubber-band includes them,
-            // but evented=false so they don't absorb mousedown and block rubber-band
-            // from starting when the user drags over the pinned background.
-            if (o.isPinned) {
-                o.selectable = (tool === 'select');
-                o.evented    = false;   // let rubber-band start on pinned background
                 return;
             }
             o.selectable = (tool === 'select');
@@ -6052,6 +6060,13 @@ function _cursorGoSleep() {
 }
 
 function broadcastCursor(e) {
+    // ── Apple Pencil hover guard ─────────────────────────────────────────────
+    // Pencil 2 fires pointermove at 120 Hz even while hovering (not touching).
+    // During an active stroke _isPenDrawing=true so cursor is useful; while just
+    // hovering _isPenDrawing=false — skip to avoid flooding the main thread.
+    if (e.pointerType === 'pen' && !_isPenDrawing) return;
+    // ─────────────────────────────────────────────────────────────────────────
+
     const now     = Date.now();
     const pointer = canvas.getPointer(e);
     const px = pointer.x, py = pointer.y;
@@ -6626,10 +6641,71 @@ document.addEventListener('pointerdown', (e) => {
 });
 // Clear the pen flag on lift or cancel so future palm contacts are handled normally.
 document.addEventListener('pointerup',     (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
-document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'pen') _isPenDrawing = false; });
+document.addEventListener('pointercancel', (e) => {
+    if (e.pointerType !== 'pen') return;
+    _isPenDrawing = false;
+    // iPadOS can fire pointercancel instead of pointerup (e.g. palm contact mid-stroke).
+    // Fabric doesn't listen for pointercancel so brush._points keeps growing forever,
+    // causing the main thread to freeze until the user switches tools.
+    // _abortFreeDrawing is defined later in the file but by the time pointercancel
+    // fires the page is fully loaded, so the reference is always valid.
+    if (typeof _abortFreeDrawing === 'function') {
+        _abortFreeDrawing();
+    }
+});
 document.addEventListener('touchstart', (e) => {
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 }, { passive: true });
+
+// ── Rubber-band OVER pinned objects ──────────────────────────────────────────
+// Problem: in select mode, mousedown on a pinned (evented:true) object makes
+// Fabric start a drag-transform instead of a rubber-band, so drawings on top
+// of a pinned background can't be lassoed.
+// Solution: patch _onMouseDown. If target is pinned, set skipTargetFind so
+// Fabric treats the spot as empty canvas → rubber-band starts.
+// We track whether the user actually dragged or just clicked; on a pure click
+// we manually select the pinned object on mouseup (so unpin still works).
+(function patchRubberBandOverPinned() {
+    let _pinnedClickCandidate = null;  // pinned object user pressed on
+    let _pinnedDragged        = false; // true once mouse moves > 5 px
+
+    const _origMouseDown = canvas._onMouseDown.bind(canvas);
+    canvas._onMouseDown = function(e) {
+        if (currentTool === 'select') {
+            const target = canvas.findTarget(e);
+            if (target && target.isPinned) {
+                _pinnedClickCandidate = target;
+                _pinnedDragged        = false;
+                // Hide target from Fabric so it falls through to rubber-band logic
+                canvas.skipTargetFind = true;
+                _origMouseDown(e);
+                canvas.skipTargetFind = false;
+                return;
+            }
+        }
+        _pinnedClickCandidate = null;
+        _origMouseDown(e);
+    };
+
+    // Track whether the press became a real drag
+    canvas.on('mouse:move', function(opt) {
+        if (!_pinnedClickCandidate || _pinnedDragged) return;
+        const gs = canvas._groupSelector;
+        if (gs && (Math.abs(gs.left) > 5 || Math.abs(gs.top) > 5)) {
+            _pinnedDragged = true;
+        }
+    });
+
+    // On mouseup: if no drag happened → pure click → select the pinned object
+    canvas.on('mouse:up', function() {
+        if (_pinnedClickCandidate && !_pinnedDragged) {
+            canvas.setActiveObject(_pinnedClickCandidate);
+            canvas.requestRenderAll();
+        }
+        _pinnedClickCandidate = null;
+        _pinnedDragged        = false;
+    });
+})();
 
 // Right-click on canvas
 canvas.on('mouse:down', (opt) => {
@@ -6705,14 +6781,22 @@ canvas.upperCanvasEl.addEventListener('touchstart', (e) => {
 
     // --- Долгий тап ---
     clearTimeout(longTapTimer); // На всякий случай сбрасываем предыдущий
+    // ── Apple Pencil perf fix ────────────────────────────────────────────────
+    // Capture clientX/Y NOW (they're valid during touchstart).
+    // Passing the original TouchEvent `e` to canvas.findTarget() 600 ms later
+    // forces a stale-event layout recalc (forced reflow) which can freeze the
+    // main thread for hundreds of ms.  Use a synthetic minimal event instead.
+    const _longTapX = clientX;
+    const _longTapY = clientY;
     longTapTimer = setTimeout(() => {
         longTapFired = true;
-        const target = canvas.findTarget(e); 
+        const syntheticEvt = { clientX: _longTapX, clientY: _longTapY };
+        const target = canvas.findTarget(syntheticEvt);
         if (target) { 
             canvas.setActiveObject(target); 
             canvas.requestRenderAll(); 
         }
-        if (canvas.getActiveObject()) showCtxMenu(clientX, clientY);
+        if (canvas.getActiveObject()) showCtxMenu(_longTapX, _longTapY);
     }, 600);
     
 }, { passive: true });
