@@ -5690,7 +5690,7 @@ function setupConn() {
             window._triggerRemoteLaserRelease();
 
         } else if (msg.type === 'pdf_progress') {
-            const _pd = msg.data || msg;
+            const _pd = msg.data || msg; // P2P: data at root; Firebase/WS: data in .data
             if (_pd.done) {
                 _pdfProgressHide();
             } else {
@@ -9082,12 +9082,15 @@ function sendToFirebase(type, data) {
 // 7. Обновляем функцию broadcast для Firebase (WS handled inside original broadcast)
 const originalBroadcast = window.broadcast;
 window.broadcast = function(type, payload) {
+    // pdf_progress is a lightweight UI signal — must bypass all echo-guards
+    const _isUiSignal = (type === 'pdf_progress');
     if (connectionMode === 'firebase' && firebaseRef) {
+        // For ui signals send even when isSendingToFirebase flag is up
         sendToFirebase(type, payload.data || payload);
         return;
     }
     if (connectionMode === 'ws' && wsSocket && wsSocket.readyState === WebSocket.OPEN) {  // Deno only
-        if (!payload || !payload.data || !payload.data.__isLocal) {
+        if (_isUiSignal || !payload || !payload.data || !payload.data.__isLocal) {
             sendToWs(type, payload && payload.data ? payload.data : payload);
         }
         return;
