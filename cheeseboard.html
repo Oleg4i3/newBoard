@@ -1903,9 +1903,16 @@ function handleMqttMessage(type, data) {
                 canvas.loadFromJSON(data, () => {
                     canvas.requestRenderAll();
                     resizeCanvas();
+                    // Fix selectable/evented: sender serialised in pen mode (all false).
+                    // Only touch selectable/evented — hasControls/lock* are correct in JSON.
+                    canvas.getObjects().forEach(function(o) {
+                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
+                        o.selectable = (currentTool === 'select');
+                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
+                    });
                     setTimeout(() => {
                         isSendingToMqtt = false;
-                    }, 500);  // Более длительная блокировка для массовой загрузки
+                    }, 500);
                 });
             }
             break;
@@ -2151,7 +2158,6 @@ const canvas = new fabric.Canvas('c', {
 // Canvas2dFilterBackend guarantees applyTo2d() is always called.
 fabric.filterBackend = new fabric.Canvas2dFilterBackend();
 
-// ── Rubber-band selection: выделять только полностью вошедшие объекты ──────
 // Fabric 5 по умолчанию выделяет объекты, которые ПЕРЕСЕКАЮТСЯ с рамкой.
 // Переопределяем _collectObjects, чтобы брать только те,
 // что целиком находятся внутри прямоугольника выделения.
@@ -4261,7 +4267,7 @@ canvas.on('mouse:move', (o) => {
     broadcastCursor(o.e);
 });
 
-canvas.on('mouse:up', () => {
+canvas.on('mouse:up', (opt) => {
     if (isPanning) {
         isPanning = false;
         canvas.setCursor('grab');
@@ -5907,6 +5913,13 @@ function applyRemoteStateDump(stateData, onDone) {
         });
 
         if (imageObjects.length === 0) {
+            // Fix selectable/evented: sender may have serialised in pen mode (all false).
+            // Only touch selectable/evented — hasControls/lock* are correct in JSON.
+            canvas.getObjects().forEach(function(o) {
+                if (o.type === 'textbox' && o.__isLocal === true) { return; }
+                o.selectable = (currentTool === 'select');
+                o.evented    = (currentTool === 'select' || currentTool === 'eraser');
+            });
             canvas.requestRenderAll();
             if (onDone) onDone();
             return;
@@ -5921,7 +5934,15 @@ function applyRemoteStateDump(stateData, onDone) {
             if (el && el.naturalWidth > 0) {
                 // Image loaded fine by loadFromJSON
                 remaining--;
-                if (remaining === 0) { canvas.requestRenderAll(); if (onDone) onDone(); }
+                if (remaining === 0) {
+                    canvas.getObjects().forEach(function(o) {
+                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
+                        o.selectable = (currentTool === 'select');
+                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
+                    });
+                    canvas.requestRenderAll();
+                    if (onDone) onDone();
+                }
                 return;
             }
 
@@ -5956,7 +5977,15 @@ function applyRemoteStateDump(stateData, onDone) {
                 }
                 canvas.add(img);
                 remaining--;
-                if (remaining === 0) { canvas.requestRenderAll(); if (onDone) onDone(); }
+                if (remaining === 0) {
+                    canvas.getObjects().forEach(function(o) {
+                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
+                        o.selectable = (currentTool === 'select');
+                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
+                    });
+                    canvas.requestRenderAll();
+                    if (onDone) onDone();
+                }
             });
         });
     });
@@ -6657,57 +6686,64 @@ document.addEventListener('touchstart', (e) => {
     if (!ctxMenu.contains(e.target)) hideCtxMenu();
 }, { passive: true });
 
-// ── Rubber-band OVER pinned objects ──────────────────────────────────────────
-// Problem: in select mode, mousedown on a pinned (evented:true) object makes
-// Fabric start a drag-transform instead of a rubber-band, so drawings on top
-// of a pinned background can't be lassoed.
-// Solution: patch _onMouseDown. If target is pinned, set skipTargetFind so
-// Fabric treats the spot as empty canvas → rubber-band starts.
-// We track whether the user actually dragged or just clicked; on a pure click
-// we manually select the pinned object on mouseup (so unpin still works).
-(function patchRubberBandOverPinned() {
-    let _pinnedClickCandidate = null;  // pinned object user pressed on
-    let _pinnedDragged        = false; // true once mouse moves > 5 px
+// ── Click-select for pinned objects ──────────────────────────────────────────
+// Pinned objects have evented:false in select mode so that mousedown passes
+// through to the canvas background → Fabric starts a rubber-band instead of
+// a drag-transform.  But evented:false also makes canvas.findTarget() blind
+// to them, so a plain click can't select them through normal Fabric flow.
+//
+// Fix: listen to pointerdown/pointerup on the upper canvas element directly.
+// On pointerup, if the pointer barely moved (< 8px = click, not drag), do a
+// manual hit-test using containsPoint() — which is pure geometry and ignores
+// evented — to find any pinned object under the cursor and select it.
+//
+// Sync safety: _collectObjects already excludes isPinned, so rubber-band
+// never puts a pinned object into an activeSelection, and object:modified
+// is never broadcast for pinned objects.
+// Right-click on canvas
 
-    const _origMouseDown = canvas._onMouseDown.bind(canvas);
-    canvas._onMouseDown = function(e) {
-        if (currentTool === 'select') {
-            const target = canvas.findTarget(e);
-            if (target && target.isPinned) {
-                _pinnedClickCandidate = target;
-                _pinnedDragged        = false;
-                // Hide target from Fabric so it falls through to rubber-band logic
-                canvas.skipTargetFind = true;
-                _origMouseDown(e);
-                canvas.skipTargetFind = false;
-                return;
-            }
-        }
-        _pinnedClickCandidate = null;
-        _origMouseDown(e);
+// ── Rubber-band over pinned objects ──────────────────────────────────────────
+// Root cause: Fabric calls findTarget() BEFORE firing the 'mouse:down' event.
+// So setting selectable=false in mouse:down is always too late.
+// Fix: patch findTarget itself to return null for pinned objects in select mode.
+// Fabric sees no target → starts rubber-band. Click-select for pinned objects
+// is handled in mouse:up via containsPoint (pure geometry, ignores evented/selectable).
+(function() {
+    const _origFindTarget = canvas.findTarget.bind(canvas);
+    canvas.findTarget = function(e, skipGroup) {
+        const t = _origFindTarget(e, skipGroup);
+        // In select mode, pretend pinned objects don't exist so rubber-band starts
+        if (t && t.isPinned && currentTool === 'select') return null;
+        return t;
     };
 
-    // Track whether the press became a real drag
-    canvas.on('mouse:move', function(opt) {
-        if (!_pinnedClickCandidate || _pinnedDragged) return;
-        const gs = canvas._groupSelector;
-        if (gs && (Math.abs(gs.left) > 5 || Math.abs(gs.top) > 5)) {
-            _pinnedDragged = true;
-        }
+    let _downPt = null;
+
+    canvas.on('mouse:down', function(opt) {
+        _downPt = opt.pointer ? { x: opt.pointer.x, y: opt.pointer.y } : null;
     });
 
-    // On mouseup: if no drag happened → pure click → select the pinned object
-    canvas.on('mouse:up', function() {
-        if (_pinnedClickCandidate && !_pinnedDragged) {
-            canvas.setActiveObject(_pinnedClickCandidate);
-            canvas.requestRenderAll();
+    canvas.on('mouse:up', function(opt) {
+        if (currentTool !== 'select' || !_downPt || !opt.pointer) return;
+        // Only act if it was a click (< 5px movement)
+        const dx = opt.pointer.x - _downPt.x;
+        const dy = opt.pointer.y - _downPt.y;
+        if (dx * dx + dy * dy > 25) return;
+        // Only if rubber-band didn't select anything
+        if (canvas.getActiveObject()) return;
+        // Find topmost pinned object under pointer
+        const objs = canvas.getObjects();
+        for (let i = objs.length - 1; i >= 0; i--) {
+            const o = objs[i];
+            if (o.isPinned && o.visible && o.containsPoint(opt.pointer)) {
+                canvas.setActiveObject(o);
+                canvas.requestRenderAll();
+                break;
+            }
         }
-        _pinnedClickCandidate = null;
-        _pinnedDragged        = false;
     });
 })();
 
-// Right-click on canvas
 canvas.on('mouse:down', (opt) => {
     if (opt.e.button === 2 || opt.e.buttons === 2) {
         const target = canvas.findTarget(opt.e);
