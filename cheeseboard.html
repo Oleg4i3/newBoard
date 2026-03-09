@@ -846,12 +846,12 @@ document.addEventListener('mousedown', function(e) {
 
         <div class="bar-section">
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
-			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected">❐</button>
+			<button class="tool-btn mob-hide" id="btn-duplicate" onclick="duplicateSelected()" data-tooltip="Duplicate selected"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
-            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)">🪢</button>
-            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)">⛓️</button>
-            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image">✂️</button>
-		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)">❌</button>
+            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="2" y="2" width="20" height="20" rx="3"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/></svg></button>
+            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></button>
+            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
+		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)"><svg width="15" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" multiple onchange="handleImport(this)">
@@ -913,6 +913,12 @@ document.addEventListener('mousedown', function(e) {
                         <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
                     </div>
+                  
+                    <div class="shape-grid">
+                        <div class="shape-item" onclick="insertMathCurve('sine')" data-tooltip="Sinusoid (2 periods)"><span class="shape-icon"><svg width="26" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
+                        <div class="shape-item" onclick="insertMathCurve('parabola')" data-tooltip="Parabola"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,62 Q50,2 95,62" fill="none"/></svg></span>Para</div>
+                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,58 C20,52 40,40 55,28 C70,16 80,6 95,2" fill="none"/></svg></span>Exp</div>
+                    </div>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insert3DShape('cube')" data-tooltip="Cube">
@@ -934,12 +940,13 @@ document.addEventListener('mousedown', function(e) {
                         <div class="shape-item" onclick="insert3DShape('frustum')" data-tooltip="Truncated Pyramid">
                             <span class="shape-icon"><svg width="21" height="18" viewBox="0 0 150 158" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"><line x1="5" y1="148" x2="112" y2="148"/><line x1="112" y1="148" x2="138" y2="122"/><line x1="5" y1="148" x2="38" y2="68"/><line x1="112" y1="148" x2="100" y2="68"/><line x1="138" y1="122" x2="122" y2="50"/><line x1="38" y1="68" x2="100" y2="68"/><line x1="100" y1="68" x2="122" y2="50"/><line x1="5" y1="148" x2="31" y2="122" stroke-width="3"/><line x1="31" y1="122" x2="138" y2="122" stroke-width="3"/><line x1="31" y1="122" x2="58" y2="50" stroke-width="3"/><line x1="122" y1="50" x2="58" y2="50" stroke-width="3"/><line x1="58" y1="50" x2="38" y2="68" stroke-width="3"/></svg></span>Frust</div>
                     </div>
-                    <h4>Objects (PNG)</h4>
+                    <h4>Objects & Tools</h4>
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insertPngShape('sphere.png')" data-tooltip="Sphere"><span class="shape-icon">🌐</span>Globe</div>
                         <div class="shape-item" onclick="insertPngShape('ball.png')" data-tooltip="Ball"><span class="shape-icon">🪩</span>Ball</div>
                         <div class="shape-item" onclick="insertPngShape('ruler.png')" data-tooltip="Ruler"><span class="shape-icon">📏</span>Ruler</div>
                         <div class="shape-item" onclick="insertPngShape('protractor.png')" data-tooltip="Protractor"><span class="shape-icon">⊾</span>Prot</div>
+                        <div class="shape-item" id="btn-coordaxis-item" onclick="startCoordAxisTool()" data-tooltip="Coordinate Axis"><span class="shape-icon"><svg width="20" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="24" x2="104" y2="24"/><polyline points="92,16 108,24 92,32"/><line x1="22" y1="20" x2="22" y2="28"/><line x1="42" y1="20" x2="42" y2="28"/><line x1="62" y1="20" x2="62" y2="28"/><line x1="82" y1="20" x2="82" y2="28"/></svg></span>Axis</div>
                         <button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
                     </div>
                     
@@ -1017,6 +1024,7 @@ document.addEventListener('mousedown', function(e) {
             <div class="shape-item" onclick="insertPngShape('ball.png');hideMobOverflow()"><span class="shape-icon">🪩</span>Ball</div>
             <div class="shape-item" onclick="insertPngShape('ruler.png');hideMobOverflow()"><span class="shape-icon">📏</span>Ruler</div>
             <div class="shape-item" onclick="insertPngShape('protractor.png');hideMobOverflow()"><span class="shape-icon">⊾</span>Prot</div>
+            <div class="shape-item" onclick="startCoordAxisTool();hideMobOverflow()" data-tooltip="Coordinate Axis"><span class="shape-icon"><svg width="18" height="12" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="24" x2="104" y2="24"/><polyline points="92,16 108,24 92,32"/><line x1="22" y1="20" x2="22" y2="28"/><line x1="42" y1="20" x2="42" y2="28"/><line x1="62" y1="20" x2="62" y2="28"/><line x1="82" y1="20" x2="82" y2="28"/></svg></span>Axis</div>
         </div>
     </div>
     <div class="mob-row">
@@ -1090,14 +1098,14 @@ document.addEventListener('mousedown', function(e) {
         <button class="ctx-ic" data-tooltip="Bring to Front" onclick="ctxBringToFront()">⬆</button>
         <button class="ctx-ic" data-tooltip="Send to Back"   onclick="ctxSendToBack()">⬇</button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic" data-tooltip="Group"     onclick="ctxGroupSelected()">⊞</button>
-        <button class="ctx-ic" data-tooltip="Ungroup"   onclick="ctxUngroupSelected()">⊟</button>
+        <button class="ctx-ic" data-tooltip="Group"     onclick="ctxGroupSelected()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="2" y="2" width="20" height="20" rx="3"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/></svg></button>
+        <button class="ctx-ic" data-tooltip="Ungroup"   onclick="ctxUngroupSelected()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></button>
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic" id="ctx-pin-btn"  data-tooltip="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
-        <button class="ctx-ic" data-tooltip="Clone"     onclick="ctxClone()">❐</button>
-        <button class="ctx-ic" id="ctx-crop-btn" data-tooltip="Crop image" onclick="ctxCrop()">✂</button>
+        <button class="ctx-ic" data-tooltip="Clone"     onclick="ctxClone()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="ctx-ic" id="ctx-crop-btn" data-tooltip="Crop image" onclick="ctxCrop()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()">✕</button>
+        <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()"><svg width="14" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
     </div>
     <!-- Row 1b: pivot controls (always visible when menu open) -->
     <div class="ctx-icon-row" id="ctx-pivot-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:4px;margin-top:-2px;">
@@ -1157,6 +1165,29 @@ document.addEventListener('mousedown', function(e) {
         </div>
         <!-- Text color swatches -->
         <div id="ctx-text-color-row" class="ctx-swatches-row"></div>
+    </div>
+
+    <!-- AXIS SECTION (only for coordAxis objects) -->
+    <div id="ctx-axis-section" style="display:none; flex-direction:column; gap:5px; padding:0 2px;">
+        <!-- Color swatches -->
+        <div id="ctx-axis-color-row" class="ctx-swatches-row"></div>
+        <!-- Stroke width -->
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label">W</span>
+            <input type="range" id="ctx-axis-sw" min="1" max="10" value="2" oninput="ctxAxisApply()">
+            <span id="ctx-axis-sw-val" style="font-size:10px;color:rgba(255,255,255,0.8);min-width:18px;text-align:right;">2</span>
+        </div>
+        <!-- Step + Freq -->
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:36px;">Step</span>
+            <input type="number" id="ctx-axis-step" min="0.01" step="0.01" value="1"
+                style="width:52px;background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:5px;font-size:11px;padding:2px 4px;text-align:center;"
+                oninput="ctxAxisApply()">
+            <span class="ctx-slider-label" style="min-width:30px;margin-left:6px;">Freq</span>
+            <input type="number" id="ctx-axis-freq" min="1" step="1" value="1"
+                style="width:40px;background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:5px;font-size:11px;padding:2px 4px;text-align:center;"
+                oninput="ctxAxisApply()">
+        </div>
     </div>
 
     <!-- IMAGE FILTER SECTION (only for image objects) -->
@@ -2406,7 +2437,8 @@ const _UNDO_PROPS = [
     'lockScalingX','lockScalingY','hasControls','borderColor','hoverCursor',
     'text','fontFamily','fontSize','fontWeight','fontStyle','underline',
     'textAlign','lineHeight','charSpacing',
-    '_filterContrast','_filterSharpen','_filterBlur'
+    '_filterContrast','_filterSharpen','_filterBlur',
+    'axisNegLen','axisTickStep','axisTickFreq','axisStrokeWidth','axisColor','axisLabelPos'
 ];
 
 function _undoSnapshot(obj) {
@@ -2472,6 +2504,7 @@ function _applyUndoState(obj, state) {
         obj._filterContrast = c; obj._filterSharpen = s; obj._filterBlur = b;
         _applyImgFilters(obj, c, s, b);
     }
+    if (obj.type === 'coordAxis') obj.dirty = true;
     obj.setCoords();
 }
 
@@ -3800,6 +3833,96 @@ function insertPngShape(filename) {
     };
     probe.src = url;
 }
+
+// ==========================================
+// MATH CURVES (sinusoid, parabola, exponential)
+// Generated as exact polylines — NOT splines
+// ==========================================
+function insertMathCurve(type) {
+    // Canvas dimensions for placement
+    var vpt  = canvas.viewportTransform;
+    var zoom = canvas.getZoom();
+    var cx   = (canvas.width  / 2 - vpt[4]) / zoom;
+    var cy   = (canvas.height / 2 - vpt[5]) / zoom;
+
+    // All curves rendered into a W×H bounding box, centered at (cx, cy).
+    // Point count N controls precision — high enough to look smooth.
+    var W = 240;  // pixel width of curve bounding box
+    var H = 120;  // pixel height
+
+    var pts = [];  // [{x, y}] in canvas coords, top-left at (cx-W/2, cy-H/2)
+
+    var x0 = cx - W / 2;
+    var y0 = cy - H / 2;
+    var N  = 400; // number of line segments
+
+    if (type === 'sine') {
+        // y = sin(2π * t * 2)  for t in [0,1] → 2 full periods
+        // normalized: top = 0, bottom = H, midline = H/2
+        for (var i = 0; i <= N; i++) {
+            var t = i / N;
+            var px = x0 + t * W;
+            var py = y0 + H / 2 - (H / 2 - 4) * Math.sin(2 * Math.PI * 2 * t);
+            pts.push({ x: px, y: py });
+        }
+    } else if (type === 'parabola') {
+        // y = (2x-1)^2  for x in [0,1], normalized to fill H
+        // vertex at top-center, opens downward for visual clarity
+        for (var i = 0; i <= N; i++) {
+            var t = i / N;
+            var u = 2 * t - 1;    // u in [-1, 1]
+            var v = u * u;        // v in [0, 1], min at center
+            var px = x0 + t * W/2;
+            var py = y0 + 4 + v * (H - 8);  // top=vertex, bottom=edges
+            pts.push({ x: px, y: py });
+        }
+    } else if (type === 'exp') {
+        // y = e^(k*t) for t in [0,1], normalized so:
+        //   t=0 → bottom-left, t=1 → top-right
+        // k = ln(H/4) so the curve spans from ~1px to H
+        var k = Math.log((H - 8) / 4);
+        var yMin = Math.exp(0);          // = 1
+        var yMax = Math.exp(k);          // = H-8 / 4 * 4 = H-8
+        for (var i = 0; i <= N; i++) {
+            var t = i / N;
+            var raw = Math.exp(k * t);
+            // map raw [1, yMax] → canvas [y0+H-4, y0+4]  (bottom to top)
+            var py = y0 + H - 4 - (raw - yMin) / (yMax - yMin) * (H - 8);
+            var px = x0 + t * W;
+            pts.push({ x: px, y: py });
+        }
+    }
+
+    if (pts.length < 2) return;
+
+    // Build SVG path string: M then L for each subsequent point
+    var d = 'M ' + pts[0].x.toFixed(2) + ' ' + pts[0].y.toFixed(2);
+    for (var j = 1; j < pts.length; j++) {
+        d += ' L ' + pts[j].x.toFixed(2) + ' ' + pts[j].y.toFixed(2);
+    }
+
+    var curve = new fabric.Path(d, {
+        id:               type + '-' + _uid(),
+        fill:             'transparent',
+        stroke:           '#222222',
+        strokeWidth:       1,
+        strokeLineCap:    'round',
+        strokeLineJoin:   'round',
+        selectable:       true,
+        evented:          true,
+        objectCaching:    false,
+        // Store curve type so it can be identified later if needed
+        curveType:        type,
+    });
+
+    canvas.add(curve);
+    canvas.setActiveObject(curve);
+    addToHistory(curve);
+    broadcast('draw', { data: curve.toObject(['id']) });
+    activateTool('select');
+    toggleSubmenu('shapes-menu');
+}
+window.insertMathCurve = insertMathCurve;
 
 // ==========================================
 // ЛОГИКА PIN / UNPIN
@@ -6765,6 +6888,7 @@ function showCtxMenu(x, y) {
 
     const isImg  = obj.type === 'image';
     const isText = obj.type === 'textbox';
+    const isAxis = obj.type === 'coordAxis';
 
     const CLOSED_TYPES = new Set(['rect','circle','ellipse','triangle','polygon','path']);
     const LINE_TYPES   = new Set(['line','dashed','arrow']);
@@ -6777,19 +6901,22 @@ function showCtxMenu(x, y) {
     const hasClosed = targets.some(isClosedObj);
     const allImg    = targets.every(o => o.type === 'image');
     const allText   = targets.every(o => o.type === 'textbox');
+    const allAxis   = targets.every(o => o.type === 'coordAxis');
 
     const strokeSection      = document.getElementById('ctx-stroke-section');
     const strokeWidthSection = document.getElementById('ctx-stroke-width-section');
     const fillSection        = document.getElementById('ctx-fill-section');
     const textSection        = document.getElementById('ctx-text-section');
     const imgSection         = document.getElementById('ctx-img-section');
+    const axisSection        = document.getElementById('ctx-axis-section');
 
-    strokeSection.style.display      = (allImg || allText) ? 'none' : 'flex';
-    strokeWidthSection.style.display = (allImg || allText) ? 'none' : 'flex';
+    strokeSection.style.display      = (allImg || allText || allAxis) ? 'none' : 'flex';
+    strokeWidthSection.style.display = (allImg || allText || allAxis) ? 'none' : 'flex';
     fillSection.style.display        = hasClosed ? 'flex' : 'none';
     document.getElementById('ctx-fill-color-section').style.display = hasClosed ? 'flex' : 'none';
     textSection.style.display        = allText ? 'flex' : 'none';
     imgSection.style.display         = allImg  ? 'flex' : 'none';
+    if (axisSection) axisSection.style.display = allAxis ? 'flex' : 'none';
 
     // Crop button: only for images; Pin button: always shown
     const cropBtn = document.getElementById('ctx-crop-btn');
@@ -6870,6 +6997,50 @@ function showCtxMenu(x, y) {
         document.getElementById('ctx-contrast').value = c; document.getElementById('ctx-contrast-val').textContent = c;
         document.getElementById('ctx-sharpen').value  = s; document.getElementById('ctx-sharpen-val').textContent  = s;
         document.getElementById('ctx-blur').value     = b; document.getElementById('ctx-blur-val').textContent     = b;
+    }
+
+    // ── Populate axis fields ──────────────────────────────────────────────────
+    if (allAxis) {
+        const ax = targets[0] || obj;
+        // stroke width
+        const swEl  = document.getElementById('ctx-axis-sw');
+        const swVal = document.getElementById('ctx-axis-sw-val');
+        const sw = ax.axisStrokeWidth !== undefined ? ax.axisStrokeWidth : 2;
+        if (swEl)  swEl.value         = sw;
+        if (swVal) swVal.textContent  = sw;
+        // step / freq
+        const stepEl = document.getElementById('ctx-axis-step');
+        const freqEl = document.getElementById('ctx-axis-freq');
+        if (stepEl) stepEl.value = ax.axisTickStep !== undefined ? ax.axisTickStep : 1;
+        if (freqEl) freqEl.value = ax.axisTickFreq !== undefined ? ax.axisTickFreq : 1;
+        // color swatches — inline (function is inside IIFE, not accessible here)
+        const colorRow = document.getElementById('ctx-axis-color-row');
+        if (colorRow) {
+            colorRow.innerHTML = '';
+            const curColor = ax.axisColor || '#222222';
+            ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'].forEach(c => {
+                const d = document.createElement('div');
+                d.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
+                d.style.background = c;
+                if (c === curColor) d.classList.add('selected');
+                d.onclick = () => {
+                    colorRow.querySelectorAll('.ctx-swatch').forEach(s => s.classList.remove('selected'));
+                    d.classList.add('selected');
+                    ctxAxisSetColor(c);
+                };
+                colorRow.appendChild(d);
+            });
+            const pkl = document.createElement('input');
+            pkl.type = 'color'; pkl.value = curColor;
+            pkl.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+            const cust = document.createElement('div');
+            cust.className = 'ctx-swatch';
+            cust.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+            cust.appendChild(pkl);
+            pkl.oninput = () => { cust.style.background = pkl.value; ctxAxisSetColor(pkl.value); };
+            cust.onclick = e => { pkl.click(); e.stopPropagation(); };
+            colorRow.appendChild(cust);
+        }
     }
 
     // Initial position
@@ -10322,6 +10493,7 @@ canvas.on('object:moving', function (e) {
 canvas.on('object:scaling', function (e) {
     if (!snapEnabled) return;
     const o = e.target; if (!o || !o.width || !o.height) return;
+    if (o.type === 'coordAxis') return; // has its own handler
 
     // Fabric's scaling transform keeps the OPPOSITE corner fixed.
     // e.transform.originX/Y tell us which corner is the anchor
@@ -10459,6 +10631,505 @@ window.addEventListener('keydown', function (e) {
     }
 });
 
+
+
+// ==========================================
+// COORDINATE AXIS OBJECT
+// ==========================================
+(function () {
+
+// ─── Fabric class ────────────────────────────────────────────────────────────
+fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
+    type: 'coordAxis',
+    stateProperties: fabric.Object.prototype.stateProperties.concat(
+        ['axisNegLen','axisTickStep','axisTickFreq','axisStrokeWidth','axisColor','axisLabelPos']
+    ),
+
+    initialize: function (options) {
+        options = options || {};
+        this.callSuper('initialize', options);
+        this.width           = options.width           || 200;
+        this.height          = options.height          || 40;
+        this.axisNegLen      = options.axisNegLen      || 0;
+        this.axisTickStep    = options.axisTickStep    !== undefined ? options.axisTickStep  : 1;
+        this.axisTickFreq    = options.axisTickFreq    !== undefined ? options.axisTickFreq  : 1;
+        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 2;
+        this.axisColor       = options.axisColor       || '#222222';
+        // 'below' (default, for horizontal) | 'left' (for vertical — labels counter-rotated)
+        this.axisLabelPos    = options.axisLabelPos    || 'below';
+        this.lockScalingY    = true;
+        this.lockSkewingX    = true;
+        this.lockSkewingY    = true;
+        this.setControlsVisibility({
+            tl: false, tr: false, bl: false, br: false,
+            mt: false, mb: false,
+            ml: true, mr: true, mtr: true
+        });
+    },
+
+    _render: function (ctx) {
+        var W          = this.width;
+        var negLen     = this.axisNegLen  || 0;
+        var sw         = this.axisStrokeWidth || 2;
+        var color      = this.axisColor   || '#222222';
+        var freq       = Math.max(1, this.axisTickFreq || 1);
+        var step       = this.axisTickStep !== undefined ? this.axisTickStep : 1;
+        var labelLeft  = (this.axisLabelPos === 'left');
+
+        // Local coords: left end = -W/2, right end = +W/2
+        // zero mark at x = -W/2 + negLen
+        var zeroX       = -W / 2 + negLen;
+        var tickSpacing = gridSize * freq;
+
+        // Arrow geometry — sharp symmetric V (matches shape arrow tool)
+        var arrowAngle    = Math.PI / 7;
+        var arrowSize     = Math.max(10, sw * 3.5);
+        var arrowHalfBase = arrowSize * Math.sin(arrowAngle);
+        var arrowShaft    = arrowSize * Math.cos(arrowAngle);
+        var tipX          = W / 2;
+        var lineY         = 0;
+
+        // Last tick must not overlap arrowhead body
+        var maxTickX = tipX - arrowShaft - sw;
+        var minTickX = -W / 2;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle   = color;
+        ctx.lineWidth   = sw;
+        ctx.lineCap     = 'round';
+        ctx.lineJoin    = 'miter';
+        ctx.miterLimit  = 10;
+        ctx.setLineDash([]);
+
+        // Main axis line
+        ctx.beginPath();
+        ctx.moveTo(-W / 2, lineY);
+        ctx.lineTo(tipX,   lineY);
+        ctx.stroke();
+
+        // Sharp symmetric arrowhead
+        ctx.beginPath();
+        ctx.moveTo(tipX - arrowShaft, lineY - arrowHalfBase);
+        ctx.lineTo(tipX, lineY);
+        ctx.lineTo(tipX - arrowShaft, lineY + arrowHalfBase);
+        ctx.stroke();
+
+        // Ticks & labels
+        var tickLen  = 6;
+        var fontSize = Math.max(8, Math.min(11, tickSpacing * 0.55));
+        ctx.lineWidth = Math.max(1, sw * 0.7);
+
+        var kMin = Math.ceil ((minTickX - zeroX) / tickSpacing);
+        var kMax = Math.floor((maxTickX - zeroX) / tickSpacing);
+
+        for (var k = kMin; k <= kMax; k++) {
+            var tx = zeroX + k * tickSpacing;
+            if (tx < minTickX - 0.1 || tx > maxTickX + 0.1) continue;
+
+            // Tick mark
+            ctx.beginPath();
+            ctx.moveTo(tx, lineY - tickLen / 2);
+            ctx.lineTo(tx, lineY + tickLen / 2);
+            ctx.stroke();
+
+            // Label
+            if (Math.abs(k) <= 500) {
+                var labelVal = k * step;
+                var label = Number.isInteger(labelVal)
+                    ? String(labelVal)
+                    : parseFloat(labelVal.toFixed(6)).toString();
+
+                ctx.save();
+                ctx.font = fontSize + 'px Arial, sans-serif';
+                ctx.fillStyle = color;
+
+                if (labelLeft) {
+                    // Counter-rotate by the object's own angle so the label is always
+                    // horizontal in screen space, regardless of axis direction (90° or 270°).
+                    ctx.translate(tx, lineY);
+                    ctx.rotate(-(this.angle || 0) * Math.PI / 180);
+                    ctx.textAlign    = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, -(tickLen / 2 + 3), 0);
+                } else {
+                    // Horizontal axis: labels below the tick
+                    ctx.textAlign    = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(label, tx, lineY + tickLen / 2 + 2);
+                }
+                ctx.restore();
+            }
+        }
+
+        ctx.restore();
+    },
+
+    toObject: function (extraProps) {
+        return fabric.util.object.extend(
+            this.callSuper('toObject', extraProps), {
+                axisNegLen:      this.axisNegLen      || 0,
+                axisTickStep:    this.axisTickStep     !== undefined ? this.axisTickStep  : 1,
+                axisTickFreq:    this.axisTickFreq     !== undefined ? this.axisTickFreq  : 1,
+                axisStrokeWidth: this.axisStrokeWidth  !== undefined ? this.axisStrokeWidth : 2,
+                axisColor:       this.axisColor        || '#222222',
+                axisLabelPos:    this.axisLabelPos     || 'below',
+            }
+        );
+    }
+});
+
+fabric.CoordAxis.fromObject = function (object, callback) {
+    var ax = new fabric.CoordAxis(object);
+    if (callback) callback(ax);
+    return ax;
+};
+
+// ─── Helper: compute canvas-space position of the axis zero mark ──────────────
+// For H axis at angle 0/180: zeroX in local → dx in canvas
+// General: local zero offset = (axisNegLen - W/2, 0)
+function _axisZeroCanvas(ax) {
+    var localOffX = ax.axisNegLen - ax.width / 2;
+    var rad = (ax.angle || 0) * Math.PI / 180;
+    return {
+        x: ax.left + localOffX * Math.cos(rad),
+        y: ax.top  + localOffX * Math.sin(rad)
+    };
+}
+
+// ─── Drawing mode ─────────────────────────────────────────────────────────────
+var _axisDrawing  = false;
+var _axisPreview  = null;
+var _axisStartX   = 0;
+var _axisStartY   = 0;
+var _axisIsH      = true;    // true=horizontal, false=vertical
+
+function startCoordAxisTool() {
+    activateTool('select', true);
+    currentTool = 'coordAxis';
+    canvas.isDrawingMode = false;
+    canvas.selection     = false;
+    canvas.defaultCursor = 'crosshair';
+    canvas.forEachObject(function (o) { o.selectable = false; o.evented = false; });
+    document.querySelectorAll('#btn-coordaxis-item').forEach(function (b) { b.classList.add('active'); });
+    closeAllMenus();
+}
+window.startCoordAxisTool = startCoordAxisTool;
+
+canvas.on('mouse:down', function (opt) {
+    if (currentTool !== 'coordAxis') return;
+    if (opt.e.button !== 0 && opt.e.button !== undefined) return;
+    var ptr = canvas.getPointer(opt.e);
+    _axisStartX = Math.round(ptr.x / gridSize) * gridSize;
+    _axisStartY = Math.round(ptr.y / gridSize) * gridSize;
+    _axisPreview = new fabric.Line(
+        [_axisStartX, _axisStartY, _axisStartX, _axisStartY],
+        { stroke: '#2563eb', strokeWidth: 2, strokeDashArray: [6,4],
+          selectable: false, evented: false, objectCaching: false }
+    );
+    canvas.add(_axisPreview);
+    _axisDrawing = true;
+});
+
+canvas.on('mouse:move', function (opt) {
+    if (!_axisDrawing || !_axisPreview) return;
+    var ptr = canvas.getPointer(opt.e);
+    var dx = ptr.x - _axisStartX;
+    var dy = ptr.y - _axisStartY;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        _axisIsH = true;
+        _axisPreview.set({ x2: ptr.x, y2: _axisStartY });
+    } else {
+        _axisIsH = false;
+        _axisPreview.set({ x2: _axisStartX, y2: ptr.y });
+    }
+    canvas.requestRenderAll();
+});
+
+canvas.on('mouse:up', function (opt) {
+    if (!_axisDrawing) return;
+    _axisDrawing = false;
+    var ptr = canvas.getPointer(opt.e);
+    if (_axisPreview) { canvas.remove(_axisPreview); _axisPreview = null; }
+
+    var endX = _axisIsH ? ptr.x       : _axisStartX;
+    var endY = _axisIsH ? _axisStartY : ptr.y;
+    var len  = Math.sqrt((endX - _axisStartX) * (endX - _axisStartX) +
+                         (endY - _axisStartY) * (endY - _axisStartY));
+    if (len < gridSize) { activateTool('select'); return; }
+
+    var axLen = _axisIsH ? Math.abs(endX - _axisStartX) : Math.abs(endY - _axisStartY);
+    var angle, labelPos;
+    if (_axisIsH) {
+        angle    = endX >= _axisStartX ? 0 : 180;
+        labelPos = 'below';
+    } else {
+        angle    = endY >= _axisStartY ? 90 : 270;
+        labelPos = 'left';
+    }
+
+    // Center of the axis in canvas coords
+    var cx = (_axisStartX + endX) / 2;
+    var cy = (_axisStartY + endY) / 2;
+
+    // Zero is at the START point.
+    // Zero is always at the start point (where drawing began = local left end).
+    // Positive ticks extend toward the arrowhead for all angles.
+    var axisNegLen = 0;
+
+    var uid = _uid();
+    var axis = new fabric.CoordAxis({
+        left:            cx,
+        top:             cy,
+        width:           axLen,
+        height:          40,
+        angle:           angle,
+        scaleX:          1,
+        scaleY:          1,
+        axisNegLen:      axisNegLen,
+        axisTickStep:    1,
+        axisTickFreq:    1,
+        axisStrokeWidth: 2,
+        axisColor:       '#222222',
+        axisLabelPos:    labelPos,
+        originX:         'center',
+        originY:         'center',
+        id:              'axis-' + uid
+    });
+
+    canvas.add(axis);
+    canvas.setActiveObject(axis);
+    axis.setCoords();
+    canvas.requestRenderAll();
+    addToHistory(axis);
+    broadcast('draw', { data: axis.toObject(['id','axisNegLen','axisTickStep',
+        'axisTickFreq','axisStrokeWidth','axisColor','axisLabelPos']) });
+    activateTool('select');
+    document.querySelectorAll('#btn-coordaxis-item').forEach(function (b) { b.classList.remove('active'); });
+});
+
+// ─── before:transform — capture state before scaling starts ──────────────────
+var _axisScaleOrig = {};
+canvas.on('before:transform', function (e) {
+    if (!e.transform) return;
+    var o = e.transform.target;
+    if (!o || o.type !== 'coordAxis') return;
+    _axisScaleOrig[o.id] = {
+        width:      o.width,
+        axisNegLen: o.axisNegLen || 0,
+    };
+});
+
+// ─── object:scaling — convert scaleX back to width change for axis ────────────
+canvas.on('object:scaling', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'coordAxis') return;
+
+    var orig = _axisScaleOrig[o.id];
+    if (!orig) return;
+    var t = e.transform;
+    var originX = t ? t.originX : 'left';
+
+    // New real width = width * scaleX (Fabric accumulates scaleX while dragging)
+    var newW = Math.max(gridSize, o.width * o.scaleX);
+
+    if (e.e && e.e.shiftKey) {
+        var ts = gridSize * (o.axisTickFreq || 1);
+        newW = Math.max(ts, Math.round(newW / ts) * ts);
+    }
+
+    var delta = newW - orig.width;
+
+    if (originX === 'right') {
+        // ml handle dragged: left side extends → axisNegLen grows
+        var newNeg = Math.max(0, orig.axisNegLen + delta);
+        if (e.e && e.e.shiftKey) {
+            var ts2 = gridSize * (o.axisTickFreq || 1);
+            newNeg = Math.max(0, Math.round(newNeg / ts2) * ts2);
+        }
+        o.axisNegLen = newNeg;
+    }
+    // originX === 'left' (mr): axisNegLen unchanged, just extends positive end
+
+    o.width  = newW;
+    o.scaleX = 1;
+    o.height = 40;
+    o.scaleY = 1;
+    o.dirty  = true;
+    o.setCoords();
+});
+
+// ─── Snap on move: zero mark stays on grid when Shift is held ─────────────────
+// FIX 1: instead of snapping center (left/top), we snap the ZERO MARK to grid.
+canvas.on('object:moving', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'coordAxis') return;
+    if (!snapEnabled && !(e.e && e.e.shiftKey)) return;
+
+    // Snap step is always one grid cell, regardless of tick frequency
+    var rad = (o.angle || 0) * Math.PI / 180;
+
+    // Current canvas position of zero mark
+    var localOffX = (o.axisNegLen || 0) - o.width / 2;
+    var zeroX = o.left + localOffX * Math.cos(rad);
+    var zeroY = o.top  + localOffX * Math.sin(rad);
+
+    // Snap zero mark to grid (always 1-cell step)
+    var snappedZX = Math.round(zeroX / gridSize) * gridSize;
+    var snappedZY = Math.round(zeroY / gridSize) * gridSize;
+
+    // Back-compute object center
+    o.left = snappedZX - localOffX * Math.cos(rad);
+    o.top  = snappedZY - localOffX * Math.sin(rad);
+    o.setCoords();
+});
+
+// ─── object:modified — full sync after drag/scale/rotate finishes ────────────
+// handled by the existing canvas.on('object:modified') handler because
+// coordAxis.toObject() already includes all axis-specific props.
+
+// ─── Live sync — add axis-specific props to throttled broadcasts ──────────────
+canvas.on('object:moving', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'coordAxis') return;
+    var now = Date.now();
+    if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+    broadcast('modified', { data: _axisPacket(o) });
+    lastMoveSend = now;
+});
+canvas.on('object:scaling', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'coordAxis') return;
+    var now = Date.now();
+    if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+    broadcast('modified', { data: _axisPacket(o) });
+    lastMoveSend = now;
+});
+canvas.on('object:rotating', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'coordAxis') return;
+    var now = Date.now();
+    if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+    broadcast('modified', { data: _axisPacket(o) });
+    lastMoveSend = now;
+});
+
+function _axisPacket(o) {
+    return {
+        id:              o.id,
+        type:            o.type,
+        left:            o.left,
+        top:             o.top,
+        width:           o.width,
+        height:          o.height  || 40,
+        scaleX:          o.scaleX  || 1,
+        scaleY:          o.scaleY  || 1,
+        angle:           o.angle   || 0,
+        axisNegLen:      o.axisNegLen      || 0,
+        axisTickStep:    o.axisTickStep     !== undefined ? o.axisTickStep  : 1,
+        axisTickFreq:    o.axisTickFreq     !== undefined ? o.axisTickFreq  : 1,
+        axisStrokeWidth: o.axisStrokeWidth  !== undefined ? o.axisStrokeWidth : 2,
+        axisColor:       o.axisColor        || '#222222',
+        axisLabelPos:    o.axisLabelPos     || 'below',
+    };
+}
+
+// ─── applyModifiedData: ensure axis-specific props update on remote side ──────
+var _origApplyModifiedData = applyModifiedData;
+applyModifiedData = function (data) {
+    var result = _origApplyModifiedData(data);
+    if (data.type === 'coordAxis') {
+        var obj = findObjectById(data.id);
+        if (obj) {
+            if (data.axisNegLen      !== undefined) obj.axisNegLen      = data.axisNegLen;
+            if (data.axisTickStep    !== undefined) obj.axisTickStep    = data.axisTickStep;
+            if (data.axisTickFreq    !== undefined) obj.axisTickFreq    = data.axisTickFreq;
+            if (data.axisStrokeWidth !== undefined) obj.axisStrokeWidth = data.axisStrokeWidth;
+            if (data.axisColor       !== undefined) obj.axisColor       = data.axisColor;
+            if (data.axisLabelPos    !== undefined) obj.axisLabelPos    = data.axisLabelPos;
+            if (data.width           !== undefined) obj.width           = data.width;
+            obj.dirty = true;
+            canvas.requestRenderAll();
+        }
+    }
+    return result;
+};
+
+// ─── Context menu handlers ────────────────────────────────────────────────────
+function _buildAxisColorSwatches(currentColor) {
+    var row = document.getElementById('ctx-axis-color-row');
+    if (!row) return;
+    row.innerHTML = '';
+    var colors = ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'];
+    colors.forEach(function (c) {
+        var d = document.createElement('div');
+        d.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
+        d.style.background = c;
+        if (c === currentColor) d.classList.add('selected');
+        d.onclick = function () {
+            row.querySelectorAll('.ctx-swatch').forEach(function (s) { s.classList.remove('selected'); });
+            d.classList.add('selected');
+            _ctxAxisSetColor(c);
+        };
+        row.appendChild(d);
+    });
+    // Custom rainbow swatch
+    var picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = currentColor || '#222222';
+    picker.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+    var custom = document.createElement('div');
+    custom.className = 'ctx-swatch';
+    custom.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+    custom.appendChild(picker);
+    picker.oninput = function () {
+        custom.style.background = picker.value;
+        row.querySelectorAll('.ctx-swatch').forEach(function (s) { s.classList.remove('selected'); });
+        custom.classList.add('selected');
+        _ctxAxisSetColor(picker.value);
+    };
+    custom.onclick = function (e) { picker.click(); e.stopPropagation(); };
+    row.appendChild(custom);
+}
+
+function _ctxAxisSetColor(c) {
+    var obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'coordAxis') return;
+    var before = _undoSnapshot(obj);
+    obj.axisColor = c;
+    obj.dirty = true;
+    canvas.requestRenderAll();
+    _undoPush({ type:'modify', entries:[{ id: obj.id, before: before, after: _undoSnapshot(obj) }] });
+    broadcast('modified', { data: _axisPacket(obj) });
+}
+window.ctxAxisSetColor = _ctxAxisSetColor;
+
+window.ctxAxisApply = function () {
+    var obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'coordAxis') return;
+    var swEl   = document.getElementById('ctx-axis-sw');
+    var swVal  = document.getElementById('ctx-axis-sw-val');
+    var stepEl = document.getElementById('ctx-axis-step');
+    var freqEl = document.getElementById('ctx-axis-freq');
+    if (!stepEl || !freqEl) return;
+    var newStep = parseFloat(stepEl.value);
+    var newFreq = parseInt(freqEl.value, 10);
+    var newSW   = swEl ? parseInt(swEl.value, 10) : (obj.axisStrokeWidth || 2);
+    if (isNaN(newStep) || newStep <= 0) newStep = 1;
+    if (isNaN(newFreq) || newFreq < 1) newFreq = 1;
+    if (isNaN(newSW)   || newSW   < 1) newSW   = 2;
+    if (swVal) swVal.textContent = newSW;
+    var before = _undoSnapshot(obj);
+    obj.axisTickStep    = newStep;
+    obj.axisTickFreq    = newFreq;
+    obj.axisStrokeWidth = newSW;
+    obj.dirty = true;
+    canvas.requestRenderAll();
+    _undoPush({ type:'modify', entries:[{ id: obj.id, before: before, after: _undoSnapshot(obj) }] });
+    broadcast('modified', { data: _axisPacket(obj) });
+};
+
+})(); // end COORDINATE AXIS IIFE
 
 // ==========================================
 // LASER POINTER 🔴  (hold Ctrl → temporary red pen)
