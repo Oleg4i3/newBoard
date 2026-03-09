@@ -4930,6 +4930,7 @@ let peer = null;
 let conn = null;
 let myId = null;
 let isHost = false;
+let _peerWasDisconnected = false; // true after peer.on('disconnected') — lets peer.on('open') restore status on reconnect
 let actualConnectionType = "unknown";
 let connectionTimeout = null;
 
@@ -4957,6 +4958,13 @@ function checkAutoConnect() {
         const checkPeerReady = setInterval(() => {
             if (myId) {
                 clearInterval(checkPeerReady);
+                // If the URL contains our own ID we are the host refreshing the page —
+                // switch to hosting mode instead of trying to connect to ourselves.
+                if (myId === connectId) {
+                    isHost = true;
+                    window.startHostP2P();
+                    return;
+                }
                 setTimeout(() => {
                     joinPeer();
                     setStatus('Auto-connecting to host...', 'ok');
@@ -5036,6 +5044,19 @@ function setupPeerEvents() {
         if (serverModes.includes(connectionMode)) {
             return;
         }
+
+        // After a reconnect: restore the green status without resetting the session.
+        if (_peerWasDisconnected) {
+            _peerWasDisconnected = false;
+            if (isHost) {
+                setStatus('Hosting (Share the link)', 'ok');
+            } else if (connectionMode === 'connected') {
+                setStatus('Connected', 'ok');
+            } else {
+                setStatus('Ready to connect', 'ok');
+            }
+            return;
+        }
         
         connectionMode = "ready";
         
@@ -5046,6 +5067,8 @@ function setupPeerEvents() {
             
             const shareLink = generateShareLink(id);
             document.getElementById('share-link-display').value = shareLink;
+            // Write room URL into browser address bar so host can refresh and rejoin
+            history.replaceState(null, '', '?' + new URLSearchParams({ connect: id }).toString());
         } else {
             statusText = "Ready to connect";
         }
@@ -5098,6 +5121,7 @@ function setupPeerEvents() {
     
     peer.on('disconnected', () => {
         setStatus('Disconnected from server, reconnecting...', 'err');
+        _peerWasDisconnected = true;
         
         setTimeout(() => {
             if (peer && peer.disconnected) {
@@ -5476,6 +5500,8 @@ window.startHostP2P = () => {
         const shareLink = generateShareLink(myId);
         document.getElementById('p2p-link-display').value = shareLink;
         document.getElementById('share-link-display').value = shareLink;
+        // Write host ID into browser URL so page refresh auto-reconnects
+        history.replaceState(null, '', '?' + new URLSearchParams({ connect: myId }).toString());
         setStatus("Hosting (Share the link)", 'ok');
         connectionMode = "hosting";
         updateUIForConnectionMode();
@@ -8790,6 +8816,10 @@ function generateFirebaseLink() {
     
     document.getElementById('firebase-link-display').value = firebaseLink;
     
+    // Write the room URL into the browser address bar so the initiator
+    // can also refresh and rejoin without re-entering the room ID.
+    history.replaceState(null, '', '?firebase=' + encodeURIComponent(roomId) + fdbParam);
+    
     // Подключаемся к комнате
     connectToFirebaseRoom(roomId);
 }
@@ -8918,6 +8948,22 @@ function connectToFirebaseRoom(roomId) {
         });
         
         setStatus(`Connected to Firebase room: ${roomId}`, 'ok');
+
+        // Track Firebase SDK online/offline state and update status bar.
+        // Firebase reconnects automatically after network loss; .info/connected
+        // is the official way to observe that transition.
+        const _connectedRef = getFirebase().ref('.info/connected');
+        const _connectedHandler = _connectedRef.on('value', (snap) => {
+            if (!firebaseRef) return; // room was closed
+            if (snap.val() === true) {
+                setStatus(`Connected to Firebase room: ${roomId}`, 'ok');
+            } else {
+                setStatus('🔴 Disconnected — reconnecting…', 'err');
+            }
+        });
+        // Store cleanup reference so disconnectFirebase() can remove it
+        firebaseRef._connectedRef     = _connectedRef;
+        firebaseRef._connectedHandler = _connectedHandler;
         
         // 🔥 ВАЖНО: Отправляем запрос состояния через 2 секунды
         setTimeout(() => {
@@ -9160,6 +9206,11 @@ function disconnectFirebase() {
         firebaseRef.child('messages').off();
         firebaseRef.child('state_snapshot').off();
         firebaseRef.child('cursor').off(); // remove cursor listeners
+        
+        // Remove .info/connected listener attached by connectToFirebaseRoom
+        if (firebaseRef._connectedRef && firebaseRef._connectedHandler) {
+            firebaseRef._connectedRef.off('value', firebaseRef._connectedHandler);
+        }
         
         if (myFirebaseId) {
             firebaseRef.child('users').child(myFirebaseId).remove();
