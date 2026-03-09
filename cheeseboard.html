@@ -1207,6 +1207,14 @@ document.addEventListener('mousedown', function(e) {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"></script>
+<script>
+    // Fabric default is 2 decimal places for toObject() serialization.
+    // With lossless PNG, scaleX = 800/origW is never a round number (e.g. 800/3157=0.2534)
+    // Rounding to 2dp causes 5-11px coordinate drift between sender and receiver.
+    // JPEG is unaffected because its canonScaleX is always 800/MAX (e.g. 800/1600=0.5).
+    // 6 decimal places gives sub-0.001px precision for any realistic image size.
+    fabric.Object.NUM_FRACTION_DIGITS = 6;
+</script>
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -2746,7 +2754,12 @@ function findObjectById(id, searchIn) {
 //       toActiveSelection/discardActiveObject, so at that point the object is top-level again.
 function applyModifiedData(data) {
     const obj = findObjectById(data.id);
-    if (!obj) return false;
+    if (!obj) {
+        // Object hasn't arrived yet. If this is a pin command, queue it so
+        // applyRemoteDrawObject can apply it once the object lands on canvas.
+        if (data.isPinned === true && data.id) _pendingPins.add(data.id);
+        return false;
+    }
 
     if (obj.group && obj.group.type === 'group') {
         // Inside a permanent group: only apply style/appearance props, not position.
@@ -3795,6 +3808,8 @@ function insertPngShape(filename) {
 // PIN PROMPT (after PDF load)
 // ==========================================
 let _pinPromptResolve = null;
+// IDs that arrived as "pin me" before the object itself was loaded on this peer
+const _pendingPins = new Set();
 
 function showPinPrompt() {
     return new Promise(resolve => {
@@ -5237,6 +5252,8 @@ function processSendQueue() {
     try {
         const messageSize = JSON.stringify(message).length;
         if (messageSize > MAX_BUFFER_SIZE * 0.9) {
+            // Re-queue the message — do NOT drop it silently
+            sendQueue.unshift(message);
             setTimeout(processSendQueue, 100);
             return;
         }
@@ -5641,7 +5658,8 @@ function setupConn() {
                         left: msg.data.left || 0, top: msg.data.top || 0,
                         scaleX: msg.data.scaleX || 1, scaleY: msg.data.scaleY || 1,
                         angle: msg.data.angle || 0,
-                        selectable: true, evented: true
+                        selectable: true, evented: true,
+                        __isLocal: true   // prevent object:added echo before canvas.add
                     });
                     if (msg.data._filterContrast !== undefined || msg.data._filterSharpen !== undefined || msg.data._filterBlur !== undefined) {
                         img._filterContrast = msg.data._filterContrast || 0;
@@ -5649,7 +5667,21 @@ function setupConn() {
                         img._filterBlur     = msg.data._filterBlur     || 0;
                         _applyImgFilters(img, img._filterContrast, img._filterSharpen, img._filterBlur);
                     }
+                    const _existingP2P = canvas.getObjects().find(o => o.id === msg.data.id);
+                    if (_existingP2P) { canvas.remove(_existingP2P); }
                     canvas.add(img);
+                    img.__isLocal = false;  // allow local user to move/modify and broadcast
+                    // Apply any pin that arrived before this image landed on canvas
+                    if (_pendingPins.has(img.id)) {
+                        _pendingPins.delete(img.id);
+                        img.set({
+                            lockMovementX: true, lockMovementY: true, lockRotation: true,
+                            lockScalingX: true,  lockScalingY: true,
+                            lockSkewingX: true,  lockSkewingY: true,
+                            hasControls: false,  hoverCursor: 'not-allowed',
+                            isPinned: true,      borderColor: '#ef4444'
+                        });
+                    }
                     canvas.requestRenderAll();
                 });
             } else {
@@ -5901,6 +5933,18 @@ function applyRemoteDrawObject(d, onDone) {
         } else if (!existing) {
             canvas.add(obj);
         }
+        // Apply any pin that arrived before this object landed on canvas
+        const target = existing || obj;
+        if (_pendingPins.has(target.id || d.id)) {
+            _pendingPins.delete(target.id || d.id);
+            target.set({
+                lockMovementX: true, lockMovementY: true, lockRotation: true,
+                lockScalingX: true,  lockScalingY: true,
+                lockSkewingX: true,  lockSkewingY: true,
+                hasControls: false,  hoverCursor: 'not-allowed',
+                isPinned: true,      borderColor: '#ef4444'
+            });
+        }
         canvas.requestRenderAll();
         if (onDone) onDone();
     }
@@ -5984,6 +6028,17 @@ function applyRemoteDrawObject(d, onDone) {
             // Echo prevention during remote-message processing is handled by
             // isSendingToFirebase / isSendingToWs flags, not by __isLocal.
             img.__isLocal = false;
+            // Apply any pin that arrived before this image landed on canvas
+            if (_pendingPins.has(img.id)) {
+                _pendingPins.delete(img.id);
+                img.set({
+                    lockMovementX: true, lockMovementY: true, lockRotation: true,
+                    lockScalingX: true,  lockScalingY: true,
+                    lockSkewingX: true,  lockSkewingY: true,
+                    hasControls: false,  hoverCursor: 'not-allowed',
+                    isPinned: true,      borderColor: '#ef4444'
+                });
+            }
             isSendingToWs = prev;
             canvas.requestRenderAll();
             if (onDone) onDone();
