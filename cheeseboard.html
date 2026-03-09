@@ -799,7 +799,7 @@ document.addEventListener('mousedown', function(e) {
                         <button class="btn btn-qr" onclick="showQR('mqtt-link-display')" data-tooltip="Generate QR Code"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="8" height="8"/><rect x="4" y="4" width="4" height="4" fill="white"/><rect x="14" y="2" width="8" height="8"/><rect x="16" y="4" width="4" height="4" fill="white"/><rect x="2" y="14" width="8" height="8"/><rect x="4" y="16" width="4" height="4" fill="white"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="3" height="3"/><rect x="14" y="19" width="3" height="3"/><rect x="19" y="19" width="3" height="3"/></svg></button>
                     </div>
                     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="mqtt-paper-mode" checked onchange="setMqttPaperMode(this.checked)">
+                        <input type="checkbox" id="mqtt-paper-mode"  onchange="setMqttPaperMode(this.checked)">
                         Paper mode (draw-only: no select/move/undo/erase)
                     </label>
                 </div>
@@ -912,28 +912,14 @@ document.addEventListener('mousedown', function(e) {
                         <div class="shape-item" onclick="setShapeType('line')" data-tooltip="Line (L)"><span class="shape-icon">╱</span>Line</div>
                         <div class="shape-item" onclick="setShapeType('arrow')" data-tooltip="Line Arrow (A)"><span class="shape-icon">↗</span>L-Arr</div>
                         <div class="shape-item" onclick="setShapeType('dashed')" data-tooltip="Dashed"><span class="shape-icon">---</span>Dash</div>
-							<div class="shape-item" id="btn-arcsector-item" onclick="startArcSectorTool()" data-tooltip="Arc / Sector">
-<span class="shape-icon">
-<svg width="18" height="18" viewBox="0 0 60 60" stroke="currentColor" stroke-width="3" stroke-linecap="round">
-<path d="M30 30 L52 30 A22 22 0 0 1 16 50 Z"
-      fill="currentColor" fill-opacity="0.1"/>
-</svg>
-</span>
-Arc
-</div>
-
-				
+                        <div class="shape-item" id="btn-arcsector-item" onclick="startArcSectorTool()" data-tooltip="Arc / Sector"><span class="shape-icon"><svg width="18" height="18" viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M 48 30 A 18 18 0 0 1 9 39"/><line x1="30" y1="30" x2="48" y2="30" stroke-width="2"/><line x1="30" y1="30" x2="9" y2="39" stroke-width="2"/></svg></span>Arc</div>
+                    </div>
+                  
+                    <div class="shape-grid">
                         <div class="shape-item" onclick="insertMathCurve('sine')" data-tooltip="Sinusoid (2 periods)"><span class="shape-icon"><svg width="26" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
                         <div class="shape-item" onclick="insertMathCurve('parabola')" data-tooltip="Parabola"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,62 Q50,2 95,62" fill="none"/></svg></span>Para</div>
-						<div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential">
-<span class="shape-icon">
-<svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
-<path d="M5 58 Q35 56 55 45 T95 4"/>
-</svg>
-</span>
-Exp
-</div>
-				  </div>
+                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,58 C20,52 40,40 55,28 C70,16 80,6 95,2" fill="none"/></svg></span>Exp</div>
+                    </div>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insert3DShape('cube')" data-tooltip="Cube">
@@ -1391,7 +1377,7 @@ function setImgCompressLevel(level) {
 }
 let mqttClient = null;
 let mqttRoomId = null;
-let mqttPaperMode = true; // paper mode: restricts select/erase/undo/move in MQTT
+let mqttPaperMode = false; // paper mode: restricts select/erase/undo/move in MQTT
 
 function setMqttPaperMode(enabled) {
     mqttPaperMode = enabled;
@@ -5533,6 +5519,12 @@ function broadcast(type, payload) {
             publishMqttMessage('object_removed', payload);
         } else if (type === 'laser_release') {
             publishMqttMessage('laser_release', {});
+        } else if (type === 'layer_order') {
+            // Sync layer/z-order to partner
+            publishMqttMessage('layer_order', payload);
+        } else if (type === 'undo_restore') {
+            // Atomic undo-restore: objects + layer order in one message
+            publishMqttMessage('undo_restore', payload);
         }
         return;
     }
@@ -10887,10 +10879,10 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
         this.callSuper('initialize', options);
         this.width           = options.width           || 200;
         this.height          = options.height          || 40;
-        this.axisNegLen      = options.axisNegLen      || 10;
+        this.axisNegLen      = options.axisNegLen      || 0;
         this.axisTickStep    = options.axisTickStep    !== undefined ? options.axisTickStep  : 1;
         this.axisTickFreq    = options.axisTickFreq    !== undefined ? options.axisTickFreq  : 1;
-        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 1;
+        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 2;
         this.axisColor       = options.axisColor       || '#222222';
         // 'below' (default, for horizontal) | 'left' (for vertical — labels counter-rotated)
         this.axisLabelPos    = options.axisLabelPos    || 'below';
@@ -10907,7 +10899,7 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
     _render: function (ctx) {
         var W          = this.width;
         var negLen     = this.axisNegLen  || 0;
-        var sw         = this.axisStrokeWidth || 1;
+        var sw         = this.axisStrokeWidth || 2;
         var color      = this.axisColor   || '#222222';
         var freq       = Math.max(1, this.axisTickFreq || 1);
         var step       = this.axisTickStep !== undefined ? this.axisTickStep : 1;
@@ -10954,7 +10946,7 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
 
         // Ticks & labels
         var tickLen  = 6;
-        var fontSize = Math.max(6, Math.min(8, tickSpacing * 0.55));//  var fontSize = Math.max(8, Math.min(11, tickSpacing * 0.55));
+        var fontSize = Math.max(8, Math.min(11, tickSpacing * 0.55));
         ctx.lineWidth = Math.max(1, sw * 0.7);
 
         var kMin = Math.ceil ((minTickX - zeroX) / tickSpacing);
@@ -11433,6 +11425,8 @@ fabric.ArcSector = fabric.util.createClass(fabric.Object, {
                     if (angle < 0) angle += 360;
                     obj.arcSpan = Math.max(5, Math.min(359, angle));
                     obj.dirty = true;
+                    // ── Critical: update control hit-rects so the handle stays grabbable ──
+                    obj.setCoords();
                     // Live-sync to partner
                     var now = Date.now();
                     if (now - (obj._arcSpanLastSync || 0) > 40) {
@@ -11722,6 +11716,7 @@ window.ctxArcApply = function () {
     obj.showRadii      = radiiEl ? radiiEl.checked : obj.showRadii;
     obj.arcFillOpacity = newFillOp;
     obj.dirty = true;
+    obj.setCoords();  // reposition handle hit-area
     canvas.requestRenderAll();
     _undoPush({ type: 'modify', entries: [{ id: obj.id, before: before, after: _undoSnapshot(obj) }] });
     broadcast('modified', { data: _arcPacket(obj) });
