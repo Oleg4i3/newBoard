@@ -915,9 +915,19 @@ document.addEventListener('mousedown', function(e) {
                     </div>
                   
                     <div class="shape-grid">
-                        <div class="shape-item" onclick="insertMathCurve('sine')" data-tooltip="Sinusoid (2 periods)"><span class="shape-icon"><svg width="26" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
+						<div class="shape-item" id="btn-arcsector-item" onclick="startArcSectorTool()" data-tooltip="Arc / Sector">
+									<span class="shape-icon">
+										<svg width="18" height="18" viewBox="0 0 60 60" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+<path d="M30 30 L52 30 A22 22 0 0 1 16 50 Z"
+      fill="currentColor" fill-opacity="0.15"/>
+</svg>
+</span>
+Arc
+</div>
+
+						<div class="shape-item" onclick="insertMathCurve('sine')" data-tooltip="Sinusoid (2 periods)"><span class="shape-icon"><svg width="26" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
                         <div class="shape-item" onclick="insertMathCurve('parabola')" data-tooltip="Parabola"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,62 Q50,2 95,62" fill="none"/></svg></span>Para</div>
-                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5,58 C20,52 40,40 55,28 C70,16 80,6 95,2" fill="none"/></svg></span>Exp</div>
+                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path <path d="M5 58 Q30 58 45 52 Q65 40 95 4" fill="none"/></svg></span>Exp</div>
                     </div>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
@@ -1010,6 +1020,7 @@ document.addEventListener('mousedown', function(e) {
             <div class="shape-item" onclick="setShapeType('rhombus');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">◇</span>Rhom</div>
             <div class="shape-item" onclick="setShapeType('hexagon');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">⬡</span>Hex</div>
             <div class="shape-item" onclick="setShapeType('dashed');activateTool('shape',true);hideMobOverflow()"><span class="shape-icon">--</span>Dash</div>
+            <div class="shape-item" onclick="startArcSectorTool();hideMobOverflow()"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M 48 30 A 18 18 0 0 1 9 39"/><line x1="30" y1="30" x2="48" y2="30" stroke-width="2"/><line x1="30" y1="30" x2="9" y2="39" stroke-width="2"/></svg></span>Arc</div>
         </div>
         <div class="mob-row">
             <span class="mob-row-label">3D</span>
@@ -1187,6 +1198,30 @@ document.addEventListener('mousedown', function(e) {
             <input type="number" id="ctx-axis-freq" min="1" step="1" value="1"
                 style="width:40px;background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:5px;font-size:11px;padding:2px 4px;text-align:center;"
                 oninput="ctxAxisApply()">
+        </div>
+    </div>
+
+    <!-- ARC/SECTOR SECTION (only for arcSector objects) -->
+    <div id="ctx-arc-section" style="display:none; flex-direction:column; gap:5px; padding:0 2px;">
+        <!-- Color swatches -->
+        <div id="ctx-arc-color-row" class="ctx-swatches-row"></div>
+        <!-- Stroke width -->
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label">W</span>
+            <input type="range" id="ctx-arc-sw" min="1" max="20" value="2" oninput="ctxArcApply()">
+            <span id="ctx-arc-sw-val" style="font-size:10px;color:rgba(255,255,255,0.8);min-width:18px;text-align:right;">2</span>
+        </div>
+        <!-- Angular size -->
+        <div class="ctx-slider-wrap">
+            <span class="ctx-slider-label" style="min-width:50px;">Angle°</span>
+            <input type="number" id="ctx-arc-span" min="1" max="359" value="270"
+                style="width:52px;background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:5px;font-size:11px;padding:2px 4px;text-align:center;"
+                oninput="ctxArcApply()">
+        </div>
+        <!-- Show radii checkbox -->
+        <div style="display:flex;align-items:center;gap:6px;padding:0 2px;">
+            <input type="checkbox" id="ctx-arc-radii" onchange="ctxArcApply()" style="accent-color:#60a5fa;cursor:pointer;">
+            <span style="font-size:10px;color:rgba(255,255,255,0.7);cursor:pointer;" onclick="document.getElementById('ctx-arc-radii').click()">Show radii (sector)</span>
         </div>
     </div>
 
@@ -6889,6 +6924,7 @@ function showCtxMenu(x, y) {
     const isImg  = obj.type === 'image';
     const isText = obj.type === 'textbox';
     const isAxis = obj.type === 'coordAxis';
+    const isArc  = obj.type === 'arcSector';
 
     const CLOSED_TYPES = new Set(['rect','circle','ellipse','triangle','polygon','path']);
     const LINE_TYPES   = new Set(['line','dashed','arrow']);
@@ -6902,6 +6938,7 @@ function showCtxMenu(x, y) {
     const allImg    = targets.every(o => o.type === 'image');
     const allText   = targets.every(o => o.type === 'textbox');
     const allAxis   = targets.every(o => o.type === 'coordAxis');
+    const allArc    = targets.every(o => o.type === 'arcSector');
 
     const strokeSection      = document.getElementById('ctx-stroke-section');
     const strokeWidthSection = document.getElementById('ctx-stroke-width-section');
@@ -6909,14 +6946,16 @@ function showCtxMenu(x, y) {
     const textSection        = document.getElementById('ctx-text-section');
     const imgSection         = document.getElementById('ctx-img-section');
     const axisSection        = document.getElementById('ctx-axis-section');
+    const arcSection         = document.getElementById('ctx-arc-section');
 
-    strokeSection.style.display      = (allImg || allText || allAxis) ? 'none' : 'flex';
-    strokeWidthSection.style.display = (allImg || allText || allAxis) ? 'none' : 'flex';
+    strokeSection.style.display      = (allImg || allText || allAxis || allArc) ? 'none' : 'flex';
+    strokeWidthSection.style.display = (allImg || allText || allAxis || allArc) ? 'none' : 'flex';
     fillSection.style.display        = hasClosed ? 'flex' : 'none';
     document.getElementById('ctx-fill-color-section').style.display = hasClosed ? 'flex' : 'none';
     textSection.style.display        = allText ? 'flex' : 'none';
     imgSection.style.display         = allImg  ? 'flex' : 'none';
     if (axisSection) axisSection.style.display = allAxis ? 'flex' : 'none';
+    if (arcSection)  arcSection.style.display  = allArc  ? 'flex' : 'none';
 
     // Crop button: only for images; Pin button: always shown
     const cropBtn = document.getElementById('ctx-crop-btn');
@@ -7038,6 +7077,48 @@ function showCtxMenu(x, y) {
             cust.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
             cust.appendChild(pkl);
             pkl.oninput = () => { cust.style.background = pkl.value; ctxAxisSetColor(pkl.value); };
+            cust.onclick = e => { pkl.click(); e.stopPropagation(); };
+            colorRow.appendChild(cust);
+        }
+    }
+
+    // ── Populate arc fields ───────────────────────────────────────────────────
+    if (allArc) {
+        const arc = targets[0] || obj;
+        const swEl  = document.getElementById('ctx-arc-sw');
+        const swVal = document.getElementById('ctx-arc-sw-val');
+        const spanEl = document.getElementById('ctx-arc-span');
+        const radiiEl = document.getElementById('ctx-arc-radii');
+        const sw = arc.arcStrokeWidth !== undefined ? arc.arcStrokeWidth : 2;
+        if (swEl)  swEl.value = sw;
+        if (swVal) swVal.textContent = sw;
+        if (spanEl) spanEl.value = arc.arcSpan !== undefined ? Math.round(arc.arcSpan) : 270;
+        if (radiiEl) radiiEl.checked = !!arc.showRadii;
+        // Build color swatches
+        const colorRow = document.getElementById('ctx-arc-color-row');
+        if (colorRow) {
+            colorRow.innerHTML = '';
+            const curColor = arc.arcColor || '#222222';
+            ['#000000','#ff0000','#0000ff','#008000','#ffa500','#ffffff','#800080','#ff69b4','#795548'].forEach(c => {
+                const d = document.createElement('div');
+                d.className = 'ctx-swatch' + (c === '#ffffff' ? ' white-swatch' : '');
+                d.style.background = c;
+                if (c === curColor) d.classList.add('selected');
+                d.onclick = () => {
+                    colorRow.querySelectorAll('.ctx-swatch').forEach(s => s.classList.remove('selected'));
+                    d.classList.add('selected');
+                    window.ctxArcSetColor(c);
+                };
+                colorRow.appendChild(d);
+            });
+            const pkl = document.createElement('input');
+            pkl.type = 'color'; pkl.value = curColor;
+            pkl.style.cssText = 'position:absolute;opacity:0;width:18px;height:18px;cursor:pointer;border:none;padding:0;';
+            const cust = document.createElement('div');
+            cust.className = 'ctx-swatch';
+            cust.style.cssText = 'background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);position:relative;overflow:hidden;flex-shrink:0;';
+            cust.appendChild(pkl);
+            pkl.oninput = () => { cust.style.background = pkl.value; window.ctxArcSetColor(pkl.value); };
             cust.onclick = e => { pkl.click(); e.stopPropagation(); };
             colorRow.appendChild(cust);
         }
@@ -10650,10 +10731,10 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
         this.callSuper('initialize', options);
         this.width           = options.width           || 200;
         this.height          = options.height          || 40;
-        this.axisNegLen      = options.axisNegLen      || 0;
+        this.axisNegLen      = options.axisNegLen      || 10;
         this.axisTickStep    = options.axisTickStep    !== undefined ? options.axisTickStep  : 1;
         this.axisTickFreq    = options.axisTickFreq    !== undefined ? options.axisTickFreq  : 1;
-        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 2;
+        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 1;
         this.axisColor       = options.axisColor       || '#222222';
         // 'below' (default, for horizontal) | 'left' (for vertical — labels counter-rotated)
         this.axisLabelPos    = options.axisLabelPos    || 'below';
@@ -11130,6 +11211,326 @@ window.ctxAxisApply = function () {
 };
 
 })(); // end COORDINATE AXIS IIFE
+
+// ==========================================
+// ARC / SECTOR OBJECT
+// ==========================================
+(function () {
+
+// ─── Fabric class ────────────────────────────────────────────────────────────
+fabric.ArcSector = fabric.util.createClass(fabric.Object, {
+    type: 'arcSector',
+    stateProperties: fabric.Object.prototype.stateProperties.concat(
+        ['arcRadius','arcSpan','arcStrokeWidth','arcColor','showRadii']
+    ),
+
+    initialize: function (options) {
+        options = options || {};
+        this.callSuper('initialize', options);
+        this.arcRadius      = options.arcRadius      !== undefined ? options.arcRadius      : 80;
+        this.arcSpan        = options.arcSpan        !== undefined ? options.arcSpan        : 270;
+        this.arcStrokeWidth = options.arcStrokeWidth !== undefined ? options.arcStrokeWidth : 2;
+        this.arcColor       = options.arcColor       || '#222222';
+        this.showRadii      = options.showRadii      || false;
+        // bounding box = square enclosing full circle
+        this.width  = this.arcRadius * 2;
+        this.height = this.arcRadius * 2;
+        this.lockScalingX  = true;
+        this.lockScalingY  = true;
+        this.lockSkewingX  = true;
+        this.lockSkewingY  = true;
+        this._setupControls();
+    },
+
+    _setupControls: function () {
+        var self = this;
+        // Only mtr (rotation) + custom arcSpan handle
+        this.controls = {
+            mtr: fabric.Object.prototype.controls.mtr,
+            arcSpan: new fabric.Control({
+                cursorStyle: 'pointer',
+                positionHandler: function (dim, finalMatrix, fabricObject) {
+                    var span = (fabricObject.arcSpan || 270) * Math.PI / 180;
+                    var r    = fabricObject.arcRadius || 80;
+                    var lx   = r * Math.cos(span);
+                    var ly   = r * Math.sin(span);
+                    return fabric.util.transformPoint({ x: lx, y: ly }, finalMatrix);
+                },
+                actionHandler: function (eventData, transform, x, y) {
+                    var obj    = transform.target;
+                    var canvas = obj.canvas;
+                    if (!canvas) return false;
+                    // Screen → canvas-world (undo viewport transform)
+                    var invVpt = fabric.util.invertTransform(canvas.viewportTransform);
+                    var world  = fabric.util.transformPoint({ x: x, y: y }, invVpt);
+                    // Center of object in world coords
+                    var center = obj.getCenterPoint();
+                    var dx = world.x - center.x;
+                    var dy = world.y - center.y;
+                    // Undo object rotation so we're in local coords
+                    var rad = -(obj.angle || 0) * Math.PI / 180;
+                    var ldx = dx * Math.cos(rad) - dy * Math.sin(rad);
+                    var ldy = dx * Math.sin(rad) + dy * Math.cos(rad);
+                    var angle = Math.atan2(ldy, ldx) * 180 / Math.PI;
+                    if (angle < 0) angle += 360;
+                    obj.arcSpan = Math.max(5, Math.min(359, angle));
+                    obj.dirty = true;
+                    // Live-sync to partner
+                    var now = Date.now();
+                    if (now - (obj._arcSpanLastSync || 0) > 40) {
+                        obj._arcSpanLastSync = now;
+                        broadcast('modified', { data: _arcPacket(obj) });
+                    }
+                    return true;
+                },
+                render: function (ctx, left, top, styleOverride, fabricObject) {
+                    var size = 13;
+                    ctx.save();
+                    ctx.strokeStyle = '#fff';
+                    ctx.fillStyle   = '#f59e0b';
+                    ctx.lineWidth   = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(left,          top - size / 2);
+                    ctx.lineTo(left + size / 2, top);
+                    ctx.lineTo(left,          top + size / 2);
+                    ctx.lineTo(left - size / 2, top);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                },
+                cornerSize: 16
+            })
+        };
+    },
+
+    _render: function (ctx) {
+        var r    = this.arcRadius      || 80;
+        var span = (this.arcSpan       || 270) * Math.PI / 180;
+        var sw   = this.arcStrokeWidth || 2;
+        var col  = this.arcColor       || '#222222';
+
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.fillStyle   = 'transparent';
+        ctx.lineWidth   = sw;
+        ctx.lineCap     = 'round';
+        ctx.setLineDash([]);
+
+        // Arc starting at angle 0 (right), sweeping clockwise by arcSpan degrees
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, span, false);
+        ctx.stroke();
+
+        // Radii (sector lines) when showRadii = true
+        if (this.showRadii) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(r, 0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(r * Math.cos(span), r * Math.sin(span));
+            ctx.stroke();
+        }
+        ctx.restore();
+    },
+
+    toObject: function (extraProps) {
+        return fabric.util.object.extend(
+            this.callSuper('toObject', extraProps), {
+                arcRadius:      this.arcRadius      !== undefined ? this.arcRadius      : 80,
+                arcSpan:        this.arcSpan        !== undefined ? this.arcSpan        : 270,
+                arcStrokeWidth: this.arcStrokeWidth !== undefined ? this.arcStrokeWidth : 2,
+                arcColor:       this.arcColor       || '#222222',
+                showRadii:      !!this.showRadii,
+            }
+        );
+    }
+});
+
+fabric.ArcSector.fromObject = function (object, callback) {
+    var arc = new fabric.ArcSector(object);
+    if (callback) callback(arc);
+    return arc;
+};
+
+// ─── Helper: build a sync packet ─────────────────────────────────────────────
+function _arcPacket(o) {
+    return {
+        id:             o.id,
+        type:           o.type,
+        left:           o.left,
+        top:            o.top,
+        width:          o.width,
+        height:         o.height,
+        scaleX:         1,
+        scaleY:         1,
+        angle:          o.angle   || 0,
+        arcRadius:      o.arcRadius      !== undefined ? o.arcRadius      : 80,
+        arcSpan:        o.arcSpan        !== undefined ? o.arcSpan        : 270,
+        arcStrokeWidth: o.arcStrokeWidth !== undefined ? o.arcStrokeWidth : 2,
+        arcColor:       o.arcColor       || '#222222',
+        showRadii:      !!o.showRadii,
+    };
+}
+
+// ─── Drawing mode ─────────────────────────────────────────────────────────────
+var _arcDrawing = false;
+var _arcPreview = null;
+var _arcCenterX = 0;
+var _arcCenterY = 0;
+
+window.startArcSectorTool = function () {
+    activateTool('select', true);
+    currentTool = 'arcSector';
+    canvas.isDrawingMode = false;
+    canvas.selection     = false;
+    canvas.defaultCursor = 'crosshair';
+    canvas.forEachObject(function (o) { o.selectable = false; o.evented = false; });
+    document.querySelectorAll('#btn-arcsector-item').forEach(function (b) { b.classList.add('active'); });
+    closeAllMenus();
+};
+
+canvas.on('mouse:down', function (opt) {
+    if (currentTool !== 'arcSector') return;
+    if (opt.e.button !== 0 && opt.e.button !== undefined) return;
+    var ptr = canvas.getPointer(opt.e);
+    _arcCenterX = snapEnabled ? Math.round(ptr.x / gridSize) * gridSize : ptr.x;
+    _arcCenterY = snapEnabled ? Math.round(ptr.y / gridSize) * gridSize : ptr.y;
+    // Preview: dashed circle outline
+    _arcPreview = new fabric.Circle({
+        left: _arcCenterX, top: _arcCenterY,
+        radius: 1, originX: 'center', originY: 'center',
+        stroke: '#2563eb', strokeWidth: 2,
+        strokeDashArray: [6, 4], fill: 'transparent',
+        selectable: false, evented: false, objectCaching: false
+    });
+    canvas.add(_arcPreview);
+    _arcDrawing = true;
+});
+
+canvas.on('mouse:move', function (opt) {
+    if (!_arcDrawing || !_arcPreview) return;
+    var ptr = canvas.getPointer(opt.e);
+    var dx  = ptr.x - _arcCenterX;
+    var dy  = ptr.y - _arcCenterY;
+    var r   = Math.sqrt(dx * dx + dy * dy);
+    _arcPreview.set({ radius: Math.max(1, r) });
+    canvas.requestRenderAll();
+});
+
+canvas.on('mouse:up', function (opt) {
+    if (!_arcDrawing) return;
+    _arcDrawing = false;
+    var ptr = canvas.getPointer(opt.e);
+    if (_arcPreview) { canvas.remove(_arcPreview); _arcPreview = null; }
+
+    var dx = ptr.x - _arcCenterX;
+    var dy = ptr.y - _arcCenterY;
+    var r  = Math.sqrt(dx * dx + dy * dy);
+    if (r < 8) { activateTool('select'); return; }
+
+    var uid = _uid();
+    var arc = new fabric.ArcSector({
+        left:           _arcCenterX,
+        top:            _arcCenterY,
+        originX:        'center',
+        originY:        'center',
+        arcRadius:      r,
+        arcSpan:        270,
+        arcStrokeWidth: 2,
+        arcColor:       '#222222',
+        showRadii:      false,
+        angle:          0,
+        id:             'arc-' + uid
+    });
+
+    canvas.add(arc);
+    canvas.setActiveObject(arc);
+    arc.setCoords();
+    canvas.requestRenderAll();
+    addToHistory(arc);
+    broadcast('draw', { data: arc.toObject(['id','arcRadius','arcSpan','arcStrokeWidth','arcColor','showRadii']) });
+    activateTool('select');
+    document.querySelectorAll('#btn-arcsector-item').forEach(function (b) { b.classList.remove('active'); });
+});
+
+// ─── Live sync during rotate ──────────────────────────────────────────────────
+canvas.on('object:rotating', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'arcSector') return;
+    var now = Date.now();
+    if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+    broadcast('modified', { data: _arcPacket(o) });
+    lastMoveSend = now;
+});
+canvas.on('object:moving', function (e) {
+    var o = e.target;
+    if (!o || o.type !== 'arcSector') return;
+    var now = Date.now();
+    if (now - lastMoveSend < MOVE_THROTTLE_MS) return;
+    broadcast('modified', { data: _arcPacket(o) });
+    lastMoveSend = now;
+});
+
+// ─── applyModifiedData: sync arc-specific props on remote side ────────────────
+var _origApplyModifiedDataArc = applyModifiedData;
+applyModifiedData = function (data) {
+    var result = _origApplyModifiedDataArc(data);
+    if (data.type === 'arcSector') {
+        var obj = findObjectById(data.id);
+        if (obj) {
+            if (data.arcRadius      !== undefined) obj.arcRadius      = data.arcRadius;
+            if (data.arcSpan        !== undefined) obj.arcSpan        = data.arcSpan;
+            if (data.arcStrokeWidth !== undefined) obj.arcStrokeWidth = data.arcStrokeWidth;
+            if (data.arcColor       !== undefined) obj.arcColor       = data.arcColor;
+            if (data.showRadii      !== undefined) obj.showRadii      = data.showRadii;
+            if (data.width          !== undefined) obj.width          = data.width;
+            if (data.height         !== undefined) obj.height         = data.height;
+            obj.dirty = true;
+            canvas.requestRenderAll();
+        }
+    }
+    return result;
+};
+
+// ─── Context menu handlers ────────────────────────────────────────────────────
+window.ctxArcSetColor = function (c) {
+    var obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'arcSector') return;
+    var before = _undoSnapshot(obj);
+    obj.arcColor = c;
+    obj.dirty = true;
+    canvas.requestRenderAll();
+    _undoPush({ type: 'modify', entries: [{ id: obj.id, before: before, after: _undoSnapshot(obj) }] });
+    broadcast('modified', { data: _arcPacket(obj) });
+};
+
+window.ctxArcApply = function () {
+    var obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'arcSector') return;
+    var swEl    = document.getElementById('ctx-arc-sw');
+    var swVal   = document.getElementById('ctx-arc-sw-val');
+    var spanEl  = document.getElementById('ctx-arc-span');
+    var radiiEl = document.getElementById('ctx-arc-radii');
+    var newSW   = swEl    ? parseInt(swEl.value,   10) : (obj.arcStrokeWidth || 2);
+    var newSpan = spanEl  ? parseFloat(spanEl.value)   : (obj.arcSpan || 270);
+    if (isNaN(newSW)   || newSW   < 1)   newSW   = 2;
+    if (isNaN(newSpan) || newSpan < 1)   newSpan = 1;
+    if (newSpan > 359) newSpan = 359;
+    if (swVal) swVal.textContent = newSW;
+    var before = _undoSnapshot(obj);
+    obj.arcStrokeWidth = newSW;
+    obj.arcSpan        = newSpan;
+    obj.showRadii      = radiiEl ? radiiEl.checked : obj.showRadii;
+    obj.dirty = true;
+    canvas.requestRenderAll();
+    _undoPush({ type: 'modify', entries: [{ id: obj.id, before: before, after: _undoSnapshot(obj) }] });
+    broadcast('modified', { data: _arcPacket(obj) });
+};
+
+})(); // end ARC/SECTOR IIFE
 
 // ==========================================
 // LASER POINTER 🔴  (hold Ctrl → temporary red pen)
