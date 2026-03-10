@@ -918,7 +918,7 @@ document.addEventListener('mousedown', function(e) {
                     <div class="shape-grid">
                         <div class="shape-item" onclick="insertMathCurve('sine')" data-tooltip="Sinusoid (2 periods)"><span class="shape-icon"><svg width="28" height="16" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
                         <div class="shape-item" onclick="insertMathCurve('parabola')" data-tooltip="Parabola"><span class="shape-icon"><svg width="24" height="18" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,5 Q50,62 95,5" fill="none"/></svg></span>Para</div>
-                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="24" height="18" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,60 C10,59 20,56 35,48 C50,40 62,26 72,14 C80,5 88,2 95,1" fill="none"/></svg></span>Exp</div>
+                        <div class="shape-item" onclick="insertMathCurve('exp')" data-tooltip="Exponential"><span class="shape-icon"><svg width="24" height="18" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,58 L30,55 C50,52 62,44 74,28 C82,16 88,6 95,2" fill="none"/></svg></span>Exp</div>
                     </div>
                     <h4>3D Shapes</h4>
                     <div class="shape-grid">
@@ -1019,7 +1019,7 @@ document.addEventListener('mousedown', function(e) {
             <span class="mob-row-label">∿</span>
             <div class="shape-item" onclick="insertMathCurve('sine');hideMobOverflow()"><span class="shape-icon"><svg width="26" height="14" viewBox="0 0 120 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2,24 C12,4 22,4 30,24 C38,44 48,44 56,24 C64,4 74,4 82,24 C90,44 100,44 118,24" fill="none"/></svg></span>Sin</div>
             <div class="shape-item" onclick="insertMathCurve('parabola');hideMobOverflow()"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,5 Q50,62 95,5" fill="none"/></svg></span>Para</div>
-            <div class="shape-item" onclick="insertMathCurve('exp');hideMobOverflow()"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,60 C10,59 20,56 35,48 C50,40 62,26 72,14 C80,5 88,2 95,1" fill="none"/></svg></span>Exp</div>
+            <div class="shape-item" onclick="insertMathCurve('exp');hideMobOverflow()"><span class="shape-icon"><svg width="22" height="16" viewBox="0 0 100 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5,58 L30,55 C50,52 62,44 74,28 C82,16 88,6 95,2" fill="none"/></svg></span>Exp</div>
         </div>
         <div class="mob-row">
             <span class="mob-row-label">3D</span>
@@ -2582,6 +2582,9 @@ function activateTool(tool, keepMenu = false) {
     if (!keepMenu) closeAllMenus();
 
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    // Magnet is a persistent toggle — restore its highlight after the sweep above
+    const magnetBtn = document.getElementById('btn-magnet');
+    if (magnetBtn && typeof snapEnabled !== 'undefined' && snapEnabled) magnetBtn.classList.add('active');
     
     const btnMap = {
         'select': 'btn-select',
@@ -11409,15 +11412,12 @@ fabric.ArcSector = fabric.util.createClass(fabric.Object, {
                 positionHandler: function (dim, finalMatrix, fabricObject) {
                     var span = (fabricObject.arcSpan || 270) * Math.PI / 180;
                     var r    = fabricObject.arcRadius || 80;
-                    // Arc tip in object-local coords (CCW: y is negated)
-                    var lx   = r * Math.cos(span);
-                    var ly   = -r * Math.sin(span);
-                    // local → canvas-world via object transform matrix
-                    var objMtx   = fabricObject.calcTransformMatrix();
-                    var worldPt  = fabric.util.transformPoint({ x: lx, y: ly }, objMtx);
-                    // canvas-world → screen via viewport transform
-                    var vpt = fabricObject.canvas.viewportTransform;
-                    return fabric.util.transformPoint(worldPt, vpt);
+                    // CCW arc tip in local coords: angle goes counter-clockwise from 0
+                    // canvas ctx.arc CCW means tip is at (cos(span), -sin(span))
+                    var lx = r * Math.cos(span);
+                    var ly = -r * Math.sin(span);
+                    // finalMatrix = vpt * objectMatrix: transforms local → screen directly
+                    return fabric.util.transformPoint({ x: lx, y: ly }, finalMatrix);
                 },
                 actionHandler: function (eventData, transform, x, y) {
                     var obj    = transform.target;
@@ -11437,6 +11437,12 @@ fabric.ArcSector = fabric.util.createClass(fabric.Object, {
                     // so measure angle as atan2(-ldy, ldx)
                     var angle = Math.atan2(-ldy, ldx) * 180 / Math.PI;
                     if (angle < 0) angle += 360;
+                    // Snap to 15° steps when Shift is held or snap (magnet) is active
+                    if ((typeof snapEnabled !== 'undefined' && snapEnabled) || (eventData && eventData.shiftKey)) {
+                        angle = Math.round(angle / 15) * 15;
+                        if (angle <= 0) angle = 15;
+                        if (angle >= 360) angle = 345;
+                    }
                     obj.arcSpan = Math.max(5, Math.min(359, angle));
                     obj.dirty = true;
                     // ── Critical: update control hit-rects so the handle stays grabbable ──
@@ -11492,14 +11498,14 @@ fabric.ArcSector = fabric.util.createClass(fabric.Object, {
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.lineTo(r, 0);
-            ctx.arc(0, 0, r, 0, span, true);  // CCW
+            ctx.arc(0, 0, r, 0, -span, true);  // CCW by exactly span radians; endpoint=(cos(span),-sin(span))
             ctx.closePath();
             ctx.fill();
         }
 
-        // Arc — counter-clockwise
+        // Arc — counter-clockwise by exactly span radians
         ctx.beginPath();
-        ctx.arc(0, 0, r, 0, span, true);
+        ctx.arc(0, 0, r, 0, -span, true);
         ctx.stroke();
 
         // Radii (sector lines) when showRadii = true
@@ -11788,6 +11794,7 @@ window.ctxArcApply = function () {
 
         currentTool = 'laser';
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        if (typeof snapEnabled !== 'undefined' && snapEnabled) { var mb = document.getElementById('btn-magnet'); if (mb) mb.classList.add('active'); }
 
         canvas.isDrawingMode    = true;
         canvas.selection        = false;
