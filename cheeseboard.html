@@ -1878,6 +1878,27 @@ function publishMqttMessage(type, payload) {
     }
 }
 
+// Buffer for reassembling chunked MQTT state_dumps
+const _mqttChunkBuf = {};
+
+// Chunk size: 48 KB keeps each MQTT message under EMQX's 256 KB default limit
+// even after JSON envelope overhead (sender, type, timestamp).
+const MQTT_CHUNK_SIZE = 48 * 1024; // 48 KB chars
+
+function _mqttPublishChunked(type, payload) {
+    const fullStr = JSON.stringify(payload);
+    if (fullStr.length <= MQTT_CHUNK_SIZE) {
+        publishMqttMessage(type, payload);
+        return;
+    }
+    const chunkId = 'mc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const total   = Math.ceil(fullStr.length / MQTT_CHUNK_SIZE);
+    for (let i = 0; i < total; i++) {
+        const chunk = fullStr.slice(i * MQTT_CHUNK_SIZE, (i + 1) * MQTT_CHUNK_SIZE);
+        publishMqttMessage('state_chunk', { chunkId, index: i, total, payload: chunk });
+    }
+}
+
 
 
 function handleMqttMessage(type, data) {
@@ -2020,42 +2041,54 @@ function handleMqttMessage(type, data) {
             break;
             
         case 'request_state':
-            // Отправляем текущее состояние канвы
+            // Send current board to partner.
+            // FIX 1: use applyRemoteStateDump-compatible path (images need src).
+            // FIX 2: chunk large payloads so public MQTT brokers (EMQX 256 KB limit)
+            //        don't silently drop the message.
             if (canvas.getObjects().length > 0) {
-                const syncProps = [
+                const _mqSyncProps = [
                     'id', 'isPinned', 'left', 'top', 'scaleX', 'scaleY', 'angle', 
                     'fill', 'stroke', 'strokeWidth', 'type', 'width', 'height',
                     'rx', 'ry', 'points', 'path', 'objectCaching', 'src',
                     'strokeLineCap', 'strokeLineJoin',
-                    'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'textAlign', 'lineHeight', 'charSpacing',
+                    'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+                    'underline', 'textAlign', 'lineHeight', 'charSpacing',
                     '_filterContrast', '_filterSharpen', '_filterBlur'
                 ];
-                const state = canvas.toJSON(syncProps);
-                publishMqttMessage('state_dump', state);
+                const _mqState = canvas.toJSON(_mqSyncProps);
+                _mqttPublishChunked('state_dump', _mqState);
             }
             break;
             
+        case 'state_chunk': {
+            // Reassemble chunked state_dump
+            const { chunkId, index, total, payload: chunkPayload } = data;
+            if (!_mqttChunkBuf[chunkId]) {
+                _mqttChunkBuf[chunkId] = { total, received: 0, chunks: [] };
+            }
+            const _buf = _mqttChunkBuf[chunkId];
+            _buf.chunks[index] = chunkPayload;
+            _buf.received++;
+            setStatus('Receiving board… chunk ' + _buf.received + '/' + total, 'ok');
+            if (_buf.received === total) {
+                delete _mqttChunkBuf[chunkId];
+                let _assembled;
+                try { _assembled = JSON.parse(_buf.chunks.join('')); } catch(e) { break; }
+                handleMqttMessage('state_dump', _assembled);
+            }
+            break;
+        }
+
         case 'state_dump':
-            // 🔥 ИСПРАВЛЕНИЕ: Добавлена блокировка при загрузке состояния
-            if (canvas.getObjects().length === 0) {
-                if (data.objects) {
-                    data.objects.forEach(obj => obj.__isLocal = true);
-                }
-                
+            // FIX 1: always apply (not only when canvas is empty) so re-sync works.
+            // FIX 2: use applyRemoteStateDump so images (PDF pages) are properly loaded.
+            if (data && data.objects !== undefined) {
+                setStatus('Receiving board from partner…', 'ok');
                 isSendingToMqtt = true;
-                canvas.loadFromJSON(data, () => {
-                    canvas.requestRenderAll();
+                applyRemoteStateDump(data, () => {
                     resizeCanvas();
-                    // Fix selectable/evented: sender serialised in pen mode (all false).
-                    // Only touch selectable/evented — hasControls/lock* are correct in JSON.
-                    canvas.getObjects().forEach(function(o) {
-                        if (o.type === 'textbox' && o.__isLocal === true) { return; }
-                        o.selectable = (currentTool === 'select');
-                        o.evented    = (currentTool === 'select' || currentTool === 'eraser');
-                    });
-                    setTimeout(() => {
-                        isSendingToMqtt = false;
-                    }, 500);
+                    setTimeout(() => { isSendingToMqtt = false; }, 500);
+                    setStatus('✔ Board synced — ' + (data.objects ? data.objects.length : 0) + ' objects', 'ok');
                 });
             }
             break;
