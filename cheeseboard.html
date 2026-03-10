@@ -3945,7 +3945,7 @@ function insertMathCurve(type) {
         for (var i = 0; i <= N; i++) {
             var t = i / N;
             var u = 2 * t - 1;    // u in [-1, 1]
-            var v = u * u;        // v in [0, 1], min at center
+            var v = 2*u * u;        // v in [0, 1], min at center
             var px = x0 + t * W;
             var py = y0 + H - 4 - v * (H - 8);  // vertex at bottom, edges at top
             pts.push({ x: px, y: py });
@@ -10887,10 +10887,10 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
         this.callSuper('initialize', options);
         this.width           = options.width           || 200;
         this.height          = options.height          || 40;
-        this.axisNegLen      = options.axisNegLen      || 0;
+        this.axisNegLen      = options.axisNegLen      || 10;
         this.axisTickStep    = options.axisTickStep    !== undefined ? options.axisTickStep  : 1;
         this.axisTickFreq    = options.axisTickFreq    !== undefined ? options.axisTickFreq  : 1;
-        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 2;
+        this.axisStrokeWidth = options.axisStrokeWidth !== undefined ? options.axisStrokeWidth : 1;
         this.axisColor       = options.axisColor       || '#222222';
         // 'below' (default, for horizontal) | 'left' (for vertical — labels counter-rotated)
         this.axisLabelPos    = options.axisLabelPos    || 'below';
@@ -10907,7 +10907,7 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
     _render: function (ctx) {
         var W          = this.width;
         var negLen     = this.axisNegLen  || 0;
-        var sw         = this.axisStrokeWidth || 2;
+        var sw         = this.axisStrokeWidth || 1;
         var color      = this.axisColor   || '#222222';
         var freq       = Math.max(1, this.axisTickFreq || 1);
         var step       = this.axisTickStep !== undefined ? this.axisTickStep : 1;
@@ -10953,8 +10953,8 @@ fabric.CoordAxis = fabric.util.createClass(fabric.Object, {
         ctx.stroke();
 
         // Ticks & labels
-        var tickLen  = 6;
-        var fontSize = Math.max(8, Math.min(11, tickSpacing * 0.55));
+        var tickLen  = 4;
+        var fontSize = Math.max(7, Math.min(11, tickSpacing * 0.55));
         ctx.lineWidth = Math.max(1, sw * 0.7);
 
         var kMin = Math.ceil ((minTickX - zeroX) / tickSpacing);
