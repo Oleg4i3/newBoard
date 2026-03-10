@@ -1443,6 +1443,30 @@ function setConnectionMode(mode) {
     // Default compression: lossless for P2P (fast channel), medium for relay/cloud
     setImgCompressLevel(mode === 'p2p' ? 'lossless' : 'medium');
 
+    // BUG2 FIX: strip URL params that belong to the previous transport when switching
+    // e.g. going from firebase → ws must remove ?firebase= from the address bar,
+    // and going from ws → firebase must remove ?wsroom= / ?wsserver=.
+    (function _cleanUrlForMode() {
+        const sp = new URLSearchParams(window.location.search);
+        let changed = false;
+        if (mode !== 'firebase') {
+            if (sp.has('firebase')) { sp.delete('firebase'); sp.delete('fdb'); changed = true; }
+        }
+        if (mode !== 'ws') {
+            if (sp.has('wsroom')) { sp.delete('wsroom'); sp.delete('wsserver'); sp.delete('wstransport'); changed = true; }
+        }
+        if (mode !== 'p2p') {
+            if (sp.has('connect')) { sp.delete('connect'); changed = true; }
+        }
+        if (mode !== 'mqtt') {
+            if (sp.has('room')) { sp.delete('room'); changed = true; }
+        }
+        if (changed) {
+            const qs = sp.toString();
+            history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
+        }
+    })();
+
     // Обновляем UI
       document.getElementById('p2p-section').style.display = mode === 'p2p' ? 'block' : 'none';
       document.getElementById('mqtt-section').style.display = mode === 'mqtt' ? 'block' : 'none';
@@ -1573,6 +1597,9 @@ function generateMqttLink() {
     const mqttLink = `${currentUrl}?room=${roomId}`;
     
     document.getElementById('mqtt-link-display').value = mqttLink;
+    
+    // BUG2 FIX: reflect MQTT room link in browser address bar (same pattern as Firebase)
+    history.replaceState(null, '', '?room=' + encodeURIComponent(roomId));
     
     // Автоматически подключаемся к комнате
     connectToMqttRoom(roomId);
@@ -5084,16 +5111,37 @@ canvas.upperCanvasEl.addEventListener('touchend', (e) => {
 });
 
 canvas.on('mouse:wheel', function(opt) {
-    if(opt.e.ctrlKey) return;
-    const delta = opt.e.deltaY;
+    // Always prevent default first — stops Ctrl+Scroll browser page-zoom,
+    // which corrupts all subsequent offsetX/Y values.
+    opt.e.preventDefault(); opt.e.stopPropagation();
+    if (opt.e.ctrlKey) return;
+
+    // Normalise deltaY: deltaMode=0 → pixels, =1 → lines (~16px), =2 → pages (~100px)
+    const RAW  = opt.e.deltaY;
+    const MODE = opt.e.deltaMode || 0;
+    const delta = MODE === 1 ? RAW * 16 : MODE === 2 ? RAW * 100 : RAW;
+
+    // getBoundingClientRect is immune to CSS filters / browser zoom
+    const rect = canvas.upperCanvasEl.getBoundingClientRect();
+    const x = opt.e.clientX - rect.left;
+    const y = opt.e.clientY - rect.top;
+
     let zoom = canvas.getZoom();
     zoom *= 0.999 ** delta;
     if (zoom > 10) zoom = 10; if (zoom < 0.1) zoom = 0.1;
-    canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
-	
-	  sendMyViewport();
+
+    canvas.zoomToPoint({ x, y }, zoom);
+
+    // BUG3 FIX: zoomToPoint calls requestRenderAll() internally, which schedules
+    // a rAF. With many PDF-page objects the lerp before:render loop keeps
+    // _requestRenderAll = true, so the second call is a no-op and the rAF fires
+    // on the NEXT frame — which can be missed when setCoords() on N large images
+    // stalls the event loop.  Calling renderAll() directly gives an immediate
+    // synchronous render and is the same strategy used by the +/- keyboard buttons.
+    canvas.renderAll();
+
+    sendMyViewport();
     updatePartnerFrame();
-    opt.e.preventDefault(); opt.e.stopPropagation();
 });
 
 // ==========================================
@@ -6365,6 +6413,19 @@ function applyRemoteStateDump(stateData, onDone) {
         });
 
         const _finishStateDump = () => {
+            // BUG2 FIX: restore layer order from stateData.objects (images re-added via
+            // fromURL end up on top; re-sort to match the original z-index order)
+            const _idOrder = (stateData.objects || []).map(o => o.id).filter(Boolean);
+            if (_idOrder.length > 0) {
+                _idOrder.forEach((id, targetIdx) => {
+                    const obj = canvas.getObjects().find(o => o.id === id);
+                    if (!obj) return;
+                    const curIdx = canvas.getObjects().indexOf(obj);
+                    if (curIdx !== targetIdx) {
+                        canvas.moveTo(obj, targetIdx);
+                    }
+                });
+            }
             canvas.getObjects().forEach(function(o) {
                 if (o.type === 'textbox' && o.__isLocal === true) { return; }
                 o.selectable = (currentTool === 'select');
@@ -6422,6 +6483,19 @@ function applyRemoteStateDump(stateData, onDone) {
                     height: actualH,
                     __isLocal: false, selectable: true, evented: true
                 });
+                // BUG2 FIX: restore isPinned lock properties for images
+                if (d.isPinned) {
+                    img.set({
+                        isPinned: true,
+                        lockMovementX: true, lockMovementY: true,
+                        lockRotation:  true,
+                        lockScalingX:  true, lockScalingY: true,
+                        lockSkewingX:  true, lockSkewingY: true,
+                        hasControls:   false,
+                        hoverCursor:   'not-allowed',
+                        borderColor:   '#ef4444'
+                    });
+                }
                 // Restore image filter params from state dump
                 if (d._filterContrast !== undefined || d._filterSharpen !== undefined || d._filterBlur !== undefined) {
                     img._filterContrast = d._filterContrast || 0;
@@ -8252,9 +8326,30 @@ function openBoard(input) {
                 canvas.renderAll();
                 setStatus('Board loaded successfully', 'ok');
                 
-                if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
+                if (connectionMode === 'firebase' && firebaseRef) {
+                    // BUG1 FIX: sync loaded board to Firebase partner
+                    (async () => {
+                        const syncProps = [
+                            'id', 'isPinned', 'left', 'top', 'scaleX', 'scaleY', 'angle',
+                            'fill', 'stroke', 'strokeWidth', 'type', 'width', 'height',
+                            'rx', 'ry', 'points', 'path', 'objectCaching', 'src',
+                            'strokeLineCap', 'strokeLineJoin',
+                            'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+                            'underline', 'textAlign', 'lineHeight', 'charSpacing',
+                            '_filterContrast', '_filterSharpen', '_filterBlur'
+                        ];
+                        const state = canvas.toJSON(syncProps);
+                        const lightState = await _fbStripAndStoreImages(state);
+                        sendToFirebase('state_dump', lightState);
+                        setStatus('Board sent to partner ✔', 'ok');
+                    })();
+                } else if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
                     const state = canvas.toJSON(['id', 'isPinned']);
                     publishMqttMessage('state_dump', state);
+                } else if (connectionMode === 'ws') {
+                    // BUG1 FIX: send board to partner via WS/Relay transport
+                    setStatus('Sending board to partner…', 'ok');
+                    _sendStateDumpCompressed(syncProps);
                 } else if (conn && conn.open) {
                     setTimeout(() => {
                         sendCanvasDataChunked();
@@ -9254,6 +9349,17 @@ function checkFirebaseAutoConnect() {
 }
 
 // 4. Подключение к комнате Firebase
+// BUG3 FIX: buffer incoming Firebase messages until state_snapshot is applied.
+// Prevents race where message replay (limitToLast(50)) adds objects that are
+// then wiped by canvas.loadFromJSON inside applyRemoteStateDump.
+let _fbSnapshotApplied = false;
+let _fbMsgBuffer = [];
+function _flushFbMsgBuffer() {
+    _fbSnapshotApplied = true;
+    const buf = _fbMsgBuffer.splice(0);
+    buf.forEach(m => handleFirebaseMessage(m));
+}
+
 function connectToFirebaseRoom(roomId) {
     // Защита от двойного подключения к одной и той же комнате.
     // При загрузке страницы с ?firebase=roomId функция вызывалась ДВАЖДЫ:
@@ -9312,19 +9418,56 @@ function connectToFirebaseRoom(roomId) {
         // Устанавливаем обработчик отключения
         myUserRef.onDisconnect().remove();
         
-        // Слушаем ТОЛЬКО новые сообщения
+        // BUG3 FIX: Reset buffer state on each fresh connection.
+        // state_snapshot must be applied BEFORE message replay so that
+        // canvas.loadFromJSON doesn't wipe objects added by draw messages.
+        _fbSnapshotApplied = false;
+        _fbMsgBuffer = [];
+
+        // Register state_snapshot FIRST so Firebase SDK delivers it before
+        // queued child_added events in the messages listener below.
+        // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
+        firebaseRef.child('state_snapshot').on('value', (snapshot) => {
+            const msg = snapshot.val();
+            if (!msg || msg.sender === myFirebaseId) {
+                // No valid snapshot (null or own write) — release message buffer.
+                _flushFbMsgBuffer();
+                return;
+            }
+            _fbTraffic.addRecv(msg);
+            // Apply the snapshot; flush buffered messages once done.
+            isSendingToFirebase = true;
+            setStatus('Syncing board...', 'ok');
+            _fbResolveStateDumpRefs(msg.data).then(resolvedData => {
+                applyRemoteStateDump(resolvedData, () => {
+                    isSendingToFirebase = false;
+                    setStatus('✔ Board synced — ' + (resolvedData.objects ? resolvedData.objects.length : 0) + ' objects', 'ok');
+                    resizeCanvas();
+                    // Release buffered messages AFTER canvas is fully rebuilt.
+                    // draw messages for objects not in the snapshot (e.g. images
+                    // added after the last state_dump) are re-applied here.
+                    _flushFbMsgBuffer();
+                });
+            });
+        });
+
+        // Слушаем ТОЛЬКО новые сообщения.
+        // Messages arriving before the state_snapshot is applied are buffered
+        // and replayed once the snapshot canvas.loadFromJSON has finished.
         firebaseRef.child('messages').limitToLast(50).on('child_added', (snapshot) => {
             const msg = snapshot.val();
             if (!msg) return;
             if (msg.sender !== myFirebaseId) _fbTraffic.addRecv(msg);
+            if (!_fbSnapshotApplied) {
+                _fbMsgBuffer.push(msg);
+                return;
+            }
             handleFirebaseMessage(msg);
         });
 
         // ── Cursor-specific listener on dedicated cursor/{userId} node.
-        //    Uses child_changed (update) + child_added (first appearance).
-        //    Each event is just {x,y} or {x,y,h:1} — tiny, never accumulates.
         function _onPartnerCursor(snapshot) {
-            if (snapshot.key === myFirebaseId) return; // ignore own writes
+            if (snapshot.key === myFirebaseId) return;
             const d = snapshot.val();
             if (!d) return;
             _fbTraffic.addRecv(d);
@@ -9339,14 +9482,6 @@ function connectToFirebaseRoom(roomId) {
         firebaseRef.child('cursor').on('child_added',   _onPartnerCursor);
         firebaseRef.child('cursor').on('child_changed', _onPartnerCursor);
 
-        // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
-        firebaseRef.child('state_snapshot').on('value', (snapshot) => {
-            const msg = snapshot.val();
-            if (!msg || msg.sender === myFirebaseId) return;
-            _fbTraffic.addRecv(msg);
-            handleFirebaseMessage(msg);
-        });
-        
         setStatus(`Connected to Firebase room: ${roomId}`, 'ok');
 
         // Track Firebase SDK online/offline state and update status bar.
@@ -9483,9 +9618,16 @@ function handleFirebaseMessage(msg) {
                             isSendingToFirebase = false;
                             setStatus('✔ Board synced — ' + (resolvedData.objects ? resolvedData.objects.length : 0) + ' objects', 'ok');
                             resizeCanvas();
+                            // BUG1 FIX: notify sender that board is fully loaded
+                            sendToFirebase('board_received', { objectCount: (resolvedData.objects || []).length });
                         });
                     });
                 }
+                break;
+
+            case 'board_received':
+                // BUG1 FIX: partner confirmed board fully loaded and rendered
+                setStatus('✔ Partner loaded board (' + ((msg.data && msg.data.objectCount) || 0) + ' objects)', 'ok');
                 break;
                 
             default:
@@ -9621,6 +9763,10 @@ function disconnectFirebase() {
             firebaseRef.child('cursor').child(myFirebaseId).remove(); // clean up own cursor node
         }
         
+        // BUG3 FIX: reset message buffer so next connection starts clean
+        _fbSnapshotApplied = false;
+        _fbMsgBuffer = [];
+
         firebaseRef = null;
         firebaseRoomId = null;
     }
@@ -9678,6 +9824,11 @@ function generateWsLink() {
         link = baseUrl + '?wsroom=' + roomId + '&wsserver=' + encodeURIComponent(serverHost);
     }
     document.getElementById('ws-link-display').value = link;
+    // BUG2 FIX: reflect WS room link in browser address bar
+    const _wsParams = transport === 'ably'
+        ? '?wsroom=' + roomId + '&wstransport=ably'
+        : '?wsroom=' + roomId + '&wsserver=' + encodeURIComponent((document.getElementById('ws-server-url').value.trim()) || DEFAULT_WS_SERVER);
+    history.replaceState(null, '', _wsParams);
     connectToWsRoom(roomId);
 }
 
@@ -9699,7 +9850,20 @@ function onWsTransportChange() {
     wsTransport = t;
     try { localStorage.setItem('ws_transport', t); } catch(e) {}
     document.getElementById('ws-server-field').style.display = (t === 'deno') ? 'flex' : 'none';
-    // ably-key-field stays hidden always (key is hardcoded)
+    // BUG2 FIX: refresh address bar when transport changes and room is already active
+    if (wsRoomId) {
+        const baseUrl = window.location.href.split('?')[0];
+        let link;
+        if (t === 'ably') {
+            link = '?wsroom=' + wsRoomId + '&wstransport=ably';
+        } else {
+            const srv = (document.getElementById('ws-server-url').value.trim()) || DEFAULT_WS_SERVER;
+            link = '?wsroom=' + wsRoomId + '&wsserver=' + encodeURIComponent(srv);
+        }
+        history.replaceState(null, '', link);
+        const disp = document.getElementById('ws-link-display');
+        if (disp) disp.value = baseUrl + link;
+    }
 }
 
 function saveAblyKey(val) { /* key is hardcoded */ }
@@ -10079,9 +10243,16 @@ function handleWsMessage(msg) {
                         setTimeout(() => { isSendingToWs = false; }, 150);
                         setStatus('✔ Board synced — ' + (msg.data.objects ? msg.data.objects.length : 0) + ' objects', 'ok');
                         resizeCanvas();
+                        // BUG1 FIX: notify sender that board is fully loaded and rendered
+                        sendToWs('board_received', { objectCount: (msg.data.objects || []).length });
                     });
                     return; // don't reset flag in finally
                 }
+                break;
+
+            case 'board_received':
+                // BUG1 FIX: partner confirmed board fully loaded and rendered
+                setStatus('✔ Partner loaded board (' + ((msg.data && msg.data.objectCount) || 0) + ' objects)', 'ok');
                 break;
 
             default:
