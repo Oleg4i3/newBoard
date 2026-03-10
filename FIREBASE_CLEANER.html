@@ -5,7 +5,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 24px; max-width: 520px; background: #f5f5f5; }
+        body { font-family: sans-serif; padding: 24px; max-width: 560px; background: #f5f5f5; }
         h2 { margin: 0 0 16px; font-size: 16px; color: #333; }
         .card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.1); margin-bottom: 14px; }
         label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
@@ -13,6 +13,7 @@
         .btn-row { display: flex; gap: 8px; margin-top: 14px; }
         button { flex: 1; padding: 9px 0; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 600; transition: opacity .15s; }
         button:hover { opacity: .85; }
+        button:disabled { opacity: .4; cursor: default; }
         .btn-danger  { background: #ff4d4d; color: #fff; }
         .btn-warn    { background: #ff9900; color: #fff; }
         .btn-safe    { background: #2196f3; color: #fff; }
@@ -21,13 +22,41 @@
         #status.err { background: #fde8e8; color: #c0392b; }
         #status.run { background: #fff8e1; color: #7a5800; }
         .db-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 10px; background: #e3f0ff; color: #1a5fb4; margin-left: 6px; vertical-align: middle; }
+
+        /* Room list */
+        #rooms-card { display: none; }
+        .rooms-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .rooms-header span { font-size: 12px; color: #666; flex: 1; }
+        .room-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            transition: background .1s;
+        }
+        .room-row:hover { background: #f7f9ff; }
+        .room-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: #2196f3; flex-shrink: 0; }
+        .room-id { font-weight: 600; color: #222; flex: 1; word-break: break-all; }
+        .room-meta { font-size: 11px; color: #999; white-space: nowrap; }
+        .room-online { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ccc; margin-right: 4px; vertical-align: middle; }
+        .room-online.on { background: #34a853; }
+        #select-all-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #2196f3; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>🔥 Firebase Cleaner</h2>
-    <label>База данных:</label>
+    <label>Database:</label>
     <select id="db-select" onchange="switchDb(this.value)">
         <option value="primary">Primary — cheeseboard-c7f66 (test account)</option>
         <option value="backup">Backup — cheeseboard-7b01d (my account)</option>
@@ -35,27 +64,37 @@
 </div>
 
 <div class="card">
-    <label>Действия <span id="db-label" class="db-badge">primary</span></label>
+    <label>Actions <span id="db-label" class="db-badge">primary</span></label>
     <div class="btn-row">
-        <button class="btn-safe" onclick="listRooms()">📋 Показать комнаты</button>
-        <button class="btn-warn" onclick="cleanEmptyRooms()">🧹 Удалить пустые</button>
+        <button class="btn-safe" onclick="listRooms()">📋 List Rooms</button>
+        <button class="btn-warn" onclick="cleanEmptyRooms()">🧹 Delete Empty</button>
     </div>
     <div class="btn-row">
-        <button class="btn-danger" onclick="cleanAllRooms()">💣 Удалить ВСЕ комнаты</button>
+        <button class="btn-danger" onclick="cleanAllRooms()">💣 Delete ALL Rooms</button>
     </div>
 </div>
 
-<div id="status">Выберите базу и действие.</div>
+<!-- Room list card -->
+<div class="card" id="rooms-card">
+    <div class="rooms-header">
+        <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)" title="Select all">
+        <span id="rooms-summary">0 rooms</span>
+        <button class="btn-danger" id="btn-delete-selected" style="flex:0;padding:6px 14px;font-size:12px;" onclick="deleteSelected()" disabled>🗑 Delete Selected</button>
+    </div>
+    <div id="room-list"></div>
+</div>
+
+<div id="status">Select a database and action.</div>
 
 <script>
     const CONFIGS = {
         primary: {
-            label: "primary (cheeseboard-c7f66)",
+            label: "Primary (cheeseboard-c7f66)",
             apiKey:      "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
             databaseURL: "https://cheeseboard-c7f66-default-rtdb.firebaseio.com"
         },
         backup: {
-            label: "backup (cheeseboard-7b01d)",
+            label: "Backup (cheeseboard-7b01d)",
             apiKey:      "AIzaSyAnc8GOrjSl3kkOHBuCTRt3SF31DnypzBo",
             databaseURL: "https://cheeseboard-7b01d-default-rtdb.firebaseio.com"
         }
@@ -63,7 +102,6 @@
 
     let db = null;
     let activeKey = 'primary';
-    // Cache one Firebase app per config key — never delete, just reuse
     const _appCache = {};
 
     function getDbForKey(key) {
@@ -82,7 +120,8 @@
         activeKey = key;
         document.getElementById('db-label').textContent = key;
         db = getDbForKey(key);
-        setStatus('Переключено на ' + CONFIGS[key].label + '. Выберите действие.', '');
+        setStatus('Switched to ' + CONFIGS[key].label + '. Select an action.', '');
+        hideRoomList();
     }
 
     function setStatus(msg, cls) {
@@ -91,70 +130,146 @@
         el.className = cls || '';
     }
 
+    function hideRoomList() {
+        document.getElementById('rooms-card').style.display = 'none';
+        document.getElementById('room-list').innerHTML = '';
+    }
+
+    function renderRooms(rooms) {
+        const card = document.getElementById('rooms-card');
+        const list = document.getElementById('room-list');
+        const summary = document.getElementById('rooms-summary');
+        list.innerHTML = '';
+
+        if (!rooms || Object.keys(rooms).length === 0) {
+            card.style.display = 'none';
+            return;
+        }
+
+        const ids = Object.keys(rooms);
+        summary.textContent = `${ids.length} room${ids.length !== 1 ? 's' : ''} found`;
+
+        for (const id of ids) {
+            const r = rooms[id];
+            const msgCount = r.messages ? Object.keys(r.messages).length : 0;
+            const userKeys = r.users ? Object.keys(r.users) : [];
+            const hasOnline = userKeys.some(uid => r.users[uid] && r.users[uid].online === true);
+
+            const row = document.createElement('div');
+            row.className = 'room-row';
+            row.innerHTML = `
+                <input type="checkbox" class="room-cb" data-id="${id}" onchange="onCheckChange()">
+                <span class="room-id">${id}</span>
+                <span class="room-meta">
+                    <span class="room-online ${hasOnline ? 'on' : ''}"></span>
+                    ${msgCount} msg · ${userKeys.length} user${userKeys.length !== 1 ? 's' : ''}
+                </span>
+            `;
+            list.appendChild(row);
+        }
+
+        document.getElementById('select-all-cb').checked = false;
+        document.getElementById('btn-delete-selected').disabled = true;
+        card.style.display = 'block';
+    }
+
+    function toggleSelectAll(checked) {
+        document.querySelectorAll('.room-cb').forEach(cb => cb.checked = checked);
+        onCheckChange();
+    }
+
+    function onCheckChange() {
+        const all = document.querySelectorAll('.room-cb');
+        const checked = document.querySelectorAll('.room-cb:checked');
+        document.getElementById('select-all-cb').checked = all.length > 0 && checked.length === all.length;
+        document.getElementById('select-all-cb').indeterminate = checked.length > 0 && checked.length < all.length;
+        document.getElementById('btn-delete-selected').disabled = checked.length === 0;
+
+        const summary = document.getElementById('rooms-summary');
+        const total = all.length;
+        summary.textContent = checked.length > 0
+            ? `${checked.length} of ${total} selected`
+            : `${total} room${total !== 1 ? 's' : ''} found`;
+    }
+
     async function listRooms() {
-        if (!db) { setStatus('⚠️ Сначала база инициализируется...', 'run'); switchDb(activeKey); }
-        setStatus('Загружаем список комнат...', 'run');
+        if (!db) { switchDb(activeKey); }
+        setStatus('Loading rooms...', 'run');
         try {
             const snap = await db.ref('cheeseboard').once('value');
             const rooms = snap.val();
-            if (!rooms) { setStatus('Нет комнат.', 'ok'); return; }
-            const ids = Object.keys(rooms);
-            let lines = `Найдено комнат: ${ids.length}\n`;
-            for (const id of ids) {
-                const r = rooms[id];
-                const msgCount = r.messages ? Object.keys(r.messages).length : 0;
-                const users    = r.users    ? Object.keys(r.users).length    : 0;
-                lines += `  • ${id}  [сообщений: ${msgCount}, юзеров: ${users}]\n`;
+            if (!rooms) {
+                setStatus('No rooms found.', 'ok');
+                hideRoomList();
+                return;
             }
-            setStatus(lines.trim(), 'ok');
+            renderRooms(rooms);
+            setStatus(`Loaded ${Object.keys(rooms).length} room(s).`, 'ok');
         } catch(e) {
-            setStatus('❌ Ошибка: ' + e.message, 'err');
+            setStatus('❌ Error: ' + e.message, 'err');
+        }
+    }
+
+    async function deleteSelected() {
+        const checked = document.querySelectorAll('.room-cb:checked');
+        if (checked.length === 0) return;
+        const ids = Array.from(checked).map(cb => cb.dataset.id);
+        if (!confirm(`Delete ${ids.length} selected room(s)?\nThis cannot be undone.`)) return;
+
+        setStatus(`Deleting ${ids.length} room(s)...`, 'run');
+        try {
+            for (const id of ids) {
+                await db.ref('cheeseboard/' + id).remove();
+            }
+            setStatus(`✅ Deleted ${ids.length} room(s).`, 'ok');
+            await listRooms(); // refresh list
+        } catch(e) {
+            setStatus('❌ Error: ' + e.message, 'err');
         }
     }
 
     async function cleanEmptyRooms() {
         if (!db) switchDb(activeKey);
-        setStatus('Проверяем комнаты...', 'run');
+        setStatus('Checking rooms...', 'run');
         try {
             const snap = await db.ref('cheeseboard').once('value');
             const rooms = snap.val();
-            if (!rooms) { setStatus('Нет комнат для очистки.', 'ok'); return; }
+            if (!rooms) { setStatus('No rooms to clean.', 'ok'); return; }
 
             let deleted = 0;
             for (const id in rooms) {
                 const r = rooms[id];
                 const users = r.users ? Object.keys(r.users) : [];
-                // Empty: no users node, or all users are offline
                 const hasOnline = users.some(uid => r.users[uid] && r.users[uid].online === true);
                 if (!hasOnline) {
                     await db.ref('cheeseboard/' + id).remove();
                     deleted++;
                 }
             }
-            setStatus(`✅ Удалено пустых комнат: ${deleted} (из ${Object.keys(rooms).length})`, 'ok');
+            setStatus(`✅ Deleted ${deleted} empty room(s) (of ${Object.keys(rooms).length} total).`, 'ok');
+            hideRoomList();
         } catch(e) {
-            setStatus('❌ Ошибка: ' + e.message, 'err');
+            setStatus('❌ Error: ' + e.message, 'err');
         }
     }
 
     async function cleanAllRooms() {
-        if (!confirm('УДАЛИТЬ ВСЕ КОМНАТЫ в ' + CONFIGS[activeKey].label + '?\nЭто необратимо!')) return;
+        if (!confirm('DELETE ALL ROOMS in ' + CONFIGS[activeKey].label + '?\nThis cannot be undone!')) return;
         if (!db) switchDb(activeKey);
-        setStatus('Удаляем все комнаты...', 'run');
+        setStatus('Deleting all rooms...', 'run');
         try {
             await db.ref('cheeseboard').remove();
-            setStatus('✅ Все комнаты удалены в ' + CONFIGS[activeKey].label, 'ok');
+            setStatus('✅ All rooms deleted in ' + CONFIGS[activeKey].label, 'ok');
+            hideRoomList();
         } catch(e) {
-            setStatus('❌ Ошибка: ' + e.message, 'err');
+            setStatus('❌ Error: ' + e.message, 'err');
         }
     }
 
-    // Init default on load
     window.onload = () => {
         switchDb('primary');
         const params = new URLSearchParams(window.location.search);
         if (params.get('auto') === '1') cleanEmptyRooms();
-        // ?db=backup to pre-select backup
         const dbParam = params.get('db');
         if (dbParam && CONFIGS[dbParam]) {
             document.getElementById('db-select').value = dbParam;
