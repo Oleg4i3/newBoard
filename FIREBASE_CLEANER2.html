@@ -196,7 +196,7 @@ function initClient(key) {
 
 function signIn(key) {
     initClient(key);
-    tokenClients[key].requestAccessToken({ prompt: '' });
+    tokenClients[key].requestAccessToken({ prompt: tokens[key] ? '' : 'consent' });
 }
 
 function setBwStatus(key, msg) {
@@ -232,7 +232,23 @@ async function fetchOne(key) {
         + `&aggregation.perSeriesAligner=ALIGN_SUM`;
     try {
         const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + tokens[key] } });
-        if (!resp.ok) { setBwStatus(key, '❌ HTTP ' + resp.status); return; }
+        if (!resp.ok) {
+            if (resp.status === 403) {
+                const pid = CONFIGS[key].projectId;
+                const enableUrl = `https://console.cloud.google.com/apis/library/monitoring.googleapis.com?project=${pid}`;
+                setBwStatus(key,
+                    `❌ 403 — включи Cloud Monitoring API: `);
+                // append clickable link
+                const el = document.getElementById('bw-status-' + key);
+                const a = document.createElement('a');
+                a.href = enableUrl; a.target = '_blank'; a.textContent = 'открыть консоль →';
+                a.style.cssText = 'color:#1a73e8;font-size:11px';
+                el.appendChild(a);
+            } else {
+                setBwStatus(key, '❌ HTTP ' + resp.status);
+            }
+            return;
+        }
         const data = await resp.json();
         let bytes = 0;
         (data.timeSeries || []).forEach(ts => (ts.points || []).forEach(pt =>
