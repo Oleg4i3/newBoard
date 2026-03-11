@@ -34,6 +34,14 @@
         .room-online { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ccc; margin-right: 4px; vertical-align: middle; }
         .room-online.on { background: #34a853; }
         #select-all-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #2196f3; }
+        .lock-btn { background: none; border: none; padding: 2px 3px; cursor: pointer; flex-shrink: 0; border-radius: 4px; line-height: 1; opacity: 0.35; transition: opacity .15s, background .15s; flex: 0; }
+        .lock-btn:hover { opacity: 0.7; background: #f0f0f0; }
+        .lock-btn.locked { opacity: 1; }
+        .lock-btn svg { display: block; width: 14px; height: 14px; }
+        .room-row.locked-row { background: #fffbf0; }
+        .room-row.locked-row:hover { background: #fff5d6; }
+        .room-row.locked-row .room-id { color: #7a6000; }
+        .room-row.locked-row .room-cb { opacity: 0.3; cursor: not-allowed; }
         .bw-row { margin-bottom: 12px; }
         .bw-row:last-child { margin-bottom: 0; }
         .bw-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
@@ -126,6 +134,22 @@
 <div id="status">Select a database and action.</div>
 
 <script>
+// ── Lock state (persisted per-db in localStorage) ─────────────────
+const LOCK_KEY = 'firebase_cleaner_locked';
+function loadLocked(dbKey) {
+    try { return new Set(JSON.parse(localStorage.getItem(LOCK_KEY + '_' + dbKey) || '[]')); }
+    catch(e) { return new Set(); }
+}
+function saveLocked(dbKey, set) {
+    try { localStorage.setItem(LOCK_KEY + '_' + dbKey, JSON.stringify([...set])); }
+    catch(e) {}
+}
+// current lock set, reloaded when db changes
+let lockedRooms = new Set();
+
+const SVG_LOCKED   = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#f0a500"/><path d="M5 7V5a3 3 0 1 1 6 0v2" stroke="#c07800" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11" r="1.2" fill="#fff"/><line x1="8" y1="12.2" x2="8" y2="13.5" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+const SVG_UNLOCKED = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#ccc"/><path d="M5 7V5a3 3 0 0 1 6 0" stroke="#aaa" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
 const CONFIGS = {
     primary: {
         label:      "Primary (cheeseboard-c7f66)",
@@ -161,6 +185,7 @@ function getDbForKey(key) {
 
 function switchDb(key) {
     activeKey = key;
+    lockedRooms = loadLocked(key);
     document.getElementById('db-label').textContent = key;
     db = getDbForKey(key);
     setStatus('Switched to ' + CONFIGS[key].label + '.', '');
@@ -263,10 +288,13 @@ function renderRooms(rooms) {
         const msgCount = r.messages ? Object.keys(r.messages).length : 0;
         const userKeys = r.users ? Object.keys(r.users) : [];
         const hasOnline = userKeys.some(uid => r.users[uid]?.online === true);
+        const isLocked = lockedRooms.has(id);
         const row = document.createElement('div');
-        row.className = 'room-row';
+        row.className = 'room-row' + (isLocked ? ' locked-row' : '');
+        row.dataset.id = id;
         row.innerHTML = `
-            <input type="checkbox" class="room-cb" data-id="${id}" onchange="onCheckChange()">
+            <input type="checkbox" class="room-cb" data-id="${id}" onchange="onCheckChange()" ${isLocked ? 'disabled' : ''}>
+            <button class="lock-btn ${isLocked ? 'locked' : ''}" data-id="${id}" title="${isLocked ? 'Разблокировать' : 'Заблокировать от удаления'}" onclick="toggleLock('${id}')">${isLocked ? SVG_LOCKED : SVG_UNLOCKED}</button>
             <span class="room-id">${id}</span>
             <span class="room-meta"><span class="room-online ${hasOnline?'on':''}"></span>${msgCount} msg · ${userKeys.length} user${userKeys.length!==1?'s':''}</span>`;
         list.appendChild(row);
@@ -276,17 +304,37 @@ function renderRooms(rooms) {
     card.style.display = 'block';
 }
 
+function toggleLock(id) {
+    if (lockedRooms.has(id)) {
+        lockedRooms.delete(id);
+    } else {
+        lockedRooms.add(id);
+        // uncheck if was checked
+        const cb = document.querySelector(`.room-cb[data-id="${id}"]`);
+        if (cb) cb.checked = false;
+    }
+    saveLocked(activeKey, lockedRooms);
+    // update the row visually
+    const row = document.querySelector(`.room-row[data-id="${id}"]`);
+    const btn = row && row.querySelector('.lock-btn');
+    const cb  = row && row.querySelector('.room-cb');
+    if (row) row.classList.toggle('locked-row', lockedRooms.has(id));
+    if (btn) { btn.classList.toggle('locked', lockedRooms.has(id)); btn.innerHTML = lockedRooms.has(id) ? SVG_LOCKED : SVG_UNLOCKED; btn.title = lockedRooms.has(id) ? 'Разблокировать' : 'Заблокировать от удаления'; }
+    if (cb)  { cb.disabled = lockedRooms.has(id); }
+    onCheckChange();
+}
+
 function toggleSelectAll(checked) {
-    document.querySelectorAll('.room-cb').forEach(cb => cb.checked = checked);
+    document.querySelectorAll('.room-cb:not(:disabled)').forEach(cb => cb.checked = checked);
     onCheckChange();
 }
 
 function onCheckChange() {
-    const all = document.querySelectorAll('.room-cb'), checked = document.querySelectorAll('.room-cb:checked');
+    const all = document.querySelectorAll('.room-cb:not(:disabled)'), checked = document.querySelectorAll('.room-cb:not(:disabled):checked');
+    const total = document.querySelectorAll('.room-cb').length;
     document.getElementById('select-all-cb').checked = all.length > 0 && checked.length === all.length;
     document.getElementById('select-all-cb').indeterminate = checked.length > 0 && checked.length < all.length;
     document.getElementById('btn-delete-selected').disabled = checked.length === 0;
-    const total = all.length;
     document.getElementById('rooms-summary').textContent = checked.length > 0
         ? `${checked.length} of ${total} selected` : `${total} room${total!==1?'s':''} found`;
 }
@@ -306,7 +354,7 @@ async function listRooms() {
 async function deleteSelected() {
     const checked = document.querySelectorAll('.room-cb:checked');
     if (!checked.length) return;
-    const ids = Array.from(checked).map(cb => cb.dataset.id).filter(id => id !== STATS_KEY);
+    const ids = Array.from(checked).map(cb => cb.dataset.id).filter(id => id !== STATS_KEY && !lockedRooms.has(id));
     if (!confirm(`Delete ${ids.length} room(s)?`)) return;
     setStatus(`Deleting ${ids.length} room(s)...`, 'run');
     try {
@@ -324,7 +372,7 @@ async function cleanEmptyRooms() {
         if (!rooms) { setStatus('No rooms to clean.', 'ok'); return; }
         let deleted = 0;
         for (const id in rooms) {
-            if (id === STATS_KEY) continue; // ← protected
+            if (id === STATS_KEY || lockedRooms.has(id)) continue; // ← protected / locked
             const users = rooms[id].users ? Object.keys(rooms[id].users) : [];
             if (!users.some(uid => rooms[id].users[uid]?.online === true)) {
                 await db.ref('cheeseboard/' + id).remove(); deleted++;
@@ -343,7 +391,7 @@ async function cleanAllRooms() {
         const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val() || {};
         let deleted = 0;
         for (const id in rooms) {
-            if (id === STATS_KEY) continue; // ← protected
+            if (id === STATS_KEY || lockedRooms.has(id)) continue; // ← protected / locked
             await db.ref('cheeseboard/' + id).remove(); deleted++;
         }
         setStatus(`✅ Deleted ${deleted} room(s). __stats__ preserved.`, 'ok');
