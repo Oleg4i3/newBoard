@@ -37,9 +37,21 @@
             width: 36px; height: 36px; border-radius: 6px; border: 1px solid transparent;
             background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
             font-size: 18px; transition: 0.2s; position: relative;
+            color: #374151; /* explicit color so currentColor resolves in SVG on iOS */
         }
         .tool-btn:hover { background: #f0f0f0; }
         .tool-btn.active { background: #e0eaff; border-color: #2563eb; color: #2563eb; }
+        /* iOS Safari does not inherit SVG presentation attributes into child elements
+           when the SVG lives inside a <button>. This CSS rule bypasses that by
+           targeting children directly. Shapes panel works because its SVGs are in
+           <div>/<span> elements, not <button>s.
+           Only targets known icon-button selectors to avoid breaking QR/filled SVGs. */
+        #btn-group svg *, #btn-ungroup svg *,
+        #btn-crop svg *, #btn-delete svg *,
+        .ctx-ic svg * {
+            stroke: currentColor;
+            fill: none;
+        }
 		
 		.tool-btn.disabled {
 		 opacity: 0.2;
@@ -848,10 +860,10 @@ document.addEventListener('mousedown', function(e) {
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
 			<button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
-            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="2" y="2" width="20" height="20" rx="3"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/></svg></button>
-            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></button>
-            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
-		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)"><svg width="15" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="2" width="20" height="20" rx="3" stroke-dasharray="3 2" fill="none"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="0" fill="none"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="0" fill="none"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="0" fill="none"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="0" fill="none"/></svg></button>
+            <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="2" width="9" height="9" rx="2" fill="none"/><rect x="13" y="2" width="9" height="9" rx="2" fill="none"/><rect x="2" y="13" width="9" height="9" rx="2" fill="none"/><rect x="13" y="13" width="9" height="9" rx="2" fill="none"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5" fill="none"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5" fill="none"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5" fill="none"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5" fill="none"/></svg></button>
+            <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M6 2v14a2 2 0 0 0 2 2h14" fill="none"/><path d="M18 22V8a2 2 0 0 0-2-2H2" fill="none"/></svg></button>
+		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)"><svg width="15" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 6h18" fill="none"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" fill="none"/><path d="M10 11v6" fill="none"/><path d="M14 11v6" fill="none"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none"/></svg></button>
             
             <button class="tool-btn" onclick="document.getElementById('img-input').click()" data-tooltip="Import Image/PDF">🖼</button>
             <input type="file" id="img-input" style="display: none;" accept="image/*,application/pdf" multiple onchange="handleImport(this)">
@@ -1106,14 +1118,14 @@ document.addEventListener('mousedown', function(e) {
         <button class="ctx-ic" data-tooltip="Bring to Front" onclick="ctxBringToFront()">⬆</button>
         <button class="ctx-ic" data-tooltip="Send to Back"   onclick="ctxSendToBack()">⬇</button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic" data-tooltip="Group"     onclick="ctxGroupSelected()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="2" y="2" width="20" height="20" rx="3"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="none"/></svg></button>
+        <button class="ctx-ic" data-tooltip="Group"     onclick="ctxGroupSelected()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="2" y="2" width="20" height="20" rx="3"/><rect x="5" y="5" width="5" height="5" rx="1" stroke-dasharray="0"/><rect x="14" y="5" width="5" height="5" rx="1" stroke-dasharray="0"/><rect x="5" y="14" width="5" height="5" rx="1" stroke-dasharray="0"/><rect x="14" y="14" width="5" height="5" rx="1" stroke-dasharray="0"/></svg></button>
         <button class="ctx-ic" data-tooltip="Ungroup"   onclick="ctxUngroupSelected()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></button>
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic" id="ctx-pin-btn"  data-tooltip="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
         <button class="ctx-ic" data-tooltip="Clone"     onclick="ctxClone()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         <button class="ctx-ic" id="ctx-crop-btn" data-tooltip="Crop image" onclick="ctxCrop()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
         <div class="ctx-divider-v"></div>
-        <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()"><svg width="14" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+        <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()"><svg width="14" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
     </div>
     <!-- Row 1b: pivot controls (always visible when menu open) -->
     <div class="ctx-icon-row" id="ctx-pivot-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:4px;margin-top:-2px;">
@@ -5471,6 +5483,8 @@ function sendCanvasDataChunked() {
             });
         }
         
+        // Show progress modal on sender side while transmitting
+        _pdfProgressShow('📤 Sending board…', 0, totalChunks);
         sendChunksWithDelay(chunks, 0);
         
     } catch (error) {
@@ -5479,10 +5493,14 @@ function sendCanvasDataChunked() {
 
 function sendChunksWithDelay(chunks, index) {
     if (index >= chunks.length || !conn || !conn.open) {
-        setStatus('Connected', 'ok');
+        _pdfProgressHide();
+        setStatus('Board sent — waiting for partner ACK…', 'ok');
         return;
     }
     
+    // Update progress bar on sender side
+    _pdfProgressShow('📤 Sending board…', index + 1, chunks.length);
+
     try {
         conn.send(chunks[index]);
         
@@ -5913,6 +5931,13 @@ function setupConn() {
     
     conn.on('data', (msg) => {
         if (msg.type === 'chunked_sync' || msg.type === 'chunked_message') {
+            // Show chunk-receive progress on partner side
+            _pdfProgressShow(
+                msg.type === 'chunked_sync' ? '📥 Receiving board…' : '📥 Receiving…',
+                msg.chunkIndex + 1,
+                msg.totalChunks
+            );
+
             const fullData = assembleChunkedMessage(
                 msg.messageId, 
                 msg.chunkIndex, 
@@ -5921,11 +5946,19 @@ function setupConn() {
             );
             
             if (fullData) {
+                _pdfProgressHide();
                 if (msg.type === 'chunked_sync') {
                     try {
                         const canvasData = JSON.parse(fullData);
-                        canvas.loadFromJSON(canvasData, () => {
-                            canvas.requestRenderAll();
+                        // Use applyRemoteStateDump so images (PDF pages) are loaded correctly.
+                        // canvas.loadFromJSON silently drops image objects.
+                        setStatus('Applying board…', 'ok');
+                        applyRemoteStateDump(canvasData, () => {
+                            setStatus('✔ Board loaded — ' + (canvasData.objects ? canvasData.objects.length : 0) + ' objects', 'ok');
+                            // ACK to sender
+                            if (conn && conn.open) {
+                                conn.send({ type: 'board_received', objectCount: (canvasData.objects || []).length });
+                            }
                         });
                     } catch (e) {
                     }
@@ -6002,7 +6035,21 @@ function setupConn() {
             }
 
         } else if (msg.type === 'sync') {
-            canvas.loadFromJSON(JSON.parse(msg.data), () => { canvas.requestRenderAll(); });
+            // Use applyRemoteStateDump (handles images correctly, unlike loadFromJSON)
+            try {
+                const canvasData = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+                applyRemoteStateDump(canvasData, () => {
+                    setStatus('✔ Board loaded', 'ok');
+                    if (conn && conn.open) {
+                        conn.send({ type: 'board_received', objectCount: (canvasData.objects || []).length });
+                    }
+                });
+            } catch(e) { }
+
+        } else if (msg.type === 'board_received') {
+            // Partner confirmed the board was fully loaded and rendered
+            _pdfProgressHide();
+            setStatus('✔ Partner loaded board (' + (msg.objectCount || 0) + ' objects)', 'ok');
 
         } else if (msg.type === 'request_sync') {
             if (isHost) sendCanvasDataChunked();
@@ -9476,6 +9523,11 @@ function connectToFirebaseRoom(roomId) {
                     isSendingToFirebase = false;
                     setStatus('✔ Board synced — ' + (resolvedData.objects ? resolvedData.objects.length : 0) + ' objects', 'ok');
                     resizeCanvas();
+                    // BUG1 FIX: send ACK so the host knows partner finished loading.
+                    // state_dump always goes to state_snapshot (not messages queue),
+                    // so handleFirebaseMessage/case 'state_dump' is never triggered —
+                    // this is the only place the ACK can be sent.
+                    sendToFirebase('board_received', { objectCount: (resolvedData.objects || []).length });
                     // Release buffered messages AFTER canvas is fully rebuilt.
                     // draw messages for objects not in the snapshot (e.g. images
                     // added after the last state_dump) are re-applied here.
@@ -9933,7 +9985,10 @@ function connectViaDeno(roomId) {
             const buf = _denoChunkBufs[msgId];
             buf.chunks[chunkIndex] = chunk;
             buf.received++;
+            // Show chunk-receive progress on partner side
+            _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
             if (buf.received === buf.total) {
+                _pdfProgressHide();
                 const fullStr = buf.chunks.join('');
                 delete _denoChunkBufs[msgId];
                 try {
@@ -10025,7 +10080,10 @@ function connectViaAbly(roomId) {
         const buf = _ablyChunkBufs[msgId];
         buf.chunks[chunkIndex] = chunk;
         buf.received++;
+        // Show chunk-receive progress on partner side
+        _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
         if (buf.received === buf.total) {
+            _pdfProgressHide();
             const fullStr = buf.chunks.join('');
             delete _ablyChunkBufs[msgId];
             try {
