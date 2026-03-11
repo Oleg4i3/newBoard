@@ -9595,6 +9595,7 @@ function connectToFirebaseRoom(roomId) {
         
         // Создаем ссылку на комнату
         firebaseRoomId = roomId;
+        _fbTraffic.flush(firebaseRoomId); // persist previous session before reset
         _fbTraffic.reset(); // reset counter for fresh room session
         firebaseRef = db.ref(`cheeseboard/${roomId}`);
         
@@ -9909,7 +9910,26 @@ const _fbTraffic = (function () {
             catch(e) { recv += 256; }
             _render();
         },
-        reset: function () { sent = 0; recv = 0; _render(); }
+        reset: function () { sent = 0; recv = 0; _render(); },
+        /**
+         * Persist session stats to cheeseboard/__stats__/sessions/<pushKey>.
+         * Called on room switch (before reset) and on beforeunload.
+         * The __stats__ node is protected from deletion in Firebase Cleaner.
+         */
+        flush: function (roomId) {
+            if (!sent && !recv) return;
+            try {
+                const db = (typeof getFirebase === 'function') ? getFirebase() : null;
+                if (!db) return;
+                db.ref('cheeseboard/__stats__/sessions').push({
+                    ts:    Date.now(),
+                    month: new Date().toISOString().slice(0, 7), // "2026-03"
+                    room:  roomId || '?',
+                    sent:  sent,
+                    recv:  recv
+                });
+            } catch (e) { /* silent — don't break unload */ }
+        }
     };
 })();
 
@@ -9995,6 +10015,7 @@ function disconnectFirebase() {
 
 // Очистка Firebase при закрытии страницы
 window.addEventListener('beforeunload', function() {
+    _fbTraffic.flush(firebaseRoomId); // persist session traffic before leaving
     if (firebaseRef && myFirebaseId) {
         firebaseRef.child('users').child(myFirebaseId).remove();
         firebaseRef.child('cursor').child(myFirebaseId).remove();
