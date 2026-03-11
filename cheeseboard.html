@@ -1387,6 +1387,7 @@ function setImgCompressLevel(level) {
 let mqttClient = null;
 let mqttRoomId = null;
 let mqttPaperMode = false; // paper mode: restricts select/erase/undo/move in MQTT
+let _mqttEventsSetup = false; // true after setupCanvasMqttEvents() — prevent re-wiring on reconnect
 
 function setMqttPaperMode(enabled) {
     mqttPaperMode = enabled;
@@ -1655,6 +1656,7 @@ function connectToMqttRoom(roomId) {
         mqttClient.end();
     }
     
+    _mqttEventsSetup = false; // reset so setupCanvasMqttEvents() is called for the new room
     mqttRoomId = roomId;
     // Respect the paper-mode checkbox — don't unconditionally lock buttons
     if (mqttPaperMode) enablePaperMode(); else disablePaperMode();
@@ -1675,29 +1677,33 @@ function connectToMqttRoom(roomId) {
         mqttClient = mqtt.connect(broker.url, {
             clientId: 'cheeseboard_' + Math.random().toString(16).substr(2, 8),
             clean: true,
-            reconnectPeriod: 1000,
-            connectTimeout: 5000,
-			 keepalive: 60,
+            reconnectPeriod: 2000,
+            connectTimeout: 10000,
+			 keepalive: 30,
 			protocolVersion: 4,
 			queueQoSZero: false  // НЕ ставить QoS 0 в очередь
         });
         
         mqttClient.on('connect', () => {
-            setStatus(`In cloud room: ${roomId} (${broker.name})`, 'ok');
+            const isReconnect = _mqttEventsSetup;
+            setStatus(`☁️ In cloud room: ${roomId} (${broker.name})`, 'ok');
             
             // Подписываемся на топики комнаты
             const baseTopic = `cheeseboard/${roomId}`;
             mqttClient.subscribe(`${baseTopic}/#`, (err) => {
-                if (!err) {
-                    
-                    // Запрашиваем текущее состояние канвы у других участников
-                    publishMqttMessage('request_state', { from: myMqttId });
-                    
-                    // Обновляем UI
-                    updateUIForMqttMode();
-                    
-                    // Настраиваем обработчики событий canvas для реальной синхронизации
+                if (err) return;
+                // Always re-request state: on initial connect a partner may have
+                // the board; on reconnect we may have missed messages mid-transfer.
+                publishMqttMessage('request_state', { from: myMqttId });
+                
+                // Обновляем UI
+                updateUIForMqttMode();
+                
+                // Only wire canvas events once — canvas.off() on every reconnect
+                // strips globally-registered handlers (undo history etc).
+                if (!isReconnect) {
                     setupCanvasMqttEvents();
+                    _mqttEventsSetup = true;
                 }
             });
         });
@@ -1713,20 +1719,28 @@ function connectToMqttRoom(roomId) {
         });
         
         mqttClient.on('error', (err) => {
-            // Пробуем следующий брокер
+            // FIX: destroy the current client cleanly before trying the next
+            // broker — otherwise the old client keeps its reconnect timer alive
+            // and we accumulate zombie connections.
+            const dead = mqttClient;
+            mqttClient = null;
+            try { dead.end(true); } catch(_) {}
             setTimeout(() => {
                 tryConnect(brokerIndex + 1);
-            }, 1000);
+            }, 500);
         });
         
         mqttClient.on('close', () => {
-            if (mqttRoomId === roomId) {
-                setStatus('Disconnected from cloud', 'err');
+            // mqtt.js fires 'close' before every auto-reconnect attempt
+            // (when reconnectPeriod > 0). Only show the error banner if the
+            // client is truly gone (we set mqttClient=null on intentional end).
+            if (mqttRoomId === roomId && mqttClient) {
+                setStatus('☁️ Reconnecting to cloud…', 'err');
             }
         });
         
         mqttClient.on('reconnect', () => {
-            setStatus('Reconnecting to cloud...', 'ok');
+            setStatus('☁️ Reconnecting to cloud…', 'ok');
         });
     }
     
@@ -1896,10 +1910,22 @@ function _mqttPublishChunked(type, payload) {
     }
     const chunkId = 'mc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const total   = Math.ceil(fullStr.length / MQTT_CHUNK_SIZE);
-    for (let i = 0; i < total; i++) {
+    // FIX: send chunks with a 80 ms inter-chunk delay so the broker's
+    // per-connection rate-limiter is not triggered (which would close the
+    // WebSocket and cause "Disconnected from cloud" mid-transfer).
+    const CHUNK_DELAY_MS = 80;
+    function sendChunk(i) {
+        if (i >= total) return;
+        if (!mqttClient || !mqttClient.connected) {
+            // Connection lost mid-transfer; the auto-reconnect + request_state
+            // flow will re-sync once the link is restored.
+            return;
+        }
         const chunk = fullStr.slice(i * MQTT_CHUNK_SIZE, (i + 1) * MQTT_CHUNK_SIZE);
         publishMqttMessage('state_chunk', { chunkId, index: i, total, payload: chunk });
+        setTimeout(() => sendChunk(i + 1), CHUNK_DELAY_MS);
     }
+    sendChunk(0);
 }
 
 
