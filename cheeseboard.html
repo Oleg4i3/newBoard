@@ -819,9 +819,10 @@ document.addEventListener('mousedown', function(e) {
                         <select id="img-compress-select" onchange="setImgCompressLevel(this.value)"
                             style="font-size:11px;border:1px solid #ccc;border-radius:4px;padding:2px 4px;background:#fff;color:#333;cursor:pointer;">
                             <option value="low">Low — max quality</option>
-                            <option value="medium" selected>Medium — balanced ❖</option>
+                            <option value="medium">Medium — balanced ❖</option>
                             <option value="high">High — smallest size</option>
                             <option value="lossless">Full res PNG — lossless ❖ P2P</option>
+                            <option value="text" selected>Text optimized — 2-bit grayscale</option>
                         </select>
                         <span id="lossless-warn" style="display:none;font-size:10px;color:#b45309;background:#fef9c3;border:1px solid #fde68a;border-radius:4px;padding:2px 5px;line-height:1.3;">⚠️ Large PDFs load slowly (chunking)</span>
                     </label>
@@ -851,7 +852,7 @@ document.addEventListener('mousedown', function(e) {
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
 			<button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
 			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
-            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3" stroke-dasharray="3 2"/><rect x="5" y="5" width="5" height="5" rx="1"/><rect x="14" y="5" width="5" height="5" rx="1"/><rect x="5" y="14" width="5" height="5" rx="1"/><rect x="14" y="14" width="5" height="5" rx="1"/></svg></span></button>
+            <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3" /><rect x="5" y="5" width="5" height="5" rx="1"/><rect x="14" y="5" width="5" height="5" rx="1"/><rect x="5" y="14" width="5" height="5" rx="1"/><rect x="14" y="14" width="5" height="5" rx="1"/></svg></span></button>
             <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></span></button>
             <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></span></button>
 		    <button class="tool-btn mob-hide" id="btn-delete" onclick="deleteSelected()" data-tooltip="Delete Selected (Del)"><span class="shape-icon"><svg width="15" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></button>
@@ -962,7 +963,7 @@ document.addEventListener('mousedown', function(e) {
             <button class="tool-btn mob-hide" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
-            <button class="tool-btn" id="btn-moderate-partner" onclick="moderatePartnerScreen()" data-tooltip="Fit with partner's view screen">🎯</button>
+            <button class="tool-btn" id="btn-moderate-partner" data-tooltip="Tap: snap to partner&#39;s view  |  Hold: push your view to partner">🎯</button>
         </div>
 
         <!-- Mobile-only ••• button: always visible on phones in both modes -->
@@ -1373,8 +1374,11 @@ const IMG_COMPRESS = {
     // No pixel downscaling, lossless PNG. Ideal for A3+ fine text (grayscale docs).
     // Warning: large PDFs will be chunked and may load slowly.
     lossless: { maxSizeSmall: 9999, maxSizeMed: 9999, maxSizeLarge: 9999, qSmall: 0.90, qMed: 0.90, qLarge: 0.90, qPdf: 1.0, pdfScale: 3.0 },
+    // High-res render → 4-level (2-bit) grayscale PNG. Ideal for text-heavy B&W documents.
+    // Smallest file size while keeping text sharp; not suitable for photos/colour content.
+    text:     { maxSizeSmall: 9999, maxSizeMed: 9999, maxSizeLarge: 9999, qSmall: 0.90, qMed: 0.90, qLarge: 0.90, qPdf: 1.0, pdfScale: 2.5 },
 };
-let _imgCompressLevel = 'medium'; // default
+let _imgCompressLevel = 'text'; // default
 function getImgCompress() { return IMG_COMPRESS[_imgCompressLevel] || IMG_COMPRESS.medium; }
 function setImgCompressLevel(level) {
     if (!IMG_COMPRESS[level]) return;
@@ -1384,10 +1388,32 @@ function setImgCompressLevel(level) {
     const warn = document.getElementById('lossless-warn');
     if (warn) warn.style.display = (level === 'lossless') ? 'inline' : 'none';
 }
+// ── 2-bit grayscale PNG encoder ───────────────────────────────────────────────
+// Renders canvas pixels as 4-level grayscale (0 / 85 / 170 / 255) and returns
+// a standard 8-bit PNG data URL.  PNG compression is extremely efficient on
+// near-monochrome data, so files are much smaller than JPEG for text pages.
+function canvasTo2BitGrayscalePng(srcCanvas) {
+    const w = srcCanvas.width, h = srcCanvas.height;
+    const dst = document.createElement('canvas');
+    dst.width = w; dst.height = h;
+    const ctx = dst.getContext('2d');
+    ctx.drawImage(srcCanvas, 0, 0);
+    const imgd = ctx.getImageData(0, 0, w, h);
+    const d = imgd.data;
+    // Quantise each pixel to the nearest of the 4 gray levels {0, 85, 170, 255}
+    for (let i = 0; i < d.length; i += 4) {
+        const lum = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        // Map 0-255 → nearest quarter: round(lum/85)*85, clamped to 255
+        const q = Math.min(255, Math.round(lum / 85) * 85);
+        d[i] = d[i + 1] = d[i + 2] = q;
+        d[i + 3] = 255; // opaque
+    }
+    ctx.putImageData(imgd, 0, 0);
+    return dst.toDataURL('image/png');
+}
 let mqttClient = null;
 let mqttRoomId = null;
 let mqttPaperMode = false; // paper mode: restricts select/erase/undo/move in MQTT
-let _mqttEventsSetup = false; // true after setupCanvasMqttEvents() — prevent re-wiring on reconnect
 
 function setMqttPaperMode(enabled) {
     mqttPaperMode = enabled;
@@ -1445,7 +1471,7 @@ function setConnectionMode(mode) {
     connectionMode = mode;
     
     // Default compression: lossless for P2P (fast channel), medium for relay/cloud
-    setImgCompressLevel(mode === 'p2p' ? 'lossless' : 'medium');
+    setImgCompressLevel('text');
 
     // BUG2 FIX: strip URL params that belong to the previous transport when switching
     // e.g. going from firebase → ws must remove ?firebase= from the address bar,
@@ -1656,7 +1682,6 @@ function connectToMqttRoom(roomId) {
         mqttClient.end();
     }
     
-    _mqttEventsSetup = false; // reset so setupCanvasMqttEvents() is called for the new room
     mqttRoomId = roomId;
     // Respect the paper-mode checkbox — don't unconditionally lock buttons
     if (mqttPaperMode) enablePaperMode(); else disablePaperMode();
@@ -1677,33 +1702,29 @@ function connectToMqttRoom(roomId) {
         mqttClient = mqtt.connect(broker.url, {
             clientId: 'cheeseboard_' + Math.random().toString(16).substr(2, 8),
             clean: true,
-            reconnectPeriod: 2000,
-            connectTimeout: 10000,
-			 keepalive: 30,
+            reconnectPeriod: 1000,
+            connectTimeout: 5000,
+			 keepalive: 60,
 			protocolVersion: 4,
 			queueQoSZero: false  // НЕ ставить QoS 0 в очередь
         });
         
         mqttClient.on('connect', () => {
-            const isReconnect = _mqttEventsSetup;
-            setStatus(`☁️ In cloud room: ${roomId} (${broker.name})`, 'ok');
+            setStatus(`In cloud room: ${roomId} (${broker.name})`, 'ok');
             
             // Подписываемся на топики комнаты
             const baseTopic = `cheeseboard/${roomId}`;
             mqttClient.subscribe(`${baseTopic}/#`, (err) => {
-                if (err) return;
-                // Always re-request state: on initial connect a partner may have
-                // the board; on reconnect we may have missed messages mid-transfer.
-                publishMqttMessage('request_state', { from: myMqttId });
-                
-                // Обновляем UI
-                updateUIForMqttMode();
-                
-                // Only wire canvas events once — canvas.off() on every reconnect
-                // strips globally-registered handlers (undo history etc).
-                if (!isReconnect) {
+                if (!err) {
+                    
+                    // Запрашиваем текущее состояние канвы у других участников
+                    publishMqttMessage('request_state', { from: myMqttId });
+                    
+                    // Обновляем UI
+                    updateUIForMqttMode();
+                    
+                    // Настраиваем обработчики событий canvas для реальной синхронизации
                     setupCanvasMqttEvents();
-                    _mqttEventsSetup = true;
                 }
             });
         });
@@ -1719,28 +1740,20 @@ function connectToMqttRoom(roomId) {
         });
         
         mqttClient.on('error', (err) => {
-            // FIX: destroy the current client cleanly before trying the next
-            // broker — otherwise the old client keeps its reconnect timer alive
-            // and we accumulate zombie connections.
-            const dead = mqttClient;
-            mqttClient = null;
-            try { dead.end(true); } catch(_) {}
+            // Пробуем следующий брокер
             setTimeout(() => {
                 tryConnect(brokerIndex + 1);
-            }, 500);
+            }, 1000);
         });
         
         mqttClient.on('close', () => {
-            // mqtt.js fires 'close' before every auto-reconnect attempt
-            // (when reconnectPeriod > 0). Only show the error banner if the
-            // client is truly gone (we set mqttClient=null on intentional end).
-            if (mqttRoomId === roomId && mqttClient) {
-                setStatus('☁️ Reconnecting to cloud…', 'err');
+            if (mqttRoomId === roomId) {
+                setStatus('Disconnected from cloud', 'err');
             }
         });
         
         mqttClient.on('reconnect', () => {
-            setStatus('☁️ Reconnecting to cloud…', 'ok');
+            setStatus('Reconnecting to cloud...', 'ok');
         });
     }
     
@@ -1910,22 +1923,10 @@ function _mqttPublishChunked(type, payload) {
     }
     const chunkId = 'mc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const total   = Math.ceil(fullStr.length / MQTT_CHUNK_SIZE);
-    // FIX: send chunks with a 80 ms inter-chunk delay so the broker's
-    // per-connection rate-limiter is not triggered (which would close the
-    // WebSocket and cause "Disconnected from cloud" mid-transfer).
-    const CHUNK_DELAY_MS = 80;
-    function sendChunk(i) {
-        if (i >= total) return;
-        if (!mqttClient || !mqttClient.connected) {
-            // Connection lost mid-transfer; the auto-reconnect + request_state
-            // flow will re-sync once the link is restored.
-            return;
-        }
+    for (let i = 0; i < total; i++) {
         const chunk = fullStr.slice(i * MQTT_CHUNK_SIZE, (i + 1) * MQTT_CHUNK_SIZE);
         publishMqttMessage('state_chunk', { chunkId, index: i, total, payload: chunk });
-        setTimeout(() => sendChunk(i + 1), CHUNK_DELAY_MS);
     }
-    sendChunk(0);
 }
 
 
@@ -1935,6 +1936,9 @@ function handleMqttMessage(type, data) {
     switch(type) {
 		  case 'viewport':  // Добавьте этот case
             handlePartnerViewport(data);
+            break;
+        case 'force_viewport':
+            applyForcedViewport(data);
             break;
         case 'object_added':
             // ── Remote laser pointer ─────────────────────────────────────────
@@ -2132,6 +2136,13 @@ function handleMqttMessage(type, data) {
                 window._triggerRemoteLaserRelease();
             }
             break;
+
+        case 'pdf_progress': {
+            const _pd = data || {};
+            if (_pd.done) { _pdfProgressHide(); }
+            else { _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
+            break;
+        }
     }
 }
 
@@ -2321,6 +2332,8 @@ async function _importPdfFile(file, startY) {
                     // Receiver decodes identical bytes → same naturalWidth → zero coordinate drift.
                     const imgData = (_imgCompressLevel === 'lossless')
                         ? canvasTmp.toDataURL('image/png')
+                        : (_imgCompressLevel === 'text')
+                        ? canvasTo2BitGrayscalePng(canvasTmp)
                         : canvasTmp.toDataURL('image/jpeg', _pc.qPdf);
 
                     await new Promise(res => {
@@ -2331,7 +2344,7 @@ async function _importPdfFile(file, startY) {
                             if (img.width > 900) img.scaleToWidth(900);
                             // Tag with the original imgData so _broadcastImageWithJpegSrc
                             // can send it as-is for lossless without re-encoding
-                            if (_imgCompressLevel === 'lossless') img._losslessSrc = imgData;
+                            if (_imgCompressLevel === 'lossless' || _imgCompressLevel === 'text') img._losslessSrc = imgData;
                             setupImportedImage(img, `PDF Page ${i}`);
                             currentTop += (img.height * img.scaleY) + 50;
                             setStatus(`Loading PDF (${i}/${pdf.numPages})...`, 'ok');
@@ -5649,6 +5662,9 @@ function broadcast(type, payload) {
         } else if (type === 'undo_restore') {
             // Atomic undo-restore: objects + layer order in one message
             publishMqttMessage('undo_restore', payload);
+        } else if (type === 'pdf_progress') {
+            // Lightweight UI signal — forward so partner sees the progress bar
+            publishMqttMessage('pdf_progress', payload);
         }
         return;
     }
@@ -5999,6 +6015,9 @@ function setupConn() {
 
         } else if (msg.type === 'viewport') {
             handlePartnerViewport(msg);
+
+        } else if (msg.type === 'force_viewport') {
+            applyForcedViewport(msg);
 
         } else if (msg.type === 'draw') {
             if (msg.data.isLaser) {
@@ -6663,10 +6682,12 @@ async function _sendStateDumpCompressed(syncProps) {
                 const ctx = tmp.getContext('2d');
                 const origW = obj.width || sw, origH = obj.height || sh;
 
-                if (hasAlpha || _imgCompressLevel === 'lossless') {
+                if (hasAlpha || _imgCompressLevel === 'lossless' || _imgCompressLevel === 'text') {
                     ctx.clearRect(0, 0, sw, sh);
                     ctx.drawImage(el, 0, 0, sw, sh);
-                    obj.src = tmp.toDataURL('image/png'); // keep PNG — exact dimensions guaranteed
+                    obj.src = (_imgCompressLevel === 'text')
+                        ? canvasTo2BitGrayscalePng(tmp)
+                        : tmp.toDataURL('image/png'); // keep PNG — exact dimensions guaranteed
                 } else {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sw, sh);
@@ -8538,7 +8559,7 @@ function _broadcastImageWithJpegSrc(img, filename) {
     // Lossless fingerprint: send the exact data URL the sender's element was decoded from.
     // No re-encoding through tmp canvas — both sides decode identical bytes → same naturalWidth
     // → zero coordinate drift on multi-page documents.
-    if (_imgCompressLevel === 'lossless' && !isSvg) {
+    if ((_imgCompressLevel === 'lossless' || _imgCompressLevel === 'text') && !isSvg) {
         const losslessSrc = img._losslessSrc || origSrc;
         const losslessData = {
             type: 'image', src: losslessSrc,
@@ -9144,6 +9165,101 @@ function moderatePartnerScreen() {
     sendMyViewport();
 }
 
+// ── Push MY viewport to partner (long-press action) ──────────────────────────
+function pushMyViewportToPartner() {
+    const payload = {
+        transform: canvas.viewportTransform,
+        zoom:      canvas.getZoom(),
+        width:     canvas.width,
+        height:    canvas.height
+    };
+    if (connectionMode === 'mqtt' && mqttClient && mqttClient.connected) {
+        publishMqttMessage('force_viewport', payload);
+    } else if (connectionMode === 'firebase' && firebaseRef) {
+        sendToFirebase('force_viewport', payload);
+    } else if (connectionMode === 'ws') {
+        sendToWs('force_viewport', payload);
+    } else if (conn && conn.open) {
+        conn.send({ type: 'force_viewport', ...payload });
+    } else {
+        return;
+    }
+    // Brief amber flash on the button as confirmation
+    const btn = document.getElementById('btn-moderate-partner');
+    if (btn) {
+        btn.style.background = '#b45309';
+        setTimeout(() => { btn.style.background = ''; }, 600);
+    }
+}
+
+// Applied on the receiving side: snap screen to the sender's viewport rect.
+function applyForcedViewport(data) {
+    const t      = data.transform || data; // P2P sends flat; others wrap in .data
+    const pZoom  = data.zoom;
+    const pW     = data.width;
+    const pH     = data.height;
+    const worldLeft    = -t[4] / pZoom;
+    const worldTop     = -t[5] / pZoom;
+    const worldCenterX = worldLeft + pW / pZoom / 2;
+    const worldCenterY = worldTop  + pH / pZoom / 2;
+    const myW = canvas.width, myH = canvas.height;
+    const newZoom = Math.min(myW / (pW / pZoom), myH / (pH / pZoom));
+    const newTx   = myW / 2 - worldCenterX * newZoom;
+    const newTy   = myH / 2 - worldCenterY * newZoom;
+    canvas.setViewportTransform([newZoom, 0, 0, newZoom, newTx, newTy]);
+    canvas.requestRenderAll();
+    updatePartnerFrame();
+    // Amber flash so the user notices their screen was moved remotely
+    const btn = document.getElementById('btn-moderate-partner');
+    if (btn) {
+        btn.style.background = '#d97706';
+        setTimeout(() => { btn.style.background = ''; }, 800);
+    }
+}
+
+// ── Wire tap / long-press on 🎯 ──────────────────────────────────────────────
+// Short tap  (<500 ms): snap MY view to partner  (original behaviour)
+// Long press (≥500 ms): push MY view to partner  (new)
+(function _wireViewportBtn() {
+    const LONG_MS = 500;
+    const btn = document.getElementById('btn-moderate-partner');
+    if (!btn) return;
+
+    let _timer = null;
+    let _fired  = false;
+
+    function onStart(e) {
+        // Ignore right-click
+        if (e.button && e.button !== 0) return;
+        _fired = false;
+        _timer = setTimeout(function() {
+            _fired = true;
+            btn.style.transform = 'scale(0.92)';
+            pushMyViewportToPartner();
+        }, LONG_MS);
+    }
+    function onEnd(e) {
+        clearTimeout(_timer);
+        btn.style.transform = '';
+        if (!_fired) moderatePartnerScreen();
+        _fired = false;
+    }
+    function onCancel() {
+        clearTimeout(_timer);
+        btn.style.transform = '';
+        _fired = false;
+    }
+
+    btn.addEventListener('mousedown',   onStart);
+    btn.addEventListener('mouseup',     onEnd);
+    btn.addEventListener('mouseleave',  onCancel);
+    btn.addEventListener('touchstart',  onStart, { passive: true });
+    btn.addEventListener('touchend',    onEnd);
+    btn.addEventListener('touchcancel', onCancel);
+    // Prevent browser context-menu on long-press (mobile)
+    btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+})();
+
 
 // Инициализация чекбокса отображения рамки партнера
 document.getElementById('show-partner-frame').addEventListener('change', function() {
@@ -9632,6 +9748,9 @@ function handleFirebaseMessage(msg) {
             case 'viewport':
                 handlePartnerViewport(msg.data);
                 break;
+            case 'force_viewport':
+                applyForcedViewport(msg.data);
+                break;
                 
             case 'draw':
             case 'object_added':
@@ -9684,8 +9803,8 @@ function handleFirebaseMessage(msg) {
 
             case 'pdf_progress': {
                 const _pd = msg.data || msg;
-                if (_pd.done) { _pdfProgressHide(); }
-                else { _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
+                if (_pd.done) { _receivingPdfPages = false; _pdfProgressHide(); }
+                else { _receivingPdfPages = true; _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
                 break;
             }
 
@@ -10002,10 +10121,13 @@ function connectViaDeno(roomId) {
             const buf = _denoChunkBufs[msgId];
             buf.chunks[chunkIndex] = chunk;
             buf.received++;
-            // Show chunk-receive progress on partner side
-            _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
+            // Show chunk-receive progress — but not when a PDF page stream is in progress
+            // (pdf_progress messages handle that bar; chunk-level progress would cause jerking)
+            if (!_receivingPdfPages) {
+                _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
+            }
             if (buf.received === buf.total) {
-                _pdfProgressHide();
+                if (!_receivingPdfPages) _pdfProgressHide();
                 const fullStr = buf.chunks.join('');
                 delete _denoChunkBufs[msgId];
                 try {
@@ -10097,10 +10219,13 @@ function connectViaAbly(roomId) {
         const buf = _ablyChunkBufs[msgId];
         buf.chunks[chunkIndex] = chunk;
         buf.received++;
-        // Show chunk-receive progress on partner side
-        _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
+        // Show chunk-receive progress — but not when a PDF page stream is in progress
+        // (pdf_progress messages handle that bar; chunk-level progress would cause jerking)
+        if (!_receivingPdfPages) {
+            _pdfProgressShow('📥 Receiving board…', buf.received, buf.total);
+        }
         if (buf.received === buf.total) {
-            _pdfProgressHide();
+            if (!_receivingPdfPages) _pdfProgressHide();
             const fullStr = buf.chunks.join('');
             delete _ablyChunkBufs[msgId];
             try {
@@ -10179,6 +10304,9 @@ function connectViaAbly(roomId) {
 const ABLY_CHUNK_LIMIT = 46000; // safe under 64KB limit after JSON envelope
 const ABLY_SEND_INTERVAL = 30;  // ms between publishes → ~33 msg/sec < 50 limit
 let _ablySeq = 0;               // monotonic counter for unique msgIds
+// Flag: sender is streaming PDF pages → suppress generic chunk-progress bar
+// so it doesn't fight with the real pdf_progress page-level updates.
+let _receivingPdfPages = false;
 const _ablyQueue = [];          // { eventName, payload } pending sends
 let _ablyQueueTimer = null;
 const _ablyChunkBufs = {};      // receiving: { msgId → { total, received, chunks[] } }
@@ -10285,6 +10413,9 @@ function handleWsMessage(msg) {
             case 'viewport':
                 handlePartnerViewport(msg.data);
                 break;
+            case 'force_viewport':
+                applyForcedViewport(msg.data);
+                break;
 
             case 'draw':
             case 'object_added':
@@ -10332,8 +10463,8 @@ function handleWsMessage(msg) {
 
             case 'pdf_progress': {
                 const _pd = msg.data || msg;
-                if (_pd.done) { _pdfProgressHide(); }
-                else { _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
+                if (_pd.done) { _receivingPdfPages = false; _pdfProgressHide(); }
+                else { _receivingPdfPages = true; _pdfProgressShow('📄 ' + (_pd.title || 'PDF'), _pd.current || 0, _pd.total || 1); }
                 break;
             }
 
