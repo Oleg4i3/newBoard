@@ -4456,6 +4456,12 @@ function createComplexShapePath(type, x1, y1, x2, y2) {
 
 canvas.on('mouse:down', (o) => {
     closeAllMenus();
+
+    // In drawing mode (pen/highlighter) make sure no object is active so Fabric
+    // cannot accidentally start moving/selecting the previously drawn path.
+    if (canvas.isDrawingMode && canvas.getActiveObject()) {
+        canvas.discardActiveObject();
+    }
     
     if (isSpacePressed) {
         isPanning = true;
@@ -4781,6 +4787,14 @@ canvas.on('path:created', (e) => {
         window._laserPendingPaths.push(e.path);   // animate only when Ctrl is released
         broadcast('draw', { data: Object.assign(e.path.toObject(['id']), { isLaser: true, fill: '' }) });
         return;
+    }
+    // In drawing mode (pen/highlighter) paths must never be selectable/evented —
+    // Fabric auto-selects the new path after path:created, which causes fast
+    // subsequent strokes to accidentally move/select the previous path instead
+    // of starting a new one.
+    if (canvas.isDrawingMode) {
+        e.path.set({ selectable: false, evented: false });
+        canvas.discardActiveObject();
     }
     e.path.id = Math.random().toString(36).substr(2, 9);
     addToHistory(e.path);
