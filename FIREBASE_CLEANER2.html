@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Cleaner</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { font-family: sans-serif; padding: 24px; max-width: 560px; background: #f5f5f5; }
+        h2 { margin: 0 0 16px; font-size: 16px; color: #333; }
+        .card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.1); margin-bottom: 14px; }
+        label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+        select { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff; cursor: pointer; }
+        .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+        button { flex: 1; padding: 9px 0; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 600; transition: opacity .15s; }
+        button:hover { opacity: .85; }
+        button:disabled { opacity: .4; cursor: default; }
+        .btn-danger { background: #ff4d4d; color: #fff; }
+        .btn-warn   { background: #ff9900; color: #fff; }
+        .btn-safe   { background: #2196f3; color: #fff; }
+        .btn-green  { background: #34a853; color: #fff; }
+        #status { margin-top: 14px; font-size: 13px; min-height: 22px; padding: 8px 12px; border-radius: 6px; background: #f0f0f0; color: #444; white-space: pre-wrap; }
+        #status.ok  { background: #e6f4ea; color: #1e7e34; }
+        #status.err { background: #fde8e8; color: #c0392b; }
+        #status.run { background: #fff8e1; color: #7a5800; }
+        .db-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 10px; background: #e3f0ff; color: #1a5fb4; margin-left: 6px; vertical-align: middle; }
+        #rooms-card { display: none; }
+        .rooms-header { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid #eee; }
+        .rooms-header span { font-size: 12px; color: #666; flex: 1; }
+        .room-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 6px; font-size: 13px; transition: background .1s; }
+        .room-row:hover { background: #f7f9ff; }
+        .room-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: #2196f3; flex-shrink: 0; }
+        .room-id { font-weight: 600; color: #222; flex: 1; word-break: break-all; }
+        .room-meta { font-size: 11px; color: #999; white-space: nowrap; }
+        .room-online { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ccc; margin-right: 4px; vertical-align: middle; }
+        .room-online.on { background: #34a853; }
+        #select-all-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #2196f3; }
+        .bw-row { margin-bottom: 12px; }
+        .bw-row:last-child { margin-bottom: 0; }
+        .bw-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+        .bw-db-name { font-size: 12px; font-weight: 600; color: #333; }
+        .bw-nums { font-size: 12px; }
+        .bw-used { font-weight: 700; color: #222; }
+        .bw-limit { color: #aaa; }
+        .bw-bar-track { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+        .bw-bar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+        .bw-bar-fill.ok   { background: linear-gradient(90deg,#34a853,#4caf50); }
+        .bw-bar-fill.warn { background: linear-gradient(90deg,#ff9900,#ffb300); }
+        .bw-bar-fill.crit { background: linear-gradient(90deg,#ff4d4d,#e53935); }
+        .bw-status { font-size: 11px; color: #aaa; margin-top: 3px; min-height: 14px; }
+        .bw-note { font-size: 11px; color: #bbb; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🔥 Firebase Cleaner</h2>
+    <label>Database:</label>
+    <select id="db-select" onchange="switchDb(this.value)">
+        <option value="primary">Primary — cheeseboard-c7f66 (test account)</option>
+        <option value="backup">Backup — cheeseboard-7b01d (my account)</option>
+    </select>
+</div>
+
+<!-- Bandwidth card -->
+<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-size:12px;color:#666;font-weight:600">📊 Downloads this month</span>
+        <span style="font-size:11px;color:#aaa" id="bw-period"></span>
+    </div>
+
+    <!-- Primary -->
+    <div class="bw-row">
+        <div class="bw-row-head">
+            <span class="bw-db-name">Primary (c7f66)</span>
+            <span class="bw-nums">
+                <span class="bw-used" id="bw-used-primary">—</span>
+                <span class="bw-limit" id="bw-pct-primary"></span>
+            </span>
+        </div>
+        <div class="bw-bar-track"><div class="bw-bar-fill ok" id="bw-bar-primary" style="width:0%"></div></div>
+        <div class="bw-status" id="bw-status-primary">Нажми Sign in Primary →</div>
+    </div>
+
+    <!-- Backup -->
+    <div class="bw-row">
+        <div class="bw-row-head">
+            <span class="bw-db-name">Backup (7b01d)</span>
+            <span class="bw-nums">
+                <span class="bw-used" id="bw-used-backup">—</span>
+                <span class="bw-limit" id="bw-pct-backup"></span>
+            </span>
+        </div>
+        <div class="bw-bar-track"><div class="bw-bar-fill ok" id="bw-bar-backup" style="width:0%"></div></div>
+        <div class="bw-status" id="bw-status-backup">Нажми Sign in Backup →</div>
+    </div>
+
+    <div class="btn-row">
+        <button class="btn-green" id="btn-signin-primary" onclick="signIn('primary')">🔑 Sign in Primary</button>
+        <button class="btn-green" id="btn-signin-backup"  onclick="signIn('backup')">🔑 Sign in Backup</button>
+        <button class="btn-safe"  id="btn-refresh" onclick="fetchBoth()" style="flex:0.5">↻</button>
+    </div>
+    <p class="bw-note">Лимит: 10 GB/мес на каждую базу. Токен действует ~1 час.</p>
+</div>
+
+<!-- Actions card -->
+<div class="card">
+    <label>Actions <span id="db-label" class="db-badge">primary</span></label>
+    <div class="btn-row">
+        <button class="btn-safe"   onclick="listRooms()">📋 List Rooms</button>
+        <button class="btn-warn"   onclick="cleanEmptyRooms()">🧹 Delete Empty</button>
+    </div>
+    <div class="btn-row">
+        <button class="btn-danger" onclick="cleanAllRooms()">💣 Delete ALL Rooms</button>
+    </div>
+</div>
+
+<!-- Room list -->
+<div class="card" id="rooms-card">
+    <div class="rooms-header">
+        <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)">
+        <span id="rooms-summary">0 rooms</span>
+        <button class="btn-danger" id="btn-delete-selected" style="flex:0;padding:6px 14px;font-size:12px;" onclick="deleteSelected()" disabled>🗑 Delete Selected</button>
+    </div>
+    <div id="room-list"></div>
+</div>
+
+<div id="status">Select a database and action.</div>
+
+<script>
+const CONFIGS = {
+    primary: {
+        label:      "Primary (cheeseboard-c7f66)",
+        projectId:  "cheeseboard-c7f66",
+        clientId:   "650005551830-2oous754r1l0r0fmj2eh5mcfqdc7a8ea.apps.googleusercontent.com",
+        apiKey:     "AIzaSyAeDjmTl5-xAHOmvkCgG-QzKhHaFuehpjY",
+        databaseURL:"https://cheeseboard-c7f66-default-rtdb.firebaseio.com"
+    },
+    backup: {
+        label:      "Backup (cheeseboard-7b01d)",
+        projectId:  "cheeseboard-7b01d",
+        clientId:   "575291335461-cs74jkvf4mhtftn2o89kodq0q4rrod6k.apps.googleusercontent.com",
+        apiKey:     "AIzaSyAnc8GOrjSl3kkOHBuCTRt3SF31DnypzBo",
+        databaseURL:"https://cheeseboard-7b01d-default-rtdb.firebaseio.com"
+    }
+};
+
+const LIMIT_GB = 10;
+let db = null, activeKey = 'primary';
+const _appCache = {}, tokens = {}, tokenClients = {};
+
+// ── Firebase ──────────────────────────────────────────────────────
+function getDbForKey(key) {
+    if (!_appCache[key]) {
+        const cfg = CONFIGS[key], name = 'cleaner-' + key;
+        let app;
+        try { app = firebase.app(name); } catch(e) { app = firebase.initializeApp({ apiKey: cfg.apiKey, databaseURL: cfg.databaseURL }, name); }
+        _appCache[key] = app.database();
+    }
+    return _appCache[key];
+}
+
+function switchDb(key) {
+    activeKey = key;
+    document.getElementById('db-label').textContent = key;
+    db = getDbForKey(key);
+    setStatus('Switched to ' + CONFIGS[key].label + '.', '');
+    hideRoomList();
+}
+
+function setStatus(msg, cls) {
+    const el = document.getElementById('status');
+    el.textContent = msg; el.className = cls || '';
+}
+
+function hideRoomList() {
+    document.getElementById('rooms-card').style.display = 'none';
+    document.getElementById('room-list').innerHTML = '';
+}
+
+// ── OAuth ─────────────────────────────────────────────────────────
+function initClient(key) {
+    if (tokenClients[key]) return;
+    tokenClients[key] = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIGS[key].clientId,
+        scope: 'https://www.googleapis.com/auth/monitoring.read',
+        callback: async (resp) => {
+            if (resp.error) { setBwStatus(key, '❌ ' + resp.error); return; }
+            tokens[key] = resp.access_token;
+            document.getElementById('btn-signin-' + key).textContent = '✅ ' + (key === 'primary' ? 'Primary' : 'Backup');
+            setBwStatus(key, '✅ signed in');
+            await fetchOne(key);
+        }
+    });
+}
+
+function signIn(key) {
+    initClient(key);
+    tokenClients[key].requestAccessToken({ prompt: '' });
+}
+
+function setBwStatus(key, msg) {
+    document.getElementById('bw-status-' + key).textContent = msg;
+}
+
+// ── Bandwidth ─────────────────────────────────────────────────────
+function monthInterval() {
+    const now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('bw-period').textContent =
+        start.toLocaleDateString('en-US', { month:'short', year:'numeric' });
+    return { startTime: start.toISOString(), endTime: now.toISOString() };
+}
+
+function fmtGb(gb) {
+    if (gb >= 1)     return gb.toFixed(2) + ' GB';
+    if (gb >= 0.001) return (gb * 1000).toFixed(1) + ' MB';
+    return (gb * 1e6).toFixed(0) + ' KB';
+}
+
+async function fetchOne(key) {
+    if (!tokens[key]) return;
+    setBwStatus(key, '⏳ загрузка...');
+    const { startTime, endTime } = monthInterval();
+    const pid = CONFIGS[key].projectId;
+    const filter = encodeURIComponent('metric.type="firebasedatabase.googleapis.com/network/sent_bytes_count"');
+    const url = `https://monitoring.googleapis.com/v3/projects/${pid}/timeSeries`
+        + `?filter=${filter}`
+        + `&interval.startTime=${encodeURIComponent(startTime)}`
+        + `&interval.endTime=${encodeURIComponent(endTime)}`
+        + `&aggregation.alignmentPeriod=2592000s`
+        + `&aggregation.crossSeriesReducer=REDUCE_SUM`
+        + `&aggregation.perSeriesAligner=ALIGN_SUM`;
+    try {
+        const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + tokens[key] } });
+        if (!resp.ok) { setBwStatus(key, '❌ HTTP ' + resp.status); return; }
+        const data = await resp.json();
+        let bytes = 0;
+        (data.timeSeries || []).forEach(ts => (ts.points || []).forEach(pt =>
+            bytes += parseInt(pt.value.int64Value || pt.value.doubleValue || '0', 10)));
+        const gb  = bytes / (1024 ** 3);
+        const pct = Math.min(100, (gb / LIMIT_GB) * 100);
+        const cls = pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : 'ok';
+        document.getElementById('bw-used-' + key).textContent = fmtGb(gb);
+        document.getElementById('bw-pct-'  + key).textContent = ` / ${LIMIT_GB} GB (${pct.toFixed(1)}%)`;
+        document.getElementById('bw-pct-'  + key).style.color = pct >= 90 ? '#e53935' : pct >= 70 ? '#ff9900' : '#aaa';
+        const bar = document.getElementById('bw-bar-' + key);
+        bar.style.width = pct + '%';
+        bar.className = 'bw-bar-fill ' + cls;
+        setBwStatus(key, '');
+    } catch(e) { setBwStatus(key, '❌ ' + e.message); }
+}
+
+async function fetchBoth() {
+    await Promise.all([fetchOne('primary'), fetchOne('backup')]);
+}
+
+// ── Rooms ─────────────────────────────────────────────────────────
+function renderRooms(rooms) {
+    const card = document.getElementById('rooms-card'), list = document.getElementById('room-list');
+    list.innerHTML = '';
+    if (!rooms || !Object.keys(rooms).length) { card.style.display = 'none'; return; }
+    document.getElementById('rooms-summary').textContent = Object.keys(rooms).length + ' rooms found';
+    for (const id of Object.keys(rooms)) {
+        const r = rooms[id];
+        const msgCount = r.messages ? Object.keys(r.messages).length : 0;
+        const userKeys = r.users ? Object.keys(r.users) : [];
+        const hasOnline = userKeys.some(uid => r.users[uid]?.online === true);
+        const row = document.createElement('div');
+        row.className = 'room-row';
+        row.innerHTML = `
+            <input type="checkbox" class="room-cb" data-id="${id}" onchange="onCheckChange()">
+            <span class="room-id">${id}</span>
+            <span class="room-meta"><span class="room-online ${hasOnline?'on':''}"></span>${msgCount} msg · ${userKeys.length} user${userKeys.length!==1?'s':''}</span>`;
+        list.appendChild(row);
+    }
+    document.getElementById('select-all-cb').checked = false;
+    document.getElementById('btn-delete-selected').disabled = true;
+    card.style.display = 'block';
+}
+
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.room-cb').forEach(cb => cb.checked = checked);
+    onCheckChange();
+}
+
+function onCheckChange() {
+    const all = document.querySelectorAll('.room-cb'), checked = document.querySelectorAll('.room-cb:checked');
+    document.getElementById('select-all-cb').checked = all.length > 0 && checked.length === all.length;
+    document.getElementById('select-all-cb').indeterminate = checked.length > 0 && checked.length < all.length;
+    document.getElementById('btn-delete-selected').disabled = checked.length === 0;
+    const total = all.length;
+    document.getElementById('rooms-summary').textContent = checked.length > 0
+        ? `${checked.length} of ${total} selected` : `${total} room${total!==1?'s':''} found`;
+}
+
+async function listRooms() {
+    if (!db) switchDb(activeKey);
+    setStatus('Loading rooms...', 'run');
+    try {
+        const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val();
+        if (!rooms) { setStatus('No rooms found.', 'ok'); hideRoomList(); return; }
+        renderRooms(rooms);
+        setStatus(`Loaded ${Object.keys(rooms).length} room(s).`, 'ok');
+    } catch(e) { setStatus('❌ ' + e.message, 'err'); }
+}
+
+async function deleteSelected() {
+    const checked = document.querySelectorAll('.room-cb:checked');
+    if (!checked.length) return;
+    const ids = Array.from(checked).map(cb => cb.dataset.id);
+    if (!confirm(`Delete ${ids.length} room(s)?`)) return;
+    setStatus(`Deleting ${ids.length} room(s)...`, 'run');
+    try {
+        for (const id of ids) await db.ref('cheeseboard/' + id).remove();
+        setStatus(`✅ Deleted ${ids.length} room(s).`, 'ok');
+        await listRooms();
+    } catch(e) { setStatus('❌ ' + e.message, 'err'); }
+}
+
+async function cleanEmptyRooms() {
+    if (!db) switchDb(activeKey);
+    setStatus('Checking rooms...', 'run');
+    try {
+        const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val();
+        if (!rooms) { setStatus('No rooms to clean.', 'ok'); return; }
+        let deleted = 0;
+        for (const id in rooms) {
+            const users = rooms[id].users ? Object.keys(rooms[id].users) : [];
+            if (!users.some(uid => rooms[id].users[uid]?.online === true)) {
+                await db.ref('cheeseboard/' + id).remove(); deleted++;
+            }
+        }
+        setStatus(`✅ Deleted ${deleted} empty room(s).`, 'ok');
+        hideRoomList();
+    } catch(e) { setStatus('❌ ' + e.message, 'err'); }
+}
+
+async function cleanAllRooms() {
+    if (!confirm('DELETE ALL ROOMS in ' + CONFIGS[activeKey].label + '?')) return;
+    if (!db) switchDb(activeKey);
+    setStatus('Deleting all rooms...', 'run');
+    try {
+        await db.ref('cheeseboard').remove();
+        setStatus('✅ All rooms deleted.', 'ok');
+        hideRoomList();
+    } catch(e) { setStatus('❌ ' + e.message, 'err'); }
+}
+
+window.onload = () => {
+    switchDb('primary');
+    const t = setInterval(() => {
+        if (typeof google !== 'undefined' && google.accounts) {
+            clearInterval(t);
+            initClient('primary');
+            initClient('backup');
+        }
+    }, 200);
+};
+</script>
+</body>
+</html>
