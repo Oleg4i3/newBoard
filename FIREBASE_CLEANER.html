@@ -42,6 +42,14 @@
         .room-row.locked-row:hover { background: #fff5d6; }
         .room-row.locked-row .room-id { color: #7a6000; }
         .room-row.locked-row .room-cb { opacity: 0.3; cursor: not-allowed; }
+        .room-tag { font-size: 11px; border: 1px solid transparent; border-radius: 4px; padding: 2px 5px; color: #888; background: transparent; width: 90px; min-width: 60px; max-width: 110px; transition: border-color .15s, background .15s; flex-shrink: 0; }
+        .room-tag:hover { border-color: #ddd; background: #fafafa; }
+        .room-tag:focus { outline: none; border-color: #2196f3; background: #fff; color: #333; }
+        .room-tag::placeholder { color: #ccc; font-style: italic; }
+        .room-link { font-weight: 600; color: #2196f3; text-decoration: none; flex: 1; word-break: break-all; }
+        .room-link:hover { text-decoration: underline; color: #1565c0; }
+        .room-row.locked-row .room-link { color: #7a6000; }
+        .room-row.locked-row .room-link:hover { color: #5a4000; }
         .bw-row { margin-bottom: 12px; }
         .bw-row:last-child { margin-bottom: 0; }
         .bw-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
@@ -147,6 +155,21 @@ function saveLocked(dbKey, set) {
 // current lock set, reloaded when db changes
 let lockedRooms = new Set();
 
+// ── Tag/description state (persisted per-db in localStorage) ──────
+const TAG_KEY = 'firebase_cleaner_tags';
+function loadTags(dbKey) {
+    try { return JSON.parse(localStorage.getItem(TAG_KEY + '_' + dbKey) || '{}'); }
+    catch(e) { return {}; }
+}
+function saveTag(dbKey, roomId, value) {
+    try {
+        const tags = loadTags(dbKey);
+        if (value) tags[roomId] = value; else delete tags[roomId];
+        localStorage.setItem(TAG_KEY + '_' + dbKey, JSON.stringify(tags));
+    } catch(e) {}
+}
+let roomTags = {}; // cache for current db
+
 const SVG_LOCKED   = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#f0a500"/><path d="M5 7V5a3 3 0 1 1 6 0v2" stroke="#c07800" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11" r="1.2" fill="#fff"/><line x1="8" y1="12.2" x2="8" y2="13.5" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 const SVG_UNLOCKED = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#ccc"/><path d="M5 7V5a3 3 0 0 1 6 0" stroke="#aaa" stroke-width="1.6" stroke-linecap="round"/></svg>`;
 
@@ -186,6 +209,7 @@ function getDbForKey(key) {
 function switchDb(key) {
     activeKey = key;
     lockedRooms = loadLocked(key);
+    roomTags = loadTags(key);
     document.getElementById('db-label').textContent = key;
     db = getDbForKey(key);
     setStatus('Switched to ' + CONFIGS[key].label + '.', '');
@@ -276,27 +300,33 @@ async function trimStats() {
 }
 
 // ── Rooms ─────────────────────────────────────────────────────────
+// rooms — array of { id, msgCount, userCount }
 function renderRooms(rooms) {
     const card = document.getElementById('rooms-card'), list = document.getElementById('room-list');
     list.innerHTML = '';
-    // filter out the protected __stats__ room
-    const ids = Object.keys(rooms || {}).filter(id => id !== STATS_KEY);
-    if (!ids.length) { card.style.display = 'none'; return; }
-    document.getElementById('rooms-summary').textContent = ids.length + ' rooms found';
-    for (const id of ids) {
-        const r = rooms[id];
-        const msgCount = r.messages ? Object.keys(r.messages).length : 0;
-        const userKeys = r.users ? Object.keys(r.users) : [];
-        const hasOnline = userKeys.some(uid => r.users[uid]?.online === true);
+    if (!rooms.length) { card.style.display = 'none'; return; }
+    document.getElementById('rooms-summary').textContent = rooms.length + ' rooms found';
+    const BASE_URL = 'https://oleg4i3.github.io/newBoard/cheeseboard.html?firebase=';
+    for (const { id, msgCount, userCount } of rooms) {
         const isLocked = lockedRooms.has(id);
+        const tagVal   = roomTags[id] || '';
+        const isEmpty  = msgCount === 0;
         const row = document.createElement('div');
         row.className = 'room-row' + (isLocked ? ' locked-row' : '');
         row.dataset.id = id;
         row.innerHTML = `
             <input type="checkbox" class="room-cb" data-id="${id}" onchange="onCheckChange()" ${isLocked ? 'disabled' : ''}>
             <button class="lock-btn ${isLocked ? 'locked' : ''}" data-id="${id}" title="${isLocked ? 'Разблокировать' : 'Заблокировать от удаления'}" onclick="toggleLock('${id}')">${isLocked ? SVG_LOCKED : SVG_UNLOCKED}</button>
-            <span class="room-id">${id}</span>
-            <span class="room-meta"><span class="room-online ${hasOnline?'on':''}"></span>${msgCount} msg · ${userKeys.length} user${userKeys.length!==1?'s':''}</span>`;
+            <a class="room-link" href="${BASE_URL}${encodeURIComponent(id)}" target="_blank" title="Открыть комнату в Cheeseboard">${id}</a>
+            <input class="room-tag" type="text" placeholder="заметка…" value="${tagVal.replace(/"/g,'&quot;')}" data-id="${id}" maxlength="40" title="Короткая заметка к комнате">
+            <span class="room-meta">${isEmpty ? '<span style="color:#ccc">пусто</span>' : msgCount + ' msg'} · ${userCount} user${userCount!==1?'s':''}</span>`;
+        const tagInput = row.querySelector('.room-tag');
+        tagInput.addEventListener('change', () => {
+            roomTags[id] = tagInput.value.trim();
+            saveTag(activeKey, id, tagInput.value.trim());
+        });
+        tagInput.addEventListener('keydown', e => { if (e.key === 'Enter') tagInput.blur(); });
+        tagInput.addEventListener('click', e => e.stopPropagation());
         list.appendChild(row);
     }
     document.getElementById('select-all-cb').checked = false;
@@ -341,13 +371,34 @@ function onCheckChange() {
 
 async function listRooms() {
     if (!db) switchDb(activeKey);
-    setStatus('Loading rooms...', 'run');
+    setStatus('Loading rooms…', 'run');
+    const base = CONFIGS[activeKey].databaseURL;
     try {
-        const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val();
-        if (!rooms) { setStatus('No rooms found.', 'ok'); hideRoomList(); return; }
+        // Step 1: get only room keys (no content) via REST shallow
+        const r0 = await fetch(`${base}/cheeseboard.json?shallow=true`);
+        const keys = await r0.json();
+        if (!keys) { setStatus('No rooms found.', 'ok'); hideRoomList(); return; }
+
+        const ids = Object.keys(keys).filter(id => id !== STATS_KEY);
+        setStatus(`Found ${ids.length} room(s), checking…`, 'run');
+
+        // Step 2: parallel shallow checks — messages + users keys only
+        const rooms = await Promise.all(ids.map(async id => {
+            const [mr, ur] = await Promise.all([
+                fetch(`${base}/cheeseboard/${id}/messages.json?shallow=true`),
+                fetch(`${base}/cheeseboard/${id}/users.json?shallow=true`)
+            ]);
+            const msgs  = await mr.json();
+            const users = await ur.json();
+            return {
+                id,
+                msgCount:  msgs  ? Object.keys(msgs).length  : 0,
+                userCount: users ? Object.keys(users).length : 0
+            };
+        }));
+
         renderRooms(rooms);
-        const count = Object.keys(rooms).filter(id => id !== STATS_KEY).length;
-        setStatus(`Loaded ${count} room(s).`, 'ok');
+        setStatus(`Loaded ${rooms.length} room(s).`, 'ok');
     } catch(e) { setStatus('❌ ' + e.message, 'err'); }
 }
 
@@ -366,19 +417,27 @@ async function deleteSelected() {
 
 async function cleanEmptyRooms() {
     if (!db) switchDb(activeKey);
-    setStatus('Checking rooms...', 'run');
+    setStatus('Checking rooms…', 'run');
+    const base = CONFIGS[activeKey].databaseURL;
     try {
-        const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val();
-        if (!rooms) { setStatus('No rooms to clean.', 'ok'); return; }
-        let deleted = 0;
-        for (const id in rooms) {
-            if (id === STATS_KEY || lockedRooms.has(id)) continue; // ← protected / locked
-            const users = rooms[id].users ? Object.keys(rooms[id].users) : [];
-            if (!users.some(uid => rooms[id].users[uid]?.online === true)) {
-                await db.ref('cheeseboard/' + id).remove(); deleted++;
-            }
-        }
-        setStatus(`✅ Deleted ${deleted} empty room(s).`, 'ok');
+        const r0 = await fetch(`${base}/cheeseboard.json?shallow=true`);
+        const keys = await r0.json();
+        if (!keys) { setStatus('No rooms to clean.', 'ok'); return; }
+
+        const ids = Object.keys(keys).filter(id => id !== STATS_KEY && !lockedRooms.has(id));
+
+        // shallow check: room is empty if it has no messages
+        const checks = await Promise.all(ids.map(async id => {
+            const mr   = await fetch(`${base}/cheeseboard/${id}/messages.json?shallow=true`);
+            const msgs = await mr.json();
+            return { id, empty: !msgs };
+        }));
+
+        const toDelete = checks.filter(c => c.empty).map(c => c.id);
+        if (!toDelete.length) { setStatus('✅ No empty rooms found.', 'ok'); return; }
+
+        for (const id of toDelete) await db.ref('cheeseboard/' + id).remove();
+        setStatus(`✅ Deleted ${toDelete.length} empty room(s).`, 'ok');
         hideRoomList();
     } catch(e) { setStatus('❌ ' + e.message, 'err'); }
 }
