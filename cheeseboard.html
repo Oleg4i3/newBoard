@@ -850,8 +850,10 @@ document.addEventListener('mousedown', function(e) {
 
         <div class="bar-section">
           <button class="tool-btn" id="btn-undo" onclick="undo()" data-tooltip="Undo (Ctrl+Z)">↺</button>
-			<button class="tool-btn" id="btn-magnet" onclick="toggleSnap()" data-tooltip="Snap to grid (M)">🧲</button>
-			<button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
+			<button class="tool-btn" id="btn-magnet"
+                onclick="toggleSnap()"
+                data-tooltip="Snap to grid (M)">🧲</button>
+          <button class="tool-btn" id="btn-pin" onclick="togglePin()" data-tooltip="Pin/UnPin">📌</button>
             <button class="tool-btn mob-hide" id="btn-group" onclick="groupSelected()" data-tooltip="Group selected (Ctrl+G)"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3" /><rect x="5" y="5" width="5" height="5" rx="1"/><rect x="14" y="5" width="5" height="5" rx="1"/><rect x="5" y="14" width="5" height="5" rx="1"/><rect x="14" y="14" width="5" height="5" rx="1"/></svg></span></button>
             <button class="tool-btn mob-hide" id="btn-ungroup" onclick="ungroupSelected()" data-tooltip="Ungroup (Ctrl+Shift+G)"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><line x1="11" y1="6" x2="13" y2="6" stroke-dasharray="1.5 1.5"/><line x1="6" y1="11" x2="6" y2="13" stroke-dasharray="1.5 1.5"/><line x1="18" y1="11" x2="18" y2="13" stroke-dasharray="1.5 1.5"/><line x1="11" y1="18" x2="13" y2="18" stroke-dasharray="1.5 1.5"/></svg></span></button>
             <button class="tool-btn mob-hide" id="btn-crop" onclick="startCropMode()" data-tooltip="Crop image"><span class="shape-icon"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></span></button>
@@ -896,10 +898,7 @@ document.addEventListener('mousedown', function(e) {
             </div>
             
             <button class="tool-btn" id="btn-eraser" onclick="activateTool('eraser')" data-tooltip="Eraser (E)">🧼</button>
-            <button class="tool-btn mob-hide" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
-          
-
-            <div id="shape-wrap" style="position: relative;">
+			    <div id="shape-wrap" style="position: relative;">
                 <button class="tool-btn mob-hide" id="btn-shape" onclick="toggleSubmenu('shapes-menu'); activateTool('shape', true)" data-tooltip="Shapes & Lines">📐</button>
                 <div class="submenu" id="shapes-menu">
                     <h4>Shape Type</h4>
@@ -958,6 +957,15 @@ document.addEventListener('mousedown', function(e) {
                 </div>
             </div>
         </div>
+
+		    <div class="bar-section">
+			<button class="tool-btn mob-hide" id="btn-text" onclick="activateTool('text')" data-tooltip="Text (T)">T</button>
+            <button class="tool-btn" id="btn-hw-assist"
+                onclick="toggleHandwritingAssist()"
+                data-tooltip="Handwriting Assist (W) – align strokes to grid"><span style="font-family:lobster;font-weight:700;font-size:16px;line-height:1">Wr</span></button>
+		     </div>
+
+        
         <div class="bar-section">
             <button class="tool-btn mob-hide" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
             <button class="tool-btn mob-hide" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
@@ -1115,6 +1123,7 @@ document.addEventListener('mousedown', function(e) {
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic" id="ctx-pin-btn"  data-tooltip="Pin / Unpin" onclick="ctxTogglePin()">📌</button>
         <button class="ctx-ic" data-tooltip="Clone"     onclick="ctxClone()"><span class="shape-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span></button>
+        <button class="ctx-ic" id="ctx-edit-nodes-btn" data-tooltip="Edit path nodes (dbl-click to enter)" onclick="toggleNodeEditMode();hideCtxMenu()" style="display:none"><span class="shape-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="20" r="2.5"/><circle cx="12" cy="4" r="2.5"/><circle cx="20" cy="20" r="2.5"/><path d="M4 20 C4 10 12 4 12 4 C12 4 20 10 20 20" fill="none"/></svg></span></button>
         <button class="ctx-ic" id="ctx-crop-btn" data-tooltip="Crop image" onclick="ctxCrop()"><span class="shape-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></span></button>
         <div class="ctx-divider-v"></div>
         <button class="ctx-ic danger" data-tooltip="Delete" onclick="ctxDelete()"><span class="shape-icon"><svg width="14" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></button>
@@ -1798,6 +1807,11 @@ function setupCanvasMqttEvents() {
 
         // Add to undo history (same as the global path:created handler does)
         addToHistory(e.path);
+
+        // Handwriting assist post-processing
+        if (typeof handwritingAssist !== 'undefined' && handwritingAssist && canvas.isDrawingMode) {
+            hwAssistNormalizePath(e.path);
+        }
         
         const syncProps = [
             'id', 'path', 'left', 'top', 'scaleX', 'scaleY', 'angle',
@@ -4798,7 +4812,15 @@ canvas.on('path:created', (e) => {
     }
     e.path.id = Math.random().toString(36).substr(2, 9);
     addToHistory(e.path);
-    broadcast('draw', { data: e.path.toObject(['id']) });
+    // Handwriting assist post-processing
+    if (handwritingAssist && canvas.isDrawingMode) {
+        hwAssistNormalizePath(e.path);
+    }
+    // Use window.broadcast so Firebase override is used (bypasses isSendingToFirebase guard)
+    // Include full path geometry so HW-assist modifications reach the partner
+    const _hwSyncProps = ['id', 'path', 'left', 'top', 'scaleX', 'scaleY', 'angle',
+        'stroke', 'strokeWidth', 'fill', 'opacity', 'pathOffset'];
+    ;(window.broadcast || broadcast)('draw', { data: e.path.toObject(_hwSyncProps) });
 });
 
 // Broadcast textbox content + style when user finishes editing (clicks away)
@@ -5035,12 +5057,397 @@ canvas.on('object:rotating', handleLiveSync);
 // normally can't be hit, but guard in depth just in case.
 canvas.on('mouse:dblclick', (o) => {
     const hit = canvas.findTarget(o.e);
+    if (!hit) return;
+    // Path → enter node edit mode on double-click
+    if (hit.type === 'path') { enterNodeEditMode(hit); return; }
     if (!hit || hit.type !== 'textbox' || hit.isEditing) return;
     if (hit.__isLocal === true) return; // partner's block — ignore
     canvas.setActiveObject(hit);
     hit.enterEditing();
     canvas.requestRenderAll();
 });
+
+// ══════════════════════════════════════════════════════════════
+//  NODE EDIT MODE  — drag individual path anchor points
+// ══════════════════════════════════════════════════════════════
+let _nodeEditActive = false;
+let _nodeEditPath = null;
+let _nodeHandles = [];
+let _nodeOriginalPath = null;  // deep copy for decimation reset
+let _nodeDecimateLevel = 0;    // 0=full, 1=½, 2=¼
+let _crTension = 0.6;          // Catmull-Rom tension (0=linear, 1=tight)
+
+function _showNodeSlider() {
+    let el = document.getElementById('node-tension-slider-wrap');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'node-tension-slider-wrap';
+        el.style.cssText = 'position:fixed;bottom:52px;left:50%;transform:translateX(-50%);' +
+            'background:rgba(30,30,30,0.92);border:1px solid rgba(255,255,255,0.15);' +
+            'border-radius:8px;padding:6px 12px;display:flex;align-items:center;gap:8px;' +
+            'z-index:9999;color:#fff;font-size:11px;backdrop-filter:blur(6px);user-select:none;';
+        el.innerHTML = '<span style="opacity:.7">Tension</span>' +
+            '<input id="node-tension-input" type="range" min="0" max="1" step="0.05" value="' + _crTension + '"' +
+            ' style="width:110px;accent-color:#e67e22;" oninput="' +
+            '_crTension=+this.value;document.getElementById(\'node-tension-val\').textContent=this.value;' +
+            'if(_nodeEditPath){_smoothAllNodes(_nodeEditPath);}' +
+            '">' +
+            '<span id="node-tension-val" style="min-width:28px;text-align:right;opacity:.9">' + _crTension + '</span>';
+        document.body.appendChild(el);
+    }
+    el.style.display = 'flex';
+}
+function _hideNodeSlider() {
+    const el = document.getElementById('node-tension-slider-wrap');
+    if (el) el.style.display = 'none';
+}
+/** Re-smooth ALL segments of the path with current tension (called when slider changes). */
+function _smoothAllNodes(pathObj) {
+    const anchors = _getAnchors(pathObj.path);
+    if (anchors.length < 2) return;
+    _catmullRomSmooth(pathObj.path, anchors, 0, anchors.length - 1);
+    pathObj.dirty = true;
+    _syncHandlePositions(pathObj);
+    canvas.requestRenderAll();
+}
+
+
+function toggleNodeEditMode() {
+    if (_nodeEditActive) {
+        exitNodeEditMode();
+    } else {
+        activateTool('select');
+        const sel = canvas.getActiveObject();
+        if (sel && sel.type === 'path') enterNodeEditMode(sel);
+        else setStatus('Select a Path first, then click Edit Nodes', 'warn');
+    }
+}
+
+function enterNodeEditMode(pathObj) {
+    if (_nodeEditActive) exitNodeEditMode();
+    _nodeEditActive = true;
+    _nodeEditPath = pathObj;
+    _nodeDecimateLevel = 0;
+    _nodeOriginalPath = pathObj.path.map(cmd => cmd.slice());
+
+    const btn = document.getElementById('ctx-edit-nodes-btn');
+    if (btn) btn.classList.add('active');
+
+    pathObj.set({ selectable: false, evented: false });
+    canvas.discardActiveObject();
+    _buildNodeHandles(pathObj);
+    _showNodeSlider();
+    setStatus('\u270f\ufe0f Node edit: drag nodes | dbl-click = thin nodes | Esc = exit', 'ok');
+}
+
+function exitNodeEditMode() {
+    if (!_nodeEditActive) return;
+    _nodeEditActive = false;
+    _nodeOriginalPath = null;
+    _nodeDecimateLevel = 0;
+
+    _nodeHandles.forEach(h => canvas.remove(h));
+    _nodeHandles = [];
+
+    if (_nodeEditPath) {
+        _nodeEditPath.set({ selectable: true, evented: true });
+        // Full reinit once on exit to correct pathOffset/bbox
+        _reinitPath(_nodeEditPath);
+        // Broadcast full path data so remote updates correctly
+        const pathData = _nodeEditPath.toObject(['id', 'path', 'left', 'top',
+            'scaleX', 'scaleY', 'angle', 'stroke', 'strokeWidth', 'fill',
+            'opacity', 'pathOffset', 'width', 'height']);
+        broadcast('draw', { data: pathData });
+        canvas.setActiveObject(_nodeEditPath);
+        _nodeEditPath = null;
+    }
+
+    const btn = document.getElementById('ctx-edit-nodes-btn');
+    if (btn) btn.classList.remove('active');
+    _hideNodeSlider();
+    canvas.requestRenderAll();
+    setStatus('', 'ok');
+}
+
+/** Canvas-space position of a path anchor (handles pathOffset). */
+function _anchorToCanvas(pathObj, rawX, rawY) {
+    const po = pathObj.pathOffset || { x: 0, y: 0 };
+    return fabric.util.transformPoint(
+        { x: rawX - po.x, y: rawY - po.y },
+        pathObj.calcTransformMatrix()
+    );
+}
+
+/** Convert canvas-space point back to raw path-data coords. */
+function _canvasToRaw(pathObj, cx, cy) {
+    const po = pathObj.pathOffset || { x: 0, y: 0 };
+    const inv = fabric.util.invertTransform(pathObj.calcTransformMatrix());
+    const local = fabric.util.transformPoint({ x: cx, y: cy }, inv);
+    return { x: local.x + po.x, y: local.y + po.y };
+}
+
+function _buildNodeHandles(pathObj) {
+    _nodeHandles.forEach(h => canvas.remove(h));
+    _nodeHandles = [];
+
+    pathObj.path.forEach((cmd, cmdIdx) => {
+        const type = cmd[0].toUpperCase();
+        let ax, ay;
+        if (type === 'M' || type === 'L') { ax = cmd[1]; ay = cmd[2]; }
+        else if (type === 'C')            { ax = cmd[5]; ay = cmd[6]; }
+        else if (type === 'Q')            { ax = cmd[3]; ay = cmd[4]; }
+        else return;
+
+        const pt = _anchorToCanvas(pathObj, ax, ay);
+
+        const handle = new fabric.Circle({
+            left: pt.x, top: pt.y,
+            radius: 3,
+            fill: '#fff', stroke: '#e67e22', strokeWidth: 1.5,
+            originX: 'center', originY: 'center',
+            hasBorders: false, hasControls: false,
+            padding: 8,   // large hit area, small visual
+            selectable: true, evented: true,
+            _nodeCmd: cmdIdx,
+            _nodePath: pathObj,
+        });
+
+        handle.on('moving', () => _onNodeHandleMove(handle));
+        handle.on('mouseup', () => {
+            _smoothPathAroundNode(pathObj, handle._nodeCmd);
+        });
+
+        canvas.add(handle);
+        _nodeHandles.push(handle);
+    });
+
+    canvas.requestRenderAll();
+}
+
+function _onNodeHandleMove(handle) {
+    const pathObj = handle._nodePath;
+    if (!pathObj) return;
+
+    const raw = _canvasToRaw(pathObj, handle.left, handle.top);
+    const cmd = pathObj.path[handle._nodeCmd];
+    const type = cmd[0].toUpperCase();
+
+    if (type === 'M' || type === 'L') {
+        cmd[1] = raw.x; cmd[2] = raw.y;
+    } else if (type === 'C') {
+        const dx = raw.x - cmd[5], dy = raw.y - cmd[6];
+        cmd[3] += dx; cmd[4] += dy;
+        cmd[5] = raw.x; cmd[6] = raw.y;
+    } else if (type === 'Q') {
+        const dx = raw.x - cmd[3], dy = raw.y - cmd[4];
+        cmd[1] += dx; cmd[2] += dy;
+        cmd[3] = raw.x; cmd[4] = raw.y;
+    }
+
+    _recomputePath(pathObj);
+}
+
+/**
+ * After releasing a node, smooth the adjacent curve segments
+ * using Catmull-Rom -> Bezier so there is no sharp spike.
+ */
+function _smoothPathAroundNode(pathObj, movedCmdIdx) {
+    const cmds = pathObj.path;
+    const anchors = _getAnchors(cmds);
+    if (anchors.length < 3) return;
+
+    const ai = anchors.findIndex(a => a.cmdIdx === movedCmdIdx);
+    if (ai < 0) return;
+
+    const from = Math.max(0, ai - 1);
+    const to   = Math.min(anchors.length - 1, ai + 1);
+    _catmullRomSmooth(cmds, anchors, from, to);
+
+    // Just dirty + sync handles (no reinit)
+    pathObj.dirty = true;
+    _syncHandlePositions(pathObj);
+    canvas.requestRenderAll();
+}
+
+function _syncHandlePositions(pathObj) {
+    pathObj.path.forEach((cmd, cmdIdx) => {
+        const h = _nodeHandles.find(h => h._nodeCmd === cmdIdx);
+        if (!h) return;
+        const type = cmd[0].toUpperCase();
+        let ax, ay;
+        if (type === 'M' || type === 'L') { ax = cmd[1]; ay = cmd[2]; }
+        else if (type === 'C')            { ax = cmd[5]; ay = cmd[6]; }
+        else if (type === 'Q')            { ax = cmd[3]; ay = cmd[4]; }
+        else return;
+        const pt = _anchorToCanvas(pathObj, ax, ay);
+        h.set({ left: pt.x, top: pt.y });
+        h.setCoords();
+    });
+    canvas.requestRenderAll();
+}
+
+/** Array of { cmdIdx, x, y } for all anchor endpoints in path. */
+function _getAnchors(cmds) {
+    const res = [];
+    cmds.forEach((cmd, i) => {
+        const t = cmd[0].toUpperCase();
+        if (t === 'M' || t === 'L') res.push({ cmdIdx: i, x: cmd[1], y: cmd[2] });
+        else if (t === 'C')         res.push({ cmdIdx: i, x: cmd[5], y: cmd[6] });
+        else if (t === 'Q')         res.push({ cmdIdx: i, x: cmd[3], y: cmd[4] });
+    });
+    return res;
+}
+
+/**
+ * Catmull-Rom -> cubic Bezier: smooth segments from anchor[from] to anchor[to].
+ * Modifies path commands in-place.
+ */
+function _catmullRomSmooth(cmds, anchors, from, to) {
+    const tension = _crTension;
+    for (let i = from; i < to; i++) {
+        const p0 = anchors[Math.max(0, i - 1)];
+        const p1 = anchors[i];
+        const p2 = anchors[i + 1];
+        const p3 = anchors[Math.min(anchors.length - 1, i + 2)];
+
+        const cp1x = p1.x + (p2.x - p0.x) * tension;
+        const cp1y = p1.y + (p2.y - p0.y) * tension;
+        const cp2x = p2.x - (p3.x - p1.x) * tension;
+        const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+        const tc = cmds[p2.cmdIdx];
+        tc[0] = 'C';
+        tc[1] = cp1x; tc[2] = cp1y;
+        tc[3] = cp2x; tc[4] = cp2y;
+        tc[5] = p2.x; tc[6] = p2.y;
+        tc.length = 7;
+        p2.x = p2.x; p2.y = p2.y; // anchor coords unchanged
+    }
+}
+
+/** Fast re-render during drag: just invalidate cache, don't reinit. */
+function _recomputePath(pathObj) {
+    pathObj.dirty = true;
+    canvas.requestRenderAll();
+}
+
+/** Full re-init after edit is committed (exit or decimation).
+ *  Recenters the path bbox and updates pathOffset/width/height.
+ *  Must be called while pathObj is NOT being dragged. */
+function _reinitPath(pathObj) {
+    const stroke = pathObj.stroke;
+    const fill   = pathObj.fill;
+    const sw     = pathObj.strokeWidth;
+    const sel    = pathObj.selectable;
+    const evt    = pathObj.evented;
+    const id     = pathObj.id;
+    // Capture canvas-space center before reinit
+    const mtxBefore = pathObj.calcTransformMatrix();
+    const cxBefore  = mtxBefore[4];
+    const cyBefore  = mtxBefore[5];
+
+    pathObj.initialize(pathObj.path);
+
+    // Restore all non-geometric properties that initialize() clobbers
+    pathObj.set({ stroke, fill, strokeWidth: sw,
+                  selectable: sel, evented: evt, id });
+    // Re-center at the same canvas position
+    const mtxAfter = pathObj.calcTransformMatrix();
+    const dx = cxBefore - mtxAfter[4];
+    const dy = cyBefore - mtxAfter[5];
+    pathObj.set({ left: pathObj.left + dx, top: pathObj.top + dy });
+    pathObj.setCoords();
+    canvas.requestRenderAll();
+}
+
+/** Double-click on path in node-edit: cycle decimation 0->1->2->0. */
+function _nodeEditDblClick(pathObj) {
+    if (!_nodeEditActive || _nodeEditPath !== pathObj) return;
+    _nodeDecimateLevel = (_nodeDecimateLevel + 1) % 3;
+
+    if (_nodeDecimateLevel === 0) {
+        pathObj.path = _nodeOriginalPath.map(cmd => cmd.slice());
+    } else {
+        const step = _nodeDecimateLevel === 1 ? 2 : 4;
+        _decimatePath(pathObj, step);
+    }
+    _reinitPath(pathObj);
+    _buildNodeHandles(pathObj);
+    setStatus(['Full nodes', '\u00bd nodes', '\u00bc nodes'][_nodeDecimateLevel], 'ok');
+}
+
+/** Keep only every `step`-th anchor, fitting a smooth spline through them. */
+function _decimatePath(pathObj, step) {
+    const anchors = _getAnchors(pathObj.path);
+    if (anchors.length < step + 1) return;
+
+    const keepIdxs = [0];
+    for (let i = step; i < anchors.length - 1; i += step) keepIdxs.push(i);
+    keepIdxs.push(anchors.length - 1);
+
+    const newCmds = [];
+    const a0 = anchors[keepIdxs[0]];
+    newCmds.push(['M', a0.x, a0.y]);
+
+    for (let k = 0; k < keepIdxs.length - 1; k++) {
+        const p1 = anchors[keepIdxs[k]];
+        const p2 = anchors[keepIdxs[k + 1]];
+        const tension = _crTension;
+        const p0 = anchors[Math.max(0, keepIdxs[k] - step)];
+        const p3 = anchors[Math.min(anchors.length - 1, keepIdxs[k + 1] + step)];
+        const cp1x = p1.x + (p2.x - p0.x) * tension;
+        const cp1y = p1.y + (p2.y - p0.y) * tension;
+        const cp2x = p2.x - (p3.x - p1.x) * tension;
+        const cp2y = p2.y - (p3.y - p1.y) * tension;
+        newCmds.push(['C', cp1x, cp1y, cp2x, cp2y, p2.x, p2.y]);
+    }
+
+    pathObj.path = newCmds;
+    // _reinitPath called by caller after decimation
+}
+
+// ── Event wiring ─────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && _nodeEditActive) exitNodeEditMode();
+});
+
+canvas.on('mouse:dblclick', function(ev) {
+    if (!_nodeEditActive) return;
+    const hit = canvas.findTarget(ev.e);
+    if (hit === _nodeEditPath || (hit && hit._nodePath === _nodeEditPath)) {
+        _nodeEditDblClick(_nodeEditPath);
+    } else if (!hit || !_nodeHandles.includes(hit)) {
+        exitNodeEditMode();
+    }
+});
+
+// Exit node-edit on click on empty area / other object,
+// but NOT when the user just dragged a handle.
+let _nodeDragOccurred = false;
+
+canvas.on('mouse:down', function(ev) {
+    if (!_nodeEditActive) return;
+    _nodeDragOccurred = false;
+});
+
+canvas.on('object:moving', function(ev) {
+    if (!_nodeEditActive) return;
+    if (_nodeHandles.includes(ev.target)) _nodeDragOccurred = true;
+});
+
+canvas.on('mouse:up', function(ev) {
+    if (!_nodeEditActive) return;
+    if (_nodeDragOccurred) { _nodeDragOccurred = false; return; }
+    // Small delay so dblclick fires before we decide to exit
+    setTimeout(() => {
+        if (!_nodeEditActive) return;
+        const hit = canvas.findTarget(ev.e);
+        if (!hit || (!_nodeHandles.includes(hit) && hit !== _nodeEditPath)) {
+            exitNodeEditMode();
+        }
+    }, 180);
+});
+
 
 // ── Grid-snap for straight (horizontal / vertical) lines & arrows ─────────────
 // When moving a line/arrow that is nearly H or V we snap the perpendicular axis
@@ -6339,6 +6746,10 @@ function applyRemoteDrawObject(d, onDone) {
             if (existing.type === 'textbox') {
                 existing.initDimensions();
             }
+            // For paths: flush render cache so updated geometry shows immediately
+            if (existing.type === 'path') {
+                existing.dirty = true;
+            }
             existing.setCoords();
         } else if (!existing) {
             canvas.add(obj);
@@ -7230,6 +7641,11 @@ function showCtxMenu(x, y) {
     // Crop button: only for images; Pin button: always shown
     const cropBtn = document.getElementById('ctx-crop-btn');
     if (cropBtn) cropBtn.style.display = allImg ? 'flex' : 'none';
+    const editNodesBtn = document.getElementById('ctx-edit-nodes-btn');
+    if (editNodesBtn) {
+        const isPath = obj.type === 'path' || (targets.length === 1 && targets[0].type === 'path');
+        editNodesBtn.style.display = isPath ? 'flex' : 'none';
+    }
     // Update pin button visual state
     const pinBtn = document.getElementById('ctx-pin-btn');
     if (pinBtn) {
@@ -11159,7 +11575,217 @@ function toggleSnap() {
     setStatus(snapEnabled ? '🧲 Snap to grid ON' : 'Snap to grid OFF', 'ok');
 }
 
-/** Round v to the nearest grid line. */
+// ── MAGNET LONG-PRESS → HANDWRITING ASSIST ────────────────────────────────
+let handwritingAssist = false;
+
+function toggleHandwritingAssist() {
+    handwritingAssist = !handwritingAssist;
+    const btn = document.getElementById('btn-hw-assist');
+    if (btn) btn.classList.toggle('active', handwritingAssist);
+    setStatus(handwritingAssist ? '\u270d\ufe0f Handwriting Assist ON (W)' : 'Handwriting Assist OFF', 'ok');
+}
+
+/**
+ * Handwriting normalization applied after each stroke (path:created).
+ * Uses canvas gridSize as the reference unit.
+ */
+function hwAssistNormalizePath(pathObj) {
+    if (!pathObj || pathObj.type !== 'path') return;
+    const gs = gridSize; // e.g. 20px
+
+    // Get the bounding box in canvas coords
+    const bounds = pathObj.getBoundingRect(true, true);
+    const strokeH = bounds.height;
+    const strokeW = bounds.width;
+
+    // ── RULE 1: tiny stroke (dot/comma/subscript) ─────────────────────────
+    if (strokeH < 0.6 * gs) return; // leave alone
+
+    // ── RULE 1b: very tall stroke (line, arrow, etc.) — not a letter ──────
+    if (strokeH > 4 * gs) return;
+
+    // Decompose the path into point arrays for analysis
+    const rawPath = pathObj.path; // fabric internal path commands array
+
+    // Collect Y coordinates of all path points (in local coords)
+    const ys = [];
+    rawPath.forEach(cmd => {
+        const type = cmd[0].toUpperCase();
+        if (type === 'M' || type === 'L') { ys.push(cmd[2]); }
+        else if (type === 'C') { ys.push(cmd[2], cmd[4], cmd[6]); }
+        else if (type === 'Q') { ys.push(cmd[2], cmd[4]); }
+    });
+
+    // Count local minima/maxima among interior points (exclude first & last)
+    let extrema = 0;
+    for (let i = 1; i < ys.length - 1; i++) {
+        const prev = ys[i - 1], cur = ys[i], next = ys[i + 1];
+        if ((cur < prev && cur < next) || (cur > prev && cur > next)) extrema++;
+    }
+
+    if (extrema <= 3) {
+        // ── RULE 2: single letter – stretch height to nearest grid multiple ──
+        _hwStretchToGrid(pathObj, gs);
+    } else {
+        // ── RULE 3: word (several letters joined) ──────────────────────────
+        _hwNormalizeWord(pathObj, gs);
+    }
+
+    pathObj.dirty = true;  // flush render cache after geometry/transform change
+    canvas.requestRenderAll();
+    // NOTE: broadcast is done by the caller (path:created handler) after this returns
+}
+
+/** Softly stretch a path so its height snaps to the nearest grid multiple
+ *  and its BOTTOM aligns to the nearest grid line (baseline alignment). */
+function _hwStretchToGrid(pathObj, gs) {
+    const bounds = pathObj.getBoundingRect(true, true);
+    const curH = bounds.height;
+    // Target height: nearest grid multiple (min 1 cell)
+    const targetH = Math.max(gs, Math.round(curH / gs) * gs || gs);
+    // Target bottom: nearest grid line below current bottom
+    const curBottom = bounds.top + curH;
+    const targetBottom = Math.round(curBottom / gs) * gs;
+    const targetTop = targetBottom - targetH;
+
+    // Compute new scaleY so that rendered height = targetH
+    const renderedH = pathObj.height * pathObj.scaleY;
+    const newScaleY = renderedH > 0 ? pathObj.scaleY * (targetH / curH) : pathObj.scaleY;
+
+    // Blend 70% toward target
+    const blend = 0.7;
+    const finalScaleY = pathObj.scaleY + (newScaleY - pathObj.scaleY) * blend;
+    const topDiff = targetTop - bounds.top;
+    const finalTop = pathObj.top + topDiff * blend;
+
+    pathObj.set({ scaleY: finalScaleY, top: finalTop });
+    pathObj.setCoords();
+}
+
+/**
+ * Word normalization: segment the path at X-local-minima (letter boundaries),
+ * then apply per-segment Y stretch + bottom-align, modifying path data directly.
+ */
+function _hwNormalizeWord(pathObj, gs) {
+    const rawPath = pathObj.path;
+    const blend = 0.65;
+
+    // ── 1. Collect anchor points with their indices ───────────────────────
+    // Each entry: { cmdIdx, x, y }  (raw path-data coords)
+    const anchors = [];
+    rawPath.forEach((cmd, i) => {
+        const t = cmd[0].toUpperCase();
+        if (t === 'M' || t === 'L') anchors.push({ cmdIdx: i, x: cmd[1], y: cmd[2] });
+        else if (t === 'C') anchors.push({ cmdIdx: i, x: cmd[5], y: cmd[6] });
+        else if (t === 'Q') anchors.push({ cmdIdx: i, x: cmd[3], y: cmd[4] });
+    });
+    if (anchors.length < 4) { _hwStretchToGrid(pathObj, gs); return; }
+
+    // ── 2. Find X-local-minima as segment split points ────────────────────
+    // A local X-minimum between letter strokes: x[i] < x[i-1] && x[i] < x[i+1]
+    const splitAnchorIdxs = [0]; // always start with first anchor
+    for (let i = 1; i < anchors.length - 1; i++) {
+        const px = anchors[i - 1].x, cx = anchors[i].x, nx = anchors[i + 1].x;
+        if (cx < px && cx < nx) {
+            // Check amplitude and width of surrounding segment
+            // Look ahead for next local X-max to measure amplitude
+            let maxAhead = cx;
+            for (let j = i + 1; j < Math.min(i + 10, anchors.length); j++) {
+                if (anchors[j].x > maxAhead) maxAhead = anchors[j].x;
+            }
+            let maxBehind = cx;
+            for (let j = i - 1; j >= Math.max(i - 10, 0); j--) {
+                if (anchors[j].x > maxBehind) maxBehind = anchors[j].x;
+            }
+            const amp = Math.max(maxAhead - cx, maxBehind - cx);
+            const width = maxBehind - cx; // width from min to previous max
+            if (amp > 0.6 * gs && width > 0.6 * gs) {
+                splitAnchorIdxs.push(i);
+            }
+        }
+    }
+    splitAnchorIdxs.push(anchors.length - 1); // end
+
+    if (splitAnchorIdxs.length <= 2) {
+        // No valid splits found — treat as single letter
+        _hwStretchToGrid(pathObj, gs); return;
+    }
+
+    // ── 3. Map anchor index → rawPath cmd index for segment boundaries ───
+    // Build segments: each segment = [anchorIdxStart, anchorIdxEnd)
+    const segments = [];
+    for (let s = 0; s < splitAnchorIdxs.length - 1; s++) {
+        segments.push({
+            aStart: splitAnchorIdxs[s],
+            aEnd: splitAnchorIdxs[s + 1]
+        });
+    }
+
+    // ── 4. For each segment, compute Y extents and remap Y coords ─────────
+    // Work in raw path-data coordinate space (local, pre-transform)
+    // We need the scaleY of the object to convert grid cells to local units
+    const localGS = gs / (pathObj.scaleY || 1); // grid size in local coords
+
+    segments.forEach(seg => {
+        // Collect all Y values of commands in this segment (anchors + control pts)
+        let minY = Infinity, maxY = -Infinity;
+        const segAnchors = anchors.slice(seg.aStart, seg.aEnd + 1);
+        segAnchors.forEach(a => {
+            const cmd = rawPath[a.cmdIdx];
+            const t = cmd[0].toUpperCase();
+            if (t === 'M' || t === 'L') { minY = Math.min(minY, cmd[2]); maxY = Math.max(maxY, cmd[2]); }
+            else if (t === 'C') {
+                minY = Math.min(minY, cmd[2], cmd[4], cmd[6]);
+                maxY = Math.max(maxY, cmd[2], cmd[4], cmd[6]);
+            }
+            else if (t === 'Q') {
+                minY = Math.min(minY, cmd[2], cmd[4]);
+                maxY = Math.max(maxY, cmd[2], cmd[4]);
+            }
+        });
+
+        const segH = maxY - minY;
+        if (segH < 0.6 * localGS) return; // too small → skip
+
+        // Target: snap height to grid multiple in local space
+        const targetLocalH = Math.max(localGS, Math.round(segH / localGS) * localGS || localGS);
+        // Align bottom to nearest grid line in local coords
+        const targetLocalBottom = Math.round(maxY / localGS) * localGS;
+        const targetLocalTop = targetLocalBottom - targetLocalH;
+
+        // Linear Y remap: [minY..maxY] → [targetLocalTop..targetLocalBottom], blended
+        const scaleFactorY = segH > 0 ? targetLocalH / segH : 1;
+        const blendedScale = 1 + (scaleFactorY - 1) * blend;
+        const newMinY = maxY - segH * blendedScale; // bottom stays, top moves
+        const blendedBottom = maxY + (targetLocalBottom - maxY) * blend;
+        const newMaxY = blendedBottom;
+        const newMinYFinal = newMaxY - segH * blendedScale;
+
+        // Apply Y remap to all Y values in segment commands
+        const remapY = (y) => {
+            if (segH < 0.001) return y;
+            const t = (y - minY) / segH; // 0=top,1=bottom in original
+            return newMinYFinal + t * (newMaxY - newMinYFinal);
+        };
+
+        segAnchors.forEach(a => {
+            const cmd = rawPath[a.cmdIdx];
+            const type = cmd[0].toUpperCase();
+            if (type === 'M' || type === 'L') { cmd[2] = remapY(cmd[2]); }
+            else if (type === 'C') { cmd[2] = remapY(cmd[2]); cmd[4] = remapY(cmd[4]); cmd[6] = remapY(cmd[6]); }
+            else if (type === 'Q') { cmd[2] = remapY(cmd[2]); cmd[4] = remapY(cmd[4]); }
+        });
+    });
+
+    // Reinitialise path with updated data
+    const origTop = pathObj.top;
+    pathObj.initialize(rawPath);
+    // Restore approximate vertical position
+    pathObj.set({ top: origTop });
+    pathObj.setCoords();
+}
+
+
 function _snapV(v) { return Math.round(v / gridSize) * gridSize; }
 
 // ── Moving: snap top-left corner to grid ─────────────────────
@@ -11310,6 +11936,11 @@ window.addEventListener('keydown', function (e) {
         const active = canvas.getActiveObject();
         if (canvas.isEditing || (active && active.isEditing)) return;
         toggleSnap();
+    }
+    if (e.code === 'KeyW' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const active = canvas.getActiveObject();
+        if (canvas.isEditing || (active && active.isEditing)) return;
+        toggleHandwritingAssist();
     }
 });
 
