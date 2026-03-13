@@ -114,7 +114,7 @@
         <button class="btn-safe" id="btn-refresh" onclick="fetchBoth()">↻ Refresh Stats</button>
         <button class="btn-warn" id="btn-trim-stats" onclick="trimStats()" style="flex:0.7;font-size:12px">🗑 Trim old</button>
     </div>
-    <p class="bw-note">↓ recv + ↑ sent — данные пишет Cheeseboard при закрытии вкладки. __stats__ защищена от удаления. Лимит: 10 GB/мес download.</p>
+    <p class="bw-note">↓ recv + ↑ sent — данные пишет Cheeseboard при закрытии вкладки. __stats__ и __meta__ защищены от удаления. Лимит: 10 GB/мес download.</p>
 </div>
 
 <!-- Actions card -->
@@ -142,33 +142,63 @@
 <div id="status">Select a database and action.</div>
 
 <script>
-// ── Lock state (persisted per-db in localStorage) ─────────────────
+// ── Lock & Tag state — localStorage (fast cache) + Firebase (sync across devices) ──
 const LOCK_KEY = 'firebase_cleaner_locked';
-function loadLocked(dbKey) {
+const TAG_KEY  = 'firebase_cleaner_tags';
+const META_KEY = '__meta__'; // protected node in Firebase, stores locks & tags
+
+// localStorage helpers (fast read/write, device-local cache)
+function _lsLoadLocked(dbKey) {
     try { return new Set(JSON.parse(localStorage.getItem(LOCK_KEY + '_' + dbKey) || '[]')); }
     catch(e) { return new Set(); }
 }
-function saveLocked(dbKey, set) {
-    try { localStorage.setItem(LOCK_KEY + '_' + dbKey, JSON.stringify([...set])); }
-    catch(e) {}
+function _lsSaveLocked(dbKey, set) {
+    try { localStorage.setItem(LOCK_KEY + '_' + dbKey, JSON.stringify([...set])); } catch(e) {}
 }
-// current lock set, reloaded when db changes
-let lockedRooms = new Set();
-
-// ── Tag/description state (persisted per-db in localStorage) ──────
-const TAG_KEY = 'firebase_cleaner_tags';
-function loadTags(dbKey) {
+function _lsLoadTags(dbKey) {
     try { return JSON.parse(localStorage.getItem(TAG_KEY + '_' + dbKey) || '{}'); }
     catch(e) { return {}; }
 }
-function saveTag(dbKey, roomId, value) {
+function _lsSaveTags(dbKey, tags) {
+    try { localStorage.setItem(TAG_KEY + '_' + dbKey, JSON.stringify(tags)); } catch(e) {}
+}
+
+// Firebase helpers (async, synced across all devices)
+async function _fbLoadMeta(dbKey) {
     try {
-        const tags = loadTags(dbKey);
-        if (value) tags[roomId] = value; else delete tags[roomId];
-        localStorage.setItem(TAG_KEY + '_' + dbKey, JSON.stringify(tags));
+        const dbRef = getDbForKey(dbKey);
+        const snap = await dbRef.ref(`cheeseboard/${META_KEY}`).once('value');
+        const val  = snap.val() || {};
+        const locksArr = Array.isArray(val.locks) ? val.locks : Object.keys(val.locks || {});
+        return { locks: new Set(locksArr), tags: val.tags || {} };
+    } catch(e) { return { locks: new Set(), tags: {} }; }
+}
+async function _fbSaveLocked(dbKey, set) {
+    try { await getDbForKey(dbKey).ref(`cheeseboard/${META_KEY}/locks`).set([...set]); } catch(e) {}
+}
+async function _fbSaveTag(dbKey, roomId, value) {
+    try {
+        const ref = getDbForKey(dbKey).ref(`cheeseboard/${META_KEY}/tags/${roomId}`);
+        if (value) await ref.set(value); else await ref.remove();
     } catch(e) {}
 }
-let roomTags = {}; // cache for current db
+
+// Public save functions — write to both localStorage and Firebase simultaneously
+function saveLocked(dbKey, set) {
+    _lsSaveLocked(dbKey, set);
+    _fbSaveLocked(dbKey, set); // fire-and-forget
+}
+function saveTag(dbKey, roomId, value) {
+    // update localStorage cache
+    const tags = _lsLoadTags(dbKey);
+    if (value) tags[roomId] = value; else delete tags[roomId];
+    _lsSaveTags(dbKey, tags);
+    roomTags = tags;
+    _fbSaveTag(dbKey, roomId, value); // fire-and-forget
+}
+
+let lockedRooms = new Set();
+let roomTags    = {};
 
 const SVG_LOCKED   = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#f0a500"/><path d="M5 7V5a3 3 0 1 1 6 0v2" stroke="#c07800" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11" r="1.2" fill="#fff"/><line x1="8" y1="12.2" x2="8" y2="13.5" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 const SVG_UNLOCKED = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="10" height="8" rx="2" fill="#ccc"/><path d="M5 7V5a3 3 0 0 1 6 0" stroke="#aaa" stroke-width="1.6" stroke-linecap="round"/></svg>`;
@@ -206,14 +236,26 @@ function getDbForKey(key) {
     return _appCache[key];
 }
 
-function switchDb(key) {
+async function switchDb(key) {
     activeKey = key;
-    lockedRooms = loadLocked(key);
-    roomTags = loadTags(key);
-    document.getElementById('db-label').textContent = key;
     db = getDbForKey(key);
-    setStatus('Switched to ' + CONFIGS[key].label + '.', '');
+    // Instant load from localStorage cache so UI is not blocked
+    lockedRooms = _lsLoadLocked(key);
+    roomTags    = _lsLoadTags(key);
+    document.getElementById('db-label').textContent = key;
+    setStatus('Switching to ' + CONFIGS[key].label + '...', 'run');
     hideRoomList();
+    // Fetch authoritative copy from Firebase and update cache
+    try {
+        const meta = await _fbLoadMeta(key);
+        lockedRooms = meta.locks;
+        roomTags    = meta.tags;
+        _lsSaveLocked(key, meta.locks);
+        _lsSaveTags(key, meta.tags);
+        setStatus('Switched to ' + CONFIGS[key].label + '.', '');
+    } catch(e) {
+        setStatus('Switched to ' + CONFIGS[key].label + ' (offline cache).', '');
+    }
 }
 
 function setStatus(msg, cls) {
@@ -379,7 +421,7 @@ async function listRooms() {
         const keys = await r0.json();
         if (!keys) { setStatus('No rooms found.', 'ok'); hideRoomList(); return; }
 
-        const ids = Object.keys(keys).filter(id => id !== STATS_KEY);
+        const ids = Object.keys(keys).filter(id => id !== STATS_KEY && id !== META_KEY);
         setStatus(`Found ${ids.length} room(s), checking…`, 'run');
 
         // Step 2: parallel shallow checks — messages + users keys only
@@ -424,7 +466,7 @@ async function cleanEmptyRooms() {
         const keys = await r0.json();
         if (!keys) { setStatus('No rooms to clean.', 'ok'); return; }
 
-        const ids = Object.keys(keys).filter(id => id !== STATS_KEY && !lockedRooms.has(id));
+        const ids = Object.keys(keys).filter(id => id !== STATS_KEY && id !== META_KEY && !lockedRooms.has(id));
 
         // shallow check: room is empty if it has no messages
         const checks = await Promise.all(ids.map(async id => {
@@ -450,7 +492,7 @@ async function cleanAllRooms() {
         const snap = await db.ref('cheeseboard').once('value'), rooms = snap.val() || {};
         let deleted = 0;
         for (const id in rooms) {
-            if (id === STATS_KEY || lockedRooms.has(id)) continue; // ← protected / locked
+            if (id === STATS_KEY || id === META_KEY || lockedRooms.has(id)) continue; // ← protected / locked
             await db.ref('cheeseboard/' + id).remove(); deleted++;
         }
         setStatus(`✅ Deleted ${deleted} room(s). __stats__ preserved.`, 'ok');
