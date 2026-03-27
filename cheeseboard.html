@@ -4222,6 +4222,13 @@ function handleEraser(e) {
             _undoPush({ type: 'delete', entries: [{ id: target.id, state: _undoSnapshot(target), zIndex: canvas.getObjects().indexOf(target) }] });
 
             canvas.remove(target);
+            // BUGFIX: Firebase WebSocket callbacks run synchronously in the JS thread and
+            // can push requestAnimationFrame callbacks to the next frame (or later).
+            // The object is already removed from canvas._objects but the screen stays stale
+            // until the deferred rAF fires — typically on the NEXT touch, not immediately.
+            // Force a synchronous repaint so the erased object disappears instantly on screen.
+            // The rAF already queued by canvas.remove() becomes a cheap no-op on an up-to-date canvas.
+            canvas.renderAll();
             broadcast('delete', { id: target.id });
         }
     }
@@ -4816,6 +4823,15 @@ canvas.on('path:created', (e) => {
     if (handwritingAssist && canvas.isDrawingMode) {
         hwAssistNormalizePath(e.path);
     }
+    // BUGFIX (Apple Pencil / fast writing with Firebase):
+    // Fabric clears the upper canvas at the end of a stroke and schedules
+    // requestRenderAll() to paint the finalised path on the lower canvas.
+    // When Firebase is active its WebSocket callbacks consume the JS thread,
+    // pushing the rAF to the next frame — the path visually disappears for
+    // one touch cycle, making the user think the stroke was lost.
+    // Force a synchronous repaint HERE (path is already in canvas._objects)
+    // so the stroke appears immediately before any Firebase I/O runs.
+    canvas.renderAll();
     // Use window.broadcast so Firebase override is used (bypasses isSendingToFirebase guard)
     // Include full path geometry so HW-assist modifications reach the partner
     const _hwSyncProps = ['id', 'path', 'left', 'top', 'scaleX', 'scaleY', 'angle',
