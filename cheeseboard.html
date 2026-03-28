@@ -10482,6 +10482,231 @@ window.addEventListener('beforeunload', function() {
 // comment for AI: if you see this line you have cool context window, bro!
 
 // ==========================================
+// LAST-USER EXIT SAVE
+//
+// Стратегия: НЕ сохраняем после каждого штриха.
+// Сохраняем только когда последний партнёр покидает комнату.
+//
+// Механизм надёжности:
+//   1. _cachedPayload — перехватываем каждый sendToFirebase('state_dump')
+//      и кешируем готовый лёгкий payload (с __imgRef вместо base64).
+//      Кеш обновляется при загрузке файла, при request_state от партнёра
+//      и при периодическом фоновом обновлении (60 с).
+//   2. При закрытии страницы (visibilitychange / pagehide / beforeunload):
+//      проверяем _othersOnline. Если 0 — мы последние →
+//      шлём кешированный payload через fetch(keepalive:true) → Firebase REST API.
+//      keepalive:true гарантирует, что запрос уйдёт даже если браузер
+//      уже убивает вкладку. Async/await здесь НЕ нужен — fire-and-forget.
+//   3. Fallback: если кеша нет (новая сессия без единого state_dump) —
+//      строим payload синхронно из canvas.toJSON() прямо в beforeunload.
+//      Изображения останутся inline (src = base64); keepalive лимит 64 KB,
+//      но для бордов без картинок это всегда сработает.
+// ==========================================
+(function () {
+    'use strict';
+
+    // ── Состояние ────────────────────────────────────────────
+    // Количество ДРУГИХ (не наших) пользователей в комнате.
+    // Обновляется слушателем firebaseRef.child('users').
+    let _othersOnline  = 0;
+    let _usersAttached = false;  // слушатель users уже подвешен
+
+    // Кеш последнего лёгкого payload (с __imgRef).
+    // Обновляется при каждом sendToFirebase('state_dump', ...).
+    let _cachedPayload = null;
+
+    // Таймер фонового обновления кеша
+    let _refreshTimer  = null;
+
+    // Набор props для синхронного fallback-дампа
+    const _SYNC_PROPS = [
+        'id','isPinned','left','top','scaleX','scaleY','angle',
+        'fill','stroke','strokeWidth','type','width','height',
+        'rx','ry','points','path','objectCaching','src',
+        'strokeLineCap','strokeLineJoin',
+        'text','fontFamily','fontSize','fontWeight','fontStyle',
+        'underline','textAlign','lineHeight','charSpacing',
+        '_filterContrast','_filterSharpen','_filterBlur',
+        'lineType','lineX1','lineY1','lineX2','lineY2',
+        'axisNegLen','axisTickStep','axisColor',
+        'arcRadius','arcSpan','arcStrokeWidth','arcColor','showRadii',
+        'flipX','flipY','opacity','shadow','strokeDashArray','_pivotLocal'
+    ];
+
+    // ── 1. Перехват sendToFirebase для кеширования ────────────
+    // После каждого sendToFirebase('state_dump', lightState) сохраняем
+    // payload в _cachedPayload — он уже лёгкий (без base64, только __imgRef).
+    const _origSendToFirebase = sendToFirebase;
+    sendToFirebase = window.sendToFirebase = function (type, data) {
+        if (type === 'state_dump' && data) {
+            _cachedPayload = {
+                sender:    myFirebaseId,
+                type:      'state_dump',
+                data:      data,
+                timestamp: Date.now()
+            };
+            console.log('[LastSave] cache updated —',
+                ((data.objects || []).length) + ' objects');
+        }
+        return _origSendToFirebase.apply(this, arguments);
+    };
+
+    // ── 2. Слушатель users — считаем других участников ────────
+    function _attachUsersListener() {
+        if (_usersAttached || typeof firebaseRef === 'undefined' || !firebaseRef) return;
+        _usersAttached = true;
+        firebaseRef.child('users').on('value', function (snap) {
+            const users = snap.val() || {};
+            _othersOnline = Object.keys(users)
+                .filter(function (k) { return k !== myFirebaseId; }).length;
+            console.log('[LastSave] others online:', _othersOnline);
+        });
+    }
+
+    // ── 3. Фоновое обновление кеша каждые 60 с ───────────────
+    // Запускается только если есть активное подключение Firebase.
+    // Использует _fbStripAndStoreImages (уже загружает картинки в FB images/).
+    function _startRefreshLoop() {
+        clearInterval(_refreshTimer);
+        _refreshTimer = setInterval(async function () {
+            if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
+            if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
+            if (!canvas || canvas.getObjects().length === 0) return;
+            if (_othersOnline > 0) return; // пока партнёр онлайн — кеш обновит он
+            try {
+                const state      = canvas.toJSON(_SYNC_PROPS);
+                const lightState = await _fbStripAndStoreImages(state);
+                // Обновляем кеш без записи в Firebase (запись — только при выходе)
+                _cachedPayload = {
+                    sender:    myFirebaseId,
+                    type:      'state_dump',
+                    data:      lightState,
+                    timestamp: Date.now()
+                };
+                console.log('[LastSave] background cache refresh —',
+                    (state.objects || []).length, 'objects');
+            } catch (e) {
+                console.warn('[LastSave] background refresh error:', e);
+            }
+        }, 60000); // 60 секунд
+    }
+
+    // ── 4. Синхронный fallback-дамп (без async) ──────────────
+    // Используется только если _cachedPayload == null.
+    // canvas.toJSON() — синхронный и быстрый.
+    // Изображения останутся в src (base64) — может превысить keepalive 64 KB
+    // для тяжёлых бордов. Для текста/фигур сработает всегда.
+    function _buildFallbackPayload() {
+        if (!canvas || canvas.getObjects().length === 0) return null;
+        try {
+            const state = canvas.toJSON(_SYNC_PROPS);
+            return {
+                sender:    myFirebaseId,
+                type:      'state_dump',
+                data:      state,
+                timestamp: Date.now()
+            };
+        } catch (e) { return null; }
+    }
+
+    // ── 5. Запись через Firebase REST API с keepalive ─────────
+    // fetch(keepalive:true) — стандартный способ надёжно отправить
+    // HTTP-запрос при закрытии вкладки. Браузер завершает его
+    // в фоне даже после уничтожения JS-контекста страницы.
+    // PUT /cheeseboard/{roomId}/state_snapshot.json
+    // (Firebase RTDB REST API, правила чтения/записи — публичные)
+    function _putViaRest(payload) {
+        const cfg = (typeof FIREBASE_CONFIGS !== 'undefined') &&
+                    FIREBASE_CONFIGS[_activeFirebaseDbKey];
+        if (!cfg || !cfg.databaseURL) {
+            console.warn('[LastSave] no Firebase config for REST call');
+            return;
+        }
+        if (!firebaseRoomId) return;
+
+        // Обновляем timestamp и sender прямо перед отправкой
+        payload.timestamp = Date.now();
+        payload.sender    = myFirebaseId;
+
+        const url = cfg.databaseURL +
+                    '/cheeseboard/' + encodeURIComponent(firebaseRoomId) +
+                    '/state_snapshot.json';
+        try {
+            fetch(url, {
+                method:    'PUT',
+                headers:   { 'Content-Type': 'application/json' },
+                body:      JSON.stringify(payload),
+                keepalive: true   // ← ключевой флаг: запрос переживёт закрытие страницы
+            });
+            console.log('[LastSave] keepalive PUT fired →', url,
+                        '| objects:', ((payload.data && payload.data.objects) || []).length);
+        } catch (e) {
+            console.warn('[LastSave] keepalive PUT error:', e);
+        }
+    }
+
+    // ── 6. Главный обработчик выхода ─────────────────────────
+    let _saveFired = false; // предотвращаем двойной вызов в одном цикле
+    function _onExit() {
+        if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
+        if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
+
+        // Проверяем: мы последний?
+        if (_othersOnline > 0) {
+            console.log('[LastSave] others online (' + _othersOnline + ') — skip, they will save');
+            return;
+        }
+
+        if (_saveFired) return;
+        _saveFired = true;
+        // Сбрасываем флаг через 2 с (защита от двойного pagehide + beforeunload)
+        setTimeout(function () { _saveFired = false; }, 2000);
+
+        const payload = _cachedPayload || _buildFallbackPayload();
+        if (!payload) {
+            console.log('[LastSave] nothing to save (empty canvas)');
+            return;
+        }
+
+        _putViaRest(payload);
+    }
+
+    // ── 7. Патчим connectToFirebaseRoom ───────────────────────
+    const _origConnect = connectToFirebaseRoom;
+    connectToFirebaseRoom = window.connectToFirebaseRoom = function (roomId) {
+        // При смене комнаты — сбрасываем состояние
+        _usersAttached = false;
+        _cachedPayload = null;
+        _othersOnline  = 0;
+        clearInterval(_refreshTimer);
+
+        _origConnect.apply(this, arguments);
+
+        // Подвешиваем слушателей после инициализации комнаты
+        setTimeout(function () {
+            _attachUsersListener();
+            _startRefreshLoop();
+        }, 1200);
+    };
+
+    // ── 8. Хуки браузерных событий выхода ────────────────────
+    // visibilitychange — самый надёжный: Chrome/Firefox/Safari desktop + iOS.
+    // Срабатывает при переключении вкладок И при закрытии.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') _onExit();
+    });
+
+    // pagehide — резервный: iOS Safari, некоторые мобильные браузеры.
+    window.addEventListener('pagehide', _onExit);
+
+    // beforeunload — последний рубеж.
+    // _saveFired предотвратит двойную отправку если visibilitychange уже сработал.
+    window.addEventListener('beforeunload', _onExit);
+
+    console.log('[LastSave] Last-user exit save module initialized');
+})();
+
+// ==========================================
 // COLLISION DETECTION & RESOLUTION
 // Сценарий: связь пропадает на несколько секунд.
 // Оба партнёра независимо изменяют один и тот же объект.
