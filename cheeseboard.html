@@ -10230,9 +10230,20 @@ function handleFirebaseMessage(msg) {
                 applyUngroupOp(msg.data);
                 break;
 
-            case 'layer_order':
-                applyLayerOrder(msg.data.ids);
+            case 'layer_order': {
+                // Если layer_order пришёл сразу после draw (коллизионный дубликат),
+                // новый объект может ещё не быть добавлен на канвас (enlivenObjects async).
+                const _loIds = (msg.data && msg.data.ids) || [];
+                const _loAllPresent = _loIds.every(function (id) {
+                    return !!canvas.getObjects().find(function (o) { return o.id === id; });
+                });
+                if (_loAllPresent) {
+                    applyLayerOrder(_loIds);
+                } else {
+                    setTimeout(function () { applyLayerOrder(_loIds); }, 150);
+                }
                 break;
+            }
 
             case 'undo_restore':
                 handleUndoRestore(msg.data);
@@ -10515,6 +10526,11 @@ window.addEventListener('beforeunload', function() {
         const oldId = obj.id;
         const newId = oldId + '_crf_' + Date.now().toString(36);
 
+        // Захватываем z-индекс оригинала ДО любых изменений стека.
+        // canvas.getObjects() возвращает только top-level объекты в порядке рендера
+        // (индекс 0 = дно, length-1 = вершина).
+        const zIndex = canvas.getObjects().indexOf(obj);
+
         // Полный список свойств для копирования
         const extraProps = ['id','lineType','lineX1','lineY1','lineX2','lineY2',
                             'isPinned','axisNegLen','axisTickStep','axisColor',
@@ -10534,6 +10550,14 @@ window.addEventListener('beforeunload', function() {
             const prevFlag = isSendingToFirebase;
             isSendingToFirebase = false;
             canvas.add(clone);
+
+            // Восстанавливаем z-порядок: клон → прямо над оригиналом.
+            // После canvas.add() клон оказался на вершине стека.
+            // moveTo() перемещает его на нужную позицию (zIndex + 1 —
+            // "поверх оригинала", чтобы не закрыть его полностью).
+            const targetZ = Math.min(zIndex + 1, canvas.getObjects().length - 1);
+            canvas.moveTo(clone, targetZ);
+
             isSendingToFirebase = prevFlag;
             canvas.requestRenderAll();
 
@@ -10541,7 +10565,16 @@ window.addEventListener('beforeunload', function() {
             if (typeof firebaseRef !== 'undefined' && firebaseRef &&
                 typeof connectionMode !== 'undefined' && connectionMode === 'firebase') {
                 try {
+                    // 1. Сначала партнёр получает объект
                     sendToFirebase('draw', clone.toObject(extraProps));
+
+                    // 2. Сразу после — точный порядок слоёв.
+                    // Это гарантирует, что у партнёра клон окажется
+                    // на той же глубине, что и у нас, а не на вершине.
+                    const allIds = canvas.getObjects()
+                        .filter(function (o) { return !!o.id; })
+                        .map(function (o)    { return o.id; });
+                    sendToFirebase('layer_order', { ids: allIds });
                 } catch (err) {}
             }
         });
@@ -10549,7 +10582,7 @@ window.addEventListener('beforeunload', function() {
         if (typeof setStatus === 'function') {
             setStatus('⚡ Коллизия: ' + oldId + ' → ' + newId, 'ok');
         }
-        console.warn('[CRF] Collision resolved: duplicated', oldId, '→', newId);
+        console.warn('[CRF] Collision resolved: duplicated', oldId, '→', newId, 'at z =', zIndex + 1);
     }
 
     // ── 3. Проверяем один objectId на коллизию ──────────────────────────────
