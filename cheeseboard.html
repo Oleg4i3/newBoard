@@ -10471,6 +10471,192 @@ window.addEventListener('beforeunload', function() {
 // comment for AI: if you see this line you have cool context window, bro!
 
 // ==========================================
+// COLLISION DETECTION & RESOLUTION
+// Сценарий: связь пропадает на несколько секунд.
+// Оба партнёра независимо изменяют один и тот же объект.
+// При восстановлении связи — обнаруживаем коллизию и
+// дублируем объект под новым ID, чтобы сохранить оба действия.
+// ==========================================
+(function () {
+    'use strict';
+
+    // objectId → timestamp последнего локального изменения (в офлайн-режиме)
+    const _offlineEdits = new Map();
+    let   _collecting   = false;   // true пока Firebase offline
+    let   _connRefCRF   = null;    // ссылка на .info/connected listener для cleanup
+
+    // ── 1. Отслеживаем локальные изменения пока офлайн ─────────────────────
+    function _hookCanvas(cv) {
+        cv.on('object:modified', function (e) {
+            if (!_collecting || isSendingToFirebase) return;
+            const t = e.target;
+            if (!t) return;
+            if (t.type === 'activeSelection') {
+                t._objects.forEach(function (o) {
+                    if (o.id) _offlineEdits.set(o.id, Date.now());
+                });
+            } else if (t.id) {
+                _offlineEdits.set(t.id, Date.now());
+            }
+        });
+
+        cv.on('object:removed', function (e) {
+            if (!_collecting || isSendingToFirebase) return;
+            const o = e.target;
+            // __isLocal = удалено нами сами (не remote echo)
+            if (o && o.id && !o.__isLocal) {
+                _offlineEdits.set(o.id, Date.now());
+            }
+        });
+    }
+
+    // ── 2. Дублирование объекта со смещением и новым ID ─────────────────────
+    function _duplicateObject(obj) {
+        const oldId = obj.id;
+        const newId = oldId + '_crf_' + Date.now().toString(36);
+
+        // Полный список свойств для копирования
+        const extraProps = ['id','lineType','lineX1','lineY1','lineX2','lineY2',
+                            'isPinned','axisNegLen','axisTickStep','axisColor',
+                            'arcRadius','arcSpan','arcStrokeWidth','arcColor','showRadii'];
+        const snap = obj.toObject(extraProps);
+        snap.id   = newId;
+        snap.left = (snap.left || 0) + 24;
+        snap.top  = (snap.top  || 0) + 24;
+
+        fabric.util.enlivenObjects([snap], function (objs) {
+            if (!objs || !objs[0]) return;
+            const clone = objs[0];
+            clone.id = newId;
+            clone.setCoords();
+
+            // Добавляем локально (без echo)
+            const prevFlag = isSendingToFirebase;
+            isSendingToFirebase = false;
+            canvas.add(clone);
+            isSendingToFirebase = prevFlag;
+            canvas.requestRenderAll();
+
+            // Сообщаем партнёру о новом объекте
+            if (typeof firebaseRef !== 'undefined' && firebaseRef &&
+                typeof connectionMode !== 'undefined' && connectionMode === 'firebase') {
+                try {
+                    sendToFirebase('draw', clone.toObject(extraProps));
+                } catch (err) {}
+            }
+        });
+
+        if (typeof setStatus === 'function') {
+            setStatus('⚡ Коллизия: ' + oldId + ' → ' + newId, 'ok');
+        }
+        console.warn('[CRF] Collision resolved: duplicated', oldId, '→', newId);
+    }
+
+    // ── 3. Проверяем один objectId на коллизию ──────────────────────────────
+    function _check(objectId) {
+        if (!objectId || !_offlineEdits.has(objectId)) return;
+        const obj = (typeof findObjectById === 'function') && findObjectById(objectId);
+        if (!obj) { _offlineEdits.delete(objectId); return; }
+        _duplicateObject(obj);
+        _offlineEdits.delete(objectId);
+    }
+
+    // ── 4. Monkey-patch handleFirebaseMessage ────────────────────────────────
+    // Перехватываем входящие сообщения от партнёра и проверяем коллизии
+    // ДО применения изменений, чтобы успеть сохранить нашу версию объекта.
+    function _patchHandleMessage() {
+        if (typeof handleFirebaseMessage !== 'function') {
+            return setTimeout(_patchHandleMessage, 200);
+        }
+        const _orig = handleFirebaseMessage;
+        handleFirebaseMessage = window.handleFirebaseMessage = function (msg) {
+            // Коллизии проверяем только для чужих сообщений и только когда
+            // есть офлайн-изменения (оптимизация: пропускаем Map lookup иначе)
+            if (msg && msg.sender !== myFirebaseId && _offlineEdits.size > 0) {
+                const t = msg.type;
+                const d = msg.data || {};
+                if (t === 'modified' || t === 'object_modified') {
+                    // Партнёр изменил объект — мы тоже его меняли?
+                    if (d.id) _check(d.id);
+                } else if (t === 'delete' || t === 'object_removed') {
+                    // Партнёр удалил объект — мы его двигали?
+                    _check(d.id || (typeof d === 'string' ? d : null));
+                } else if (t === 'group_objects') {
+                    // Партнёр сгруппировал объекты — среди них есть наши?
+                    (d.oldIds || []).forEach(_check);
+                } else if (t === 'ungroup_objects') {
+                    // Партнёр разгруппировал — мы двигали группу?
+                    if (d.groupId) _check(d.groupId);
+                }
+            }
+            return _orig.call(this, msg);
+        };
+    }
+
+    // ── 5. Monkey-patch connectToFirebaseRoom ────────────────────────────────
+    // Подвешиваем свой слушатель на .info/connected для отслеживания offline/online.
+    function _patchConnect() {
+        if (typeof connectToFirebaseRoom !== 'function') {
+            return setTimeout(_patchConnect, 200);
+        }
+        const _origConn = connectToFirebaseRoom;
+        connectToFirebaseRoom = window.connectToFirebaseRoom = function (roomId) {
+            // Снимаем предыдущий CRF-listener (при смене комнаты)
+            if (_connRefCRF) {
+                try { _connRefCRF.off(); } catch (e) {}
+                _connRefCRF = null;
+            }
+            // Вызываем оригинал
+            _origConn.apply(this, arguments);
+            // Привязываем наш .info/connected после инициализации комнаты
+            setTimeout(function () {
+                try {
+                    _connRefCRF = getFirebase().ref('.info/connected');
+                    _connRefCRF.on('value', function (snap) {
+                        const online = snap.val() === true;
+                        if (!online && !_collecting) {
+                            // Связь пропала → начинаем собирать офлайн-изменения
+                            _collecting = true;
+                            console.log('[CRF] Offline — collecting local edits');
+                        } else if (online && _collecting) {
+                            // Связь восстановлена → даём 6 с на обработку входящих
+                            // сообщений, затем очищаем буфер
+                            console.log('[CRF] Online — collision window open (6s)');
+                            setTimeout(function () {
+                                if (_offlineEdits.size > 0) {
+                                    console.log('[CRF] Window closed, clearing', _offlineEdits.size, 'unresolved edits');
+                                }
+                                _collecting = false;
+                                _offlineEdits.clear();
+                            }, 6000);
+                        }
+                    });
+                } catch (e) {
+                    console.warn('[CRF] Could not attach .info/connected listener:', e);
+                }
+            }, 900);
+        };
+    }
+
+    // ── 6. Инициализация ─────────────────────────────────────────────────────
+    function _init() {
+        if (typeof canvas === 'undefined' || !canvas || typeof canvas.on !== 'function') {
+            return setTimeout(_init, 300);
+        }
+        _hookCanvas(canvas);
+        _patchHandleMessage();
+        _patchConnect();
+        console.log('[CRF] Collision detection module initialized');
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _init);
+    } else {
+        _init();
+    }
+})();
+
+// ==========================================
 // WEBSOCKET RELAY TRANSPORT
 // Modelled exactly after Firebase transport
 // ==========================================
