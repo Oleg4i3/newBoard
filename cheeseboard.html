@@ -967,7 +967,8 @@ document.addEventListener('mousedown', function(e) {
 
         
         <div class="bar-section">
-            <button class="tool-btn mob-hide" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board">💾</button>
+            <button class="tool-btn mob-hide" id="btn-save" onclick="saveBoard()" data-tooltip="Save Board (JSON)">💾</button>
+            <button class="tool-btn mob-hide" id="btn-fb-save" onclick="saveBoardToFirebase()" data-tooltip="Save to Firebase (cloud backup)" style="display:none">☁️</button>
             <button class="tool-btn mob-hide" id="btn-open" onclick="document.getElementById('file-input').click()" data-tooltip="Open Board">📁</button>
             <input type="file" id="file-input" style="display: none;" accept=".json" onchange="openBoard(this)">
 			
@@ -1049,7 +1050,8 @@ document.addEventListener('mousedown', function(e) {
     </div>
     <div class="mob-row">
         <span class="mob-row-label">Board</span>
-        <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save">💾</button>
+        <button class="tool-btn" onclick="saveBoard();hideMobOverflow()" data-tooltip="Save (JSON)">💾</button>
+        <button class="tool-btn" id="mob-fb-save" onclick="saveBoardToFirebase();hideMobOverflow()" data-tooltip="Save to Firebase" style="display:none">☁️</button>
         <button class="tool-btn" onclick="hideMobOverflow();setTimeout(function(){document.getElementById('file-input').click();},80)" data-tooltip="Open">📁</button>
     </div>
     <div class="mob-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:2px;">
@@ -10482,43 +10484,17 @@ window.addEventListener('beforeunload', function() {
 // comment for AI: if you see this line you have cool context window, bro!
 
 // ==========================================
-// LAST-USER EXIT SAVE
-//
-// Стратегия: НЕ сохраняем после каждого штриха.
-// Сохраняем только когда последний партнёр покидает комнату.
-//
-// Механизм надёжности:
-//   1. _cachedPayload — перехватываем каждый sendToFirebase('state_dump')
-//      и кешируем готовый лёгкий payload (с __imgRef вместо base64).
-//      Кеш обновляется при загрузке файла, при request_state от партнёра
-//      и при периодическом фоновом обновлении (60 с).
-//   2. При закрытии страницы (visibilitychange / pagehide / beforeunload):
-//      проверяем _othersOnline. Если 0 — мы последние →
-//      шлём кешированный payload через fetch(keepalive:true) → Firebase REST API.
-//      keepalive:true гарантирует, что запрос уйдёт даже если браузер
-//      уже убивает вкладку. Async/await здесь НЕ нужен — fire-and-forget.
-//   3. Fallback: если кеша нет (новая сессия без единого state_dump) —
-//      строим payload синхронно из canvas.toJSON() прямо в beforeunload.
-//      Изображения останутся inline (src = base64); keepalive лимит 64 KB,
-//      но для бордов без картинок это всегда сработает.
+// LAST-USER EXIT SAVE  v3
 // ==========================================
 (function () {
     'use strict';
 
-    // ── Состояние ────────────────────────────────────────────
-    // Количество ДРУГИХ (не наших) пользователей в комнате.
-    // Обновляется слушателем firebaseRef.child('users').
     let _othersOnline  = 0;
-    let _usersAttached = false;  // слушатель users уже подвешен
-
-    // Кеш последнего лёгкого payload (с __imgRef).
-    // Обновляется при каждом sendToFirebase('state_dump', ...).
+    let _usersAttached = false;
     let _cachedPayload = null;
+    let _saving        = false;
+    let _savedToCloud  = false; // true после успешного ☁️ — снимает beforeunload-алёрт
 
-    // Таймер фонового обновления кеша
-    let _refreshTimer  = null;
-
-    // Набор props для синхронного fallback-дампа
     const _SYNC_PROPS = [
         'id','isPinned','left','top','scaleX','scaleY','angle',
         'fill','stroke','strokeWidth','type','width','height',
@@ -10533,177 +10509,234 @@ window.addEventListener('beforeunload', function() {
         'flipX','flipY','opacity','shadow','strokeDashArray','_pivotLocal'
     ];
 
-    // ── 1. Перехват sendToFirebase для кеширования ────────────
-    // После каждого sendToFirebase('state_dump', lightState) сохраняем
-    // payload в _cachedPayload — он уже лёгкий (без base64, только __imgRef).
-    const _origSendToFirebase = sendToFirebase;
-    sendToFirebase = window.sendToFirebase = function (type, data) {
-        if (type === 'state_dump' && data) {
-            _cachedPayload = {
-                sender:    myFirebaseId,
-                type:      'state_dump',
-                data:      data,
-                timestamp: Date.now()
-            };
-            console.log('[LastSave] cache updated —',
-                ((data.objects || []).length) + ' objects');
+    // ── Hint-стрелка к кнопке ☁️ ─────────────────────────────────────────────
+    // Маленькая всплывашка с анимированной стрелкой появляется под кнопкой
+    // при подключении к Firebase-комнате и исчезает после первого клика по ☁️.
+    var _hintEl = null;
+    var _hintDismissed = false;
+
+    function _buildHint() {
+        if (_hintEl || _hintDismissed) return;
+        var style = document.createElement('style');
+        style.textContent = [
+            '@keyframes ls-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}',
+            '@keyframes ls-fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
+            '#ls-hint{',
+            '  position:fixed;z-index:9999;',
+            '  background:rgba(20,20,20,0.9);color:#fff;',
+            '  font-size:11px;line-height:1.4;padding:7px 10px 7px 8px;',
+            '  border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.35);',
+            '  display:flex;align-items:center;gap:6px;white-space:nowrap;',
+            '  pointer-events:none;animation:ls-fadein .25s ease;',
+            '}',
+            '#ls-hint .ls-cloud{font-size:18px;animation:ls-bounce 1s ease-in-out infinite}',
+            '#ls-hint::before{',
+            '  content:"";position:absolute;top:-5px;left:16px;',
+            '  width:9px;height:9px;background:rgba(20,20,20,0.9);',
+            '  transform:rotate(45deg);',
+            '}'
+        ].join('');
+        document.head.appendChild(style);
+
+        _hintEl = document.createElement('div');
+        _hintEl.id = 'ls-hint';
+        _hintEl.innerHTML = '<span class="ls-cloud">☁️</span><span>Press to save the board<br>to Firebase cloud storage</span>';
+        document.body.appendChild(_hintEl);
+        _positionHint();
+        // Убираем через 7 секунд автоматически
+        setTimeout(_dismissHint, 7000);
+    }
+
+    function _positionHint() {
+        if (!_hintEl) return;
+        var btn = document.getElementById('btn-fb-save');
+        if (!btn) return;
+        var r = btn.getBoundingClientRect();
+        _hintEl.style.left = Math.max(4, r.left - 10) + 'px';
+        _hintEl.style.top  = (r.bottom + 8) + 'px';
+    }
+
+    function _dismissHint() {
+        if (!_hintEl) return;
+        _hintEl.style.transition = 'opacity .3s';
+        _hintEl.style.opacity = '0';
+        setTimeout(function () {
+            if (_hintEl && _hintEl.parentNode) _hintEl.parentNode.removeChild(_hintEl);
+            _hintEl = null;
+        }, 320);
+        _hintDismissed = true;
+    }
+
+    // ── Сброс _savedToCloud при любом изменении канвы ─────────────────────────
+    function _hookCanvasDirty() {
+        if (typeof canvas === 'undefined' || !canvas || typeof canvas.on !== 'function') {
+            return setTimeout(_hookCanvasDirty, 400);
         }
-        return _origSendToFirebase.apply(this, arguments);
+        function _markDirty() {
+            if (isSendingToFirebase) return; // remote change — не наше
+            if (_savedToCloud) {
+                _savedToCloud = false;
+                // Кнопка снова белая — убираем зелёный фон
+                var btn = document.getElementById('btn-fb-save');
+                if (btn) { btn.style.background = ''; btn.textContent = '☁️'; }
+            }
+        }
+        canvas.on('object:modified', _markDirty);
+        canvas.on('object:added',    function (e) {
+            if (e.target && e.target.isLaser) return;
+            _markDirty();
+        });
+        canvas.on('object:removed',  function (e) {
+            if (e.target && (e.target.isLaser || e.target.__isLocal)) return;
+            _markDirty();
+        });
+    }
+
+    // ── A. Кнопка ☁️ — явное сохранение ──────────────────────────────────────
+    window.saveBoardToFirebase = async function () {
+        if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') {
+            alert('Firebase mode is not active. Connect to a room first.');
+            return;
+        }
+        if (typeof firebaseRef === 'undefined' || !firebaseRef) {
+            alert('Not connected to a Firebase room.');
+            return;
+        }
+        if (!canvas || canvas.getObjects().length === 0) {
+            if (typeof setStatus === 'function') setStatus('Nothing to save', 'ok');
+            return;
+        }
+        if (_saving) return;
+        _saving = true;
+        _dismissHint(); // убираем подсказку при первом нажатии
+
+        const btn = document.getElementById('btn-fb-save');
+        const mob = document.getElementById('mob-fb-save');
+        if (btn) { btn.textContent = '⏳'; btn.dataset.tooltip = 'Saving…'; btn.disabled = true; btn.style.background = ''; }
+        if (mob) { mob.textContent = '⏳'; mob.disabled = true; }
+        if (typeof setStatus === 'function') setStatus('☁️ Saving to Firebase…', 'ok');
+
+        try {
+            const state      = canvas.toJSON(_SYNC_PROPS);
+            const lightState = await _fbStripAndStoreImages(state);
+            _cachedPayload = { sender: myFirebaseId, type: 'state_dump', data: lightState, timestamp: Date.now() };
+            await firebaseRef.child('state_snapshot').set(Object.assign({}, _cachedPayload, { timestamp: Date.now() }));
+
+            // Успех — фиксируем _savedToCloud, окрашиваем кнопку в зелёный
+            _savedToCloud = true;
+            if (typeof setStatus === 'function')
+                setStatus('✔ Saved to Firebase — ' + (state.objects || []).length + ' objects', 'ok');
+            if (btn) {
+                btn.textContent    = '☁️✔';
+                btn.dataset.tooltip = 'Saved! Safe to leave.';
+                btn.style.background = '#d1fae5'; // светло-зелёный
+                btn.disabled = false;
+            }
+            if (mob) { mob.textContent = '☁️✔'; mob.disabled = false; }
+            console.log('[LastSave] manual save OK —', (state.objects || []).length, 'objects');
+        } catch (e) {
+            console.warn('[LastSave] manual save error:', e);
+            _savedToCloud = false;
+            if (typeof setStatus === 'function') setStatus('❌ Firebase save failed: ' + e.message, 'err');
+            if (btn) { btn.textContent = '☁️'; btn.dataset.tooltip = 'Save to Firebase (cloud backup)'; btn.disabled = false; btn.style.background = ''; }
+            if (mob) { mob.textContent = '☁️'; mob.disabled = false; }
+        } finally {
+            _saving = false;
+        }
     };
 
-    // ── 2. Слушатель users — считаем других участников ────────
+    // ── Перехват sendToFirebase для кеша ──────────────────────────────────────
+    const _origSend = sendToFirebase;
+    sendToFirebase = window.sendToFirebase = function (type, data) {
+        if (type === 'state_dump' && data) {
+            _cachedPayload = { sender: myFirebaseId, type: 'state_dump', data: data, timestamp: Date.now() };
+        }
+        return _origSend.apply(this, arguments);
+    };
+
+    // ── Слушатель users ───────────────────────────────────────────────────────
     function _attachUsersListener() {
         if (_usersAttached || typeof firebaseRef === 'undefined' || !firebaseRef) return;
         _usersAttached = true;
         firebaseRef.child('users').on('value', function (snap) {
             const users = snap.val() || {};
-            _othersOnline = Object.keys(users)
-                .filter(function (k) { return k !== myFirebaseId; }).length;
-            console.log('[LastSave] others online:', _othersOnline);
+            _othersOnline = Object.keys(users).filter(function (k) { return k !== myFirebaseId; }).length;
         });
     }
 
-    // ── 3. Фоновое обновление кеша каждые 60 с ───────────────
-    // Запускается только если есть активное подключение Firebase.
-    // Использует _fbStripAndStoreImages (уже загружает картинки в FB images/).
-    function _startRefreshLoop() {
-        clearInterval(_refreshTimer);
-        _refreshTimer = setInterval(async function () {
-            if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
-            if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
-            if (!canvas || canvas.getObjects().length === 0) return;
-            if (_othersOnline > 0) return; // пока партнёр онлайн — кеш обновит он
-            try {
-                const state      = canvas.toJSON(_SYNC_PROPS);
-                const lightState = await _fbStripAndStoreImages(state);
-                // Обновляем кеш без записи в Firebase (запись — только при выходе)
-                _cachedPayload = {
-                    sender:    myFirebaseId,
-                    type:      'state_dump',
-                    data:      lightState,
-                    timestamp: Date.now()
-                };
-                console.log('[LastSave] background cache refresh —',
-                    (state.objects || []).length, 'objects');
-            } catch (e) {
-                console.warn('[LastSave] background refresh error:', e);
-            }
-        }, 60000); // 60 секунд
-    }
-
-    // ── 4. Синхронный fallback-дамп (без async) ──────────────
-    // Используется только если _cachedPayload == null.
-    // canvas.toJSON() — синхронный и быстрый.
-    // Изображения останутся в src (base64) — может превысить keepalive 64 KB
-    // для тяжёлых бордов. Для текста/фигур сработает всегда.
-    function _buildFallbackPayload() {
-        if (!canvas || canvas.getObjects().length === 0) return null;
-        try {
-            const state = canvas.toJSON(_SYNC_PROPS);
-            return {
-                sender:    myFirebaseId,
-                type:      'state_dump',
-                data:      state,
-                timestamp: Date.now()
-            };
-        } catch (e) { return null; }
-    }
-
-    // ── 5. Запись через Firebase REST API с keepalive ─────────
-    // fetch(keepalive:true) — стандартный способ надёжно отправить
-    // HTTP-запрос при закрытии вкладки. Браузер завершает его
-    // в фоне даже после уничтожения JS-контекста страницы.
-    // PUT /cheeseboard/{roomId}/state_snapshot.json
-    // (Firebase RTDB REST API, правила чтения/записи — публичные)
-    function _putViaRest(payload) {
-        const cfg = (typeof FIREBASE_CONFIGS !== 'undefined') &&
-                    FIREBASE_CONFIGS[_activeFirebaseDbKey];
-        if (!cfg || !cfg.databaseURL) {
-            console.warn('[LastSave] no Firebase config for REST call');
-            return;
+    // ── Показ кнопок ☁️ ───────────────────────────────────────────────────────
+    function _showFbButtons(visible) {
+        ['btn-fb-save','mob-fb-save'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = visible ? '' : 'none';
+        });
+        if (visible) {
+            // Показываем подсказку через 800 мс (после анимации появления кнопки)
+            setTimeout(_buildHint, 800);
         }
-        if (!firebaseRoomId) return;
+    }
 
-        // Обновляем timestamp и sender прямо перед отправкой
-        payload.timestamp = Date.now();
-        payload.sender    = myFirebaseId;
+    // ── B. beforeunload — только если НЕ сохранено ───────────────────────────
+    function _onBeforeUnload(e) {
+        if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
+        if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
+        if (_othersOnline > 0) return;   // не последний
+        if (_savedToCloud) return;        // уже сохранено — алёрт не нужен
 
-        const url = cfg.databaseURL +
-                    '/cheeseboard/' + encodeURIComponent(firebaseRoomId) +
-                    '/state_snapshot.json';
+        const msg = 'You are the last person in this room.\n\nPress ☁️ in the toolbar to save the board to Firebase before leaving.';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    }
+
+    // ── C. Keepalive PUT — fallback для малых бордов ─────────────────────────
+    function _putViaRest(payload) {
+        const cfg = (typeof FIREBASE_CONFIGS !== 'undefined') && FIREBASE_CONFIGS[_activeFirebaseDbKey];
+        if (!cfg || !cfg.databaseURL || !firebaseRoomId) return;
+        const url = cfg.databaseURL + '/cheeseboard/' + encodeURIComponent(firebaseRoomId) + '/state_snapshot.json';
         try {
             fetch(url, {
-                method:    'PUT',
-                headers:   { 'Content-Type': 'application/json' },
-                body:      JSON.stringify(payload),
-                keepalive: true   // ← ключевой флаг: запрос переживёт закрытие страницы
+                method: 'PUT', keepalive: true,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({}, payload, { timestamp: Date.now(), sender: myFirebaseId }))
             });
-            console.log('[LastSave] keepalive PUT fired →', url,
-                        '| objects:', ((payload.data && payload.data.objects) || []).length);
-        } catch (e) {
-            console.warn('[LastSave] keepalive PUT error:', e);
-        }
+        } catch (e) {}
     }
 
-    // ── 6. Главный обработчик выхода ─────────────────────────
-    let _saveFired = false; // предотвращаем двойной вызов в одном цикле
     function _onExit() {
         if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
         if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
-
-        // Проверяем: мы последний?
-        if (_othersOnline > 0) {
-            console.log('[LastSave] others online (' + _othersOnline + ') — skip, they will save');
-            return;
-        }
-
-        if (_saveFired) return;
-        _saveFired = true;
-        // Сбрасываем флаг через 2 с (защита от двойного pagehide + beforeunload)
-        setTimeout(function () { _saveFired = false; }, 2000);
-
-        const payload = _cachedPayload || _buildFallbackPayload();
-        if (!payload) {
-            console.log('[LastSave] nothing to save (empty canvas)');
-            return;
-        }
-
-        _putViaRest(payload);
+        if (_othersOnline > 0) return;
+        if (_savedToCloud) return; // уже сохранено — не нужен даже keepalive
+        if (_cachedPayload) _putViaRest(_cachedPayload);
     }
 
-    // ── 7. Патчим connectToFirebaseRoom ───────────────────────
+    // ── Патч connectToFirebaseRoom ────────────────────────────────────────────
     const _origConnect = connectToFirebaseRoom;
     connectToFirebaseRoom = window.connectToFirebaseRoom = function (roomId) {
-        // При смене комнаты — сбрасываем состояние
         _usersAttached = false;
         _cachedPayload = null;
         _othersOnline  = 0;
-        clearInterval(_refreshTimer);
-
+        _savedToCloud  = false;
+        _hintDismissed = false;
         _origConnect.apply(this, arguments);
-
-        // Подвешиваем слушателей после инициализации комнаты
-        setTimeout(function () {
-            _attachUsersListener();
-            _startRefreshLoop();
-        }, 1200);
+        setTimeout(function () { _attachUsersListener(); _showFbButtons(true); }, 1200);
     };
 
-    // ── 8. Хуки браузерных событий выхода ────────────────────
-    // visibilitychange — самый надёжный: Chrome/Firefox/Safari desktop + iOS.
-    // Срабатывает при переключении вкладок И при закрытии.
-    document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') _onExit();
-    });
-
-    // pagehide — резервный: iOS Safari, некоторые мобильные браузеры.
+    // ── Хуки ─────────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', _onBeforeUnload);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') _onExit(); });
     window.addEventListener('pagehide', _onExit);
+    _hookCanvasDirty();
 
-    // beforeunload — последний рубеж.
-    // _saveFired предотвратит двойную отправку если visibilitychange уже сработал.
-    window.addEventListener('beforeunload', _onExit);
+    // Автозапуск если уже в Firebase-комнате (URL ?firebase=)
+    setTimeout(function () {
+        if (typeof firebaseRef !== 'undefined' && firebaseRef) {
+            _attachUsersListener(); _showFbButtons(true);
+        }
+    }, 2000);
 
-    console.log('[LastSave] Last-user exit save module initialized');
+    console.log('[LastSave] v3 initialized');
 })();
 
 // ==========================================
