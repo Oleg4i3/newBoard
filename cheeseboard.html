@@ -9792,12 +9792,25 @@ async function _fbResolveImgRef(imgRef) {
 }
 
 // Resolve all __imgRef entries in a state dump (returns new object, doesn't mutate)
+// Recursively collect all objects with __imgRef (including inside groups)
+function _fbCollectRefs(objects, result) {
+    if (!Array.isArray(objects)) return;
+    objects.forEach(obj => {
+        if (!obj) return;
+        if (obj.__imgRef && !obj.src) result.push(obj);
+        if (obj.type === 'group' && Array.isArray(obj.objects))
+            _fbCollectRefs(obj.objects, result);
+    });
+}
+
 async function _fbResolveStateDumpRefs(stateData) {
     if (!stateData || !stateData.objects) return stateData;
     const clone = JSON.parse(JSON.stringify(stateData));
-    const refs = clone.objects.filter(o => o.__imgRef && !o.src);
+    const refs = [];
+    _fbCollectRefs(clone.objects, refs);
     if (refs.length === 0) return clone;
     await Promise.all(refs.map(async obj => {
+        if (!obj || !obj.__imgRef) return;
         const src = await _fbResolveImgRef(obj.__imgRef);
         if (src) { obj.src = src; }
     }));
@@ -9806,7 +9819,14 @@ async function _fbResolveStateDumpRefs(stateData) {
 
 // Store image in Firebase images/ node + IndexedDB, then broadcast lightweight __imgRef
 function _fbBroadcastImageWithRef(img, compressedSrc, filename) {
-    const imgId    = img.id;
+    const imgId    = _fbSafeImgId(img.id);
+    if (!imgId) {
+        // Fallback: broadcast with inline src if id is invalid
+        const imgData = img.toObject(['id','left','top','scaleX','scaleY','angle','width','height','type','cropX','cropY']);
+        imgData.src = compressedSrc;
+        broadcast('draw', { data: imgData, isImage: true, fileName: filename });
+        return;
+    }
     const syncProps = ['id','left','top','scaleX','scaleY','angle','width','height','type','cropX','cropY'];
 
     // Always cache locally
@@ -9839,17 +9859,53 @@ function _fbBroadcastImageWithRef(img, compressedSrc, filename) {
 
 // Build a lightweight state dump: upload any new images to Firebase images/ node,
 // replace src with __imgRef in returned state object
+
+// Sanitize imgId so it is safe as a Firebase path segment.
+// Firebase rejects . # $ [ ] and spaces in key names.
+function _fbSafeImgId(id) {
+    if (!id || typeof id !== 'string') return null;
+    return id.replace(/[.#$[\]\s]/g, '_');
+}
+
+// Deep-clean an object before sending to Firebase:
+// Firebase SDK v8 throws "Cannot read properties of undefined (reading '0')"
+// when the payload contains undefined values (JSON.parse/stringify strips them,
+// but custom fabric toObject overrides can leave them in nested structures).
+function _fbDeepClean(val) {
+    if (val === undefined) return null;
+    if (val === null || typeof val !== 'object') return val;
+    if (Array.isArray(val)) return val.map(_fbDeepClean);
+    const out = {};
+    Object.keys(val).forEach(k => { out[k] = _fbDeepClean(val[k]); });
+    return out;
+}
+
+// Recursively collect all image objects including those nested inside groups.
+function _fbCollectImages(objects, result) {
+    if (!Array.isArray(objects)) return;
+    objects.forEach(obj => {
+        if (!obj) return;
+        if (obj.type === 'image' && obj.src) result.push(obj);
+        if (obj.type === 'group' && Array.isArray(obj.objects))
+            _fbCollectImages(obj.objects, result);
+    });
+}
+
 async function _fbStripAndStoreImages(stateData) {
     if (!stateData || !stateData.objects || !firebaseRef) return stateData;
     const clone = JSON.parse(JSON.stringify(stateData));
-    await Promise.all(clone.objects.map(async obj => {
-        if (obj.type !== 'image' || !obj.src) return;
-        const imgId = obj.id;
+
+    // Collect images at every nesting level (top-level + inside groups)
+    const allImages = [];
+    _fbCollectImages(clone.objects, allImages);
+
+    await Promise.all(allImages.map(async obj => {
+        if (!obj || !obj.src) return;
+        const imgId = _fbSafeImgId(obj.id);
         if (!imgId) return;
-        // Check if already in IndexedDB or Firebase
+
         const cached = await ImgCache.get(imgId);
         if (!cached) {
-            // Upload to Firebase images/ node
             try {
                 _fbTraffic.addSent(obj.src);
                 await firebaseRef.child('images').child(imgId).set(obj.src);
@@ -9858,11 +9914,12 @@ async function _fbStripAndStoreImages(stateData) {
                 return; // keep src inline on error
             }
         }
-        // Replace heavy src with lightweight ref
         obj.__imgRef = imgId;
         delete obj.src;
     }));
-    return clone;
+
+    // Deep-clean before returning — eliminates any undefined that Firebase can't serialize
+    return _fbDeepClean(clone);
 }
 
 // ── Firebase database registry ──────────────────────────────────────────────
@@ -10091,8 +10148,15 @@ function connectToFirebaseRoom(roomId) {
         // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
         firebaseRef.child('state_snapshot').on('value', (snapshot) => {
             const msg = snapshot.val();
-            if (!msg || msg.sender === myFirebaseId) {
-                // No valid snapshot (null or own write) — release message buffer.
+            if (!msg) {
+                // No snapshot in DB — release message buffer immediately.
+                _flushFbMsgBuffer();
+                return;
+            }
+            // Skip our OWN writes that just happened in this session (within 15 s).
+            // But DO apply old snapshots we wrote in a previous session — that is
+            // exactly the case when we're the last saver and reconnect the next day.
+            if (msg.sender === myFirebaseId && msg.timestamp && (Date.now() - msg.timestamp) < 15000) {
                 _flushFbMsgBuffer();
                 return;
             }
@@ -10406,7 +10470,7 @@ function sendToFirebase(type, data) {
     if (type === 'state_dump') {
         const _sdPayload = { sender: myFirebaseId, type: 'state_dump', data: data, timestamp: Date.now() };
         _fbTraffic.addSent(_sdPayload);
-        firebaseRef.child('state_snapshot').set(_sdPayload).then(() => {
+        firebaseRef.child('state_snapshot').set(_fbDeepClean(_sdPayload)).then(() => {
         }).catch(error => {
         });
         return;
@@ -10568,6 +10632,36 @@ window.addEventListener('beforeunload', function() {
     }
 
     // ── Сброс _savedToCloud при любом изменении канвы ─────────────────────────
+    // ── + Планирование автосохранения через 30 с после изменения ─────────────
+    let _autoSaveTimer = null;
+
+    async function _doAutoSave() {
+        _autoSaveTimer = null;
+        if (typeof connectionMode === 'undefined' || connectionMode !== 'firebase') return;
+        if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
+        if (typeof canvas === 'undefined' || !canvas || canvas.getObjects().length === 0) return;
+        if (_savedToCloud) return; // не нужно — уже свежее
+        try {
+            const state      = canvas.toJSON(_SYNC_PROPS);
+            const lightState = await _fbStripAndStoreImages(state);
+            const payload    = { sender: myFirebaseId, type: 'state_dump', data: lightState, timestamp: Date.now() };
+            _cachedPayload   = payload;
+            await firebaseRef.child('state_snapshot').set(_fbDeepClean(payload));
+            _savedToCloud = true;
+            // Визуальный фидбек — кнопка зеленеет без надписи "✔"
+            var btn = document.getElementById('btn-fb-save');
+            if (btn) { btn.textContent = '☁️✔'; btn.dataset.tooltip = 'Auto-saved'; btn.style.background = '#d1fae5'; }
+            console.log('[AutoSave] saved', (state.objects || []).length, 'objects');
+        } catch(e) {
+            console.warn('[AutoSave] failed:', e);
+        }
+    }
+
+    function _scheduleAutoSave() {
+        if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+        _autoSaveTimer = setTimeout(_doAutoSave, 30000); // 30 секунд после последнего изменения
+    }
+
     function _hookCanvasDirty() {
         if (typeof canvas === 'undefined' || !canvas || typeof canvas.on !== 'function') {
             return setTimeout(_hookCanvasDirty, 400);
@@ -10580,6 +10674,7 @@ window.addEventListener('beforeunload', function() {
                 var btn = document.getElementById('btn-fb-save');
                 if (btn) { btn.style.background = ''; btn.textContent = '☁️'; }
             }
+            _scheduleAutoSave(); // запланировать автосохранение
         }
         canvas.on('object:modified', _markDirty);
         canvas.on('object:added',    function (e) {
@@ -10620,7 +10715,7 @@ window.addEventListener('beforeunload', function() {
             const state      = canvas.toJSON(_SYNC_PROPS);
             const lightState = await _fbStripAndStoreImages(state);
             _cachedPayload = { sender: myFirebaseId, type: 'state_dump', data: lightState, timestamp: Date.now() };
-            await firebaseRef.child('state_snapshot').set(Object.assign({}, _cachedPayload, { timestamp: Date.now() }));
+            await firebaseRef.child('state_snapshot').set(_fbDeepClean(Object.assign({}, _cachedPayload, { timestamp: Date.now() })));
 
             // Успех — фиксируем _savedToCloud, окрашиваем кнопку в зелёный
             _savedToCloud = true;
@@ -10708,7 +10803,16 @@ window.addEventListener('beforeunload', function() {
         if (typeof firebaseRef === 'undefined' || !firebaseRef) return;
         if (_othersOnline > 0) return;
         if (_savedToCloud) return; // уже сохранено — не нужен даже keepalive
-        if (_cachedPayload) _putViaRest(_cachedPayload);
+        // Build a FRESH state synchronously (inline images OK for exit save — better than stale cache).
+        // Falls back to _cachedPayload only if canvas isn't available.
+        let payloadToSave = _cachedPayload;
+        try {
+            if (typeof canvas !== 'undefined' && canvas && canvas.getObjects().length > 0) {
+                const rawState = canvas.toJSON(_SYNC_PROPS);
+                payloadToSave = { sender: myFirebaseId, type: 'state_dump', data: rawState, timestamp: Date.now() };
+            }
+        } catch(e) { /* keep _cachedPayload as fallback */ }
+        if (payloadToSave) _putViaRest(payloadToSave);
     }
 
     // ── Патч connectToFirebaseRoom ────────────────────────────────────────────
@@ -10719,6 +10823,7 @@ window.addEventListener('beforeunload', function() {
         _othersOnline  = 0;
         _savedToCloud  = false;
         _hintDismissed = false;
+        if (_autoSaveTimer) { clearTimeout(_autoSaveTimer); _autoSaveTimer = null; }
         _origConnect.apply(this, arguments);
         setTimeout(function () { _attachUsersListener(); _showFbButtons(true); }, 1200);
     };
