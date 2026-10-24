@@ -1300,6 +1300,18 @@ document.addEventListener('mousedown', function(e) {
     // JPEG is unaffected because its canonScaleX is always 800/MAX (e.g. 800/1600=0.5).
     // 6 decimal places gives sub-0.001px precision for any realistic image size.
     fabric.Object.NUM_FRACTION_DIGITS = 6;
+
+    // FIX: "Firebase save failed: Cannot read properties of undefined (reading '0')".
+    // Firebase drops empty arrays/objects, so a text/textbox restored from a saved
+    // state comes back without the `styles` key, and fabric 5.3.0 then leaves
+    // obj.styles === undefined. After that every canvas.toJSON() throws.
+    // Normalise styles on the way in (fromObject) and on the way out (toObject).
+    (function () {
+        const _sfa = fabric.util.stylesFromArray;
+        const _sta = fabric.util.stylesToArray;
+        fabric.util.stylesFromArray = function (styles, text) { return _sfa.call(this, styles || [], text); };
+        fabric.util.stylesToArray   = function (styles, text) { return _sta.call(this, styles || {}, text); };
+    })();
 </script>
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -10146,22 +10158,13 @@ function connectToFirebaseRoom(roomId) {
         // Register state_snapshot FIRST so Firebase SDK delivers it before
         // queued child_added events in the messages listener below.
         // Слушаем state_snapshot — отдельный узел куда хост пишет дамп борда
-        firebaseRef.child('state_snapshot').on('value', (snapshot) => {
-            const msg = snapshot.val();
-            if (!msg) {
-                // No snapshot in DB — release message buffer immediately.
-                _flushFbMsgBuffer();
-                return;
-            }
-            // Skip our OWN writes that just happened in this session (within 15 s).
-            // But DO apply old snapshots we wrote in a previous session — that is
-            // exactly the case when we're the last saver and reconnect the next day.
-            if (msg.sender === myFirebaseId && msg.timestamp && (Date.now() - msg.timestamp) < 15000) {
-                _flushFbMsgBuffer();
-                return;
-            }
+        // SYNC FIX: state_snapshot is now a PERSISTENCE node (autosave / ☁️ / exit-save).
+        // It is read ONCE on connect. Previously an on('value') listener re-applied it
+        // (canvas.loadFromJSON = full wipe) on every partner's autosave, deleting
+        // everything not yet in that snapshot (e.g. text being typed) and re-downloading
+        // the whole board each time.
+        const _fbApplySnapshotMsg = function (msg) {
             _fbTraffic.addRecv(msg);
-            // Apply the snapshot; flush buffered messages once done.
             isSendingToFirebase = true;
             setStatus('Syncing board...', 'ok');
             _fbResolveStateDumpRefs(msg.data).then(resolvedData => {
@@ -10170,16 +10173,60 @@ function connectToFirebaseRoom(roomId) {
                     setStatus('✔ Board synced — ' + (resolvedData.objects ? resolvedData.objects.length : 0) + ' objects', 'ok');
                     resizeCanvas();
                     // BUG1 FIX: send ACK so the host knows partner finished loading.
-                    // state_dump always goes to state_snapshot (not messages queue),
-                    // so handleFirebaseMessage/case 'state_dump' is never triggered —
-                    // this is the only place the ACK can be sent.
                     sendToFirebase('board_received', { objectCount: (resolvedData.objects || []).length });
                     // Release buffered messages AFTER canvas is fully rebuilt.
-                    // draw messages for objects not in the snapshot (e.g. images
-                    // added after the last state_dump) are re-applied here.
                     _flushFbMsgBuffer();
                 });
             });
+        };
+
+        firebaseRef.child('state_snapshot').once('value', (snapshot) => {
+            const msg = snapshot.val();
+            if (!msg) {
+                // No snapshot in DB — release message buffer immediately.
+                _flushFbMsgBuffer();
+                return;
+            }
+            // Skip our OWN writes that just happened in this session (within 15 s).
+            // Old snapshots we wrote in a previous session ARE applied.
+            if (msg.sender === myFirebaseId && msg.timestamp && (Date.now() - msg.timestamp) < 15000) {
+                _flushFbMsgBuffer();
+                return;
+            }
+            _fbApplySnapshotMsg(msg);
+        }, () => { _flushFbMsgBuffer(); });
+
+        // Explicit "push the whole board" channel (load board, send board, reply to
+        // request_state). Listen only to the tiny state_push_meta node; the heavy
+        // state_push node is downloaded only when a real push happens.
+        let _pushMetaFirst = true;
+        firebaseRef.child('state_push_meta').on('value', (metaSnap) => {
+            if (_pushMetaFirst) { _pushMetaFirst = false; return; } // content present at attach time = stale
+            const meta = metaSnap.val();
+            if (!meta || meta.sender === myFirebaseId) return;
+            if (meta.to && meta.to !== myFirebaseId) return;        // reply addressed to another peer
+            const ref = firebaseRef;
+            let tries = 0;
+            const go = () => {
+                if (firebaseRef !== ref) return;                    // room changed meanwhile
+                if (!_fbSnapshotApplied && tries++ < 10) { setTimeout(go, 500); return; } // wait for initial load
+                ref.child('state_push').once('value', (s) => {
+                    const msg = s.val();
+                    if (!msg || !msg.data || msg.timestamp !== meta.timestamp) return;
+                    if (meta.to) {
+                        // Reply to OUR request_state: apply only if it can't wipe local work,
+                        // i.e. every object we already have is also present in the reply.
+                        const ids = new Set(((msg.data && msg.data.objects) || []).map(o => o && o.id));
+                        const localOnly = canvas.getObjects().filter(o => o.id && !o.isLaser && !ids.has(o.id));
+                        if (localOnly.length > 0) {
+                            setStatus('Partner board not applied: you already have local changes', 'ok');
+                            return;
+                        }
+                    }
+                    _fbApplySnapshotMsg(msg);
+                });
+            };
+            go();
         });
 
         // Слушаем ТОЛЬКО новые сообщения.
@@ -10346,9 +10393,9 @@ function handleFirebaseMessage(msg) {
                     isSendingToFirebase = false; // сбрасываем флаг иначе sendToFirebase заблокирует
                     // Upload any images not yet in Firebase images/ node, then send lightweight refs
                     (async () => {
-                        const state = canvas.toJSON(syncProps);
+                        const state = canvas.toJSON(window._FB_SYNC_PROPS || syncProps);
                         const lightState = await _fbStripAndStoreImages(state);
-                        sendToFirebase('state_dump', lightState);
+                        sendToFirebase('state_dump', lightState, { to: (msg.data && msg.data.from) || null });
                     })();
                 }
                 break;
@@ -10457,7 +10504,7 @@ const _fbTraffic = (function () {
 })();
 
 // 6. Отправка сообщений в Firebase
-function sendToFirebase(type, data) {
+function sendToFirebase(type, data, opts) {
     const _isUiSignal = (type === 'pdf_progress');
     if (!firebaseRef || (!_isUiSignal && isSendingToFirebase)) {
         return;
@@ -10470,9 +10517,16 @@ function sendToFirebase(type, data) {
     if (type === 'state_dump') {
         const _sdPayload = { sender: myFirebaseId, type: 'state_dump', data: data, timestamp: Date.now() };
         _fbTraffic.addSent(_sdPayload);
-        firebaseRef.child('state_snapshot').set(_fbDeepClean(_sdPayload)).then(() => {
-        }).catch(error => {
-        });
+        const _sdClean = _fbDeepClean(_sdPayload);
+        const _sdMeta  = { sender: myFirebaseId, timestamp: _sdPayload.timestamp };
+        if (opts && opts.to) _sdMeta.to = opts.to;
+        const _sdRef = firebaseRef;
+        // One atomic write: persistence copy + push copy + tiny signal for partners.
+        _sdRef.update({ state_snapshot: _sdClean, state_push: _sdClean, state_push_meta: _sdMeta })
+            .catch(error => {
+                console.warn('[state_dump] push failed, falling back to snapshot only:', error);
+                _sdRef.child('state_snapshot').set(_sdClean).catch(() => {});
+            });
         return;
     }
     
@@ -10515,6 +10569,7 @@ function disconnectFirebase() {
     if (firebaseRef) {
         firebaseRef.child('messages').off();
         firebaseRef.child('state_snapshot').off();
+        firebaseRef.child('state_push_meta').off();
         firebaseRef.child('cursor').off(); // remove cursor listeners
         
         // Remove .info/connected listener attached by connectToFirebaseRoom
@@ -10572,6 +10627,7 @@ window.addEventListener('beforeunload', function() {
         'arcRadius','arcSpan','arcStrokeWidth','arcColor','showRadii',
         'flipX','flipY','opacity','shadow','strokeDashArray','_pivotLocal'
     ];
+    window._FB_SYNC_PROPS = _SYNC_PROPS;
 
     // ── Hint-стрелка к кнопке ☁️ ─────────────────────────────────────────────
     // Маленькая всплывашка с анимированной стрелкой появляется под кнопкой
